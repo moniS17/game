@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Plain: pure green grassland (no buff) -->
+  <rect width="64" height="64" fill="#7cb342"/>
+  <g stroke="#558b2f" stroke-width="2" stroke-linecap="round" fill="none">
+    <path d="M12 52 q-2 -10 0 -16"/>
+    <path d="M16 52 q2 -12 6 -18"/>
+    <path d="M32 54 q-1 -12 -3 -18"/>
+    <path d="M36 54 q2 -10 6 -16"/>
+    <path d="M50 52 q-2 -11 1 -17"/>
+    <path d="M54 52 q1 -9 5 -15"/>
+  </g>
+</svg>

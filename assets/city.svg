@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- City: cluster of buildings -->
+  <rect x="6"  y="30" width="14" height="28" fill="#90a4ae"/>
+  <rect x="24" y="18" width="16" height="40" fill="#78909c"/>
+  <rect x="44" y="26" width="14" height="32" fill="#b0bec5"/>
+  <g fill="#eceff1">
+    <rect x="9"  y="34" width="3" height="3"/><rect x="15" y="34" width="3" height="3"/>
+    <rect x="28" y="22" width="3" height="3"/><rect x="34" y="22" width="3" height="3"/>
+    <rect x="28" y="30" width="3" height="3"/><rect x="34" y="30" width="3" height="3"/>
+    <rect x="47" y="30" width="3" height="3"/><rect x="53" y="30" width="3" height="3"/>
+  </g>
+</svg>

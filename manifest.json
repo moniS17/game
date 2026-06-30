@@ -1,0 +1,14 @@
+{
+  "name": "Battlegrid",
+  "short_name": "Battlegrid",
+  "description": "100 x 100 turn-based board strategy game.",
+  "start_url": "login.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b1f23",
+  "theme_color": "#1b1f23",
+  "icons": [
+    { "src": "assets/tank.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Shop</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; background: #1b1f23; color: #e6e6e6; padding: 24px;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto 20px; }
+    h1 { font-size: 1.4rem; }
+    .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
+    .who { font-size: .85rem; color: #9aa4ad; }
+    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card .top { display: flex; align-items: center; gap: 12px; }
+    .card img, .card .icon {
+      width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
+      align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
+    }
+    .card h3 { font-size: 1rem; }
+    .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
+    .stats b { color: #fff; }
+    .cost { font-weight: 700; color: #f5c542; }
+    button.buy { padding: .6rem; border: none; border-radius: 6px; background: #2e7d46; color: #fff; font-weight: 600; cursor: pointer; }
+    button.buy:hover:not(:disabled) { background: #266b3b; }
+    button.buy:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .stepper { display: flex; align-items: center; gap: 8px; }
+    .stepper button {
+      width: 32px; height: 32px; flex: 0 0 auto; border: none; border-radius: 6px;
+      background: #3a5bd9; color: #fff; font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+    }
+    .stepper button:hover { background: #2f49b0; }
+    .stepper .qty { flex: 1; text-align: center; font-weight: 700; font-size: 1rem; }
+    .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
+    .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; background: #3a5bd9; }
+    .queue { max-width: 900px; margin: 18px auto 0; font-size: .85rem; color: #9aa4ad; }
+    .queue b { color: #7cb342; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🛒 Unit Shop</h1>
+      <div class="who" id="who"></div>
+    </div>
+    <div class="gold">💰 <span id="gold">0</span> gold</div>
+  </header>
+
+  <div class="grid" id="grid"></div>
+  <div class="queue" id="queue"></div>
+
+  <div class="bar">
+    <a href="index.html">⬅ Return to battle</a>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const save = SaveState.load();
+    if (!save) { window.location.href = "menu.html"; }
+
+    const buyer = save.turn;                 // the player whose turn it is shops
+    save.pendingSpawns = save.pendingSpawns || [];
+
+    document.getElementById("who").textContent =
+      PLAYERS[buyer].name + "'s turn — units arrive at your home edge.";
+
+    const goldEl = document.getElementById("gold");
+    const queueEl = document.getElementById("queue");
+    const qty = {};                          // per-type quantity selected in the stepper
+    for (const k in PIECES) qty[k] = 1;
+
+    function refresh() {
+      goldEl.textContent = save.economy[buyer];
+      const gold = save.economy[buyer];
+      document.querySelectorAll(".card").forEach((card) => {
+        const type = card.dataset.type;
+        const cost = PIECES[type].cost;
+        card.querySelector(".qty").textContent = qty[type];
+        const total = cost * qty[type];
+        const btn = card.querySelector("button.buy");
+        btn.textContent = `Buy ×${qty[type]} ($${total})`;
+        btn.disabled = total > gold;
+      });
+      // queue summary, grouped by type ("Pawn ×5, Tank ×2")
+      if (save.pendingSpawns.length) {
+        const counts = {};
+        for (const s of save.pendingSpawns) counts[s.type] = (counts[s.type] || 0) + 1;
+        const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
+        queueEl.innerHTML = "Queued for deployment: <b>" + names.join(", ") + "</b> — deploy them on the board.";
+      } else {
+        queueEl.textContent = "";
+      }
+    }
+
+    function step(type, delta) {
+      qty[type] = Math.max(1, qty[type] + delta);
+      refresh();
+    }
+
+    function buy(type) {
+      const n = qty[type];
+      const cost = PIECES[type].cost * n;
+      if (save.economy[buyer] < cost) return;
+      save.economy[buyer] -= cost;
+      for (let i = 0; i < n; i++) save.pendingSpawns.push({ type, owner: buyer });
+      SaveState.save(save);                 // the game page applies these on load
+      refresh();
+    }
+
+    const grid = document.getElementById("grid");
+    for (const k in PIECES) {
+      const d = PIECES[k];
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.type = k;
+      const visual = d.art
+        ? `<img src="${d.art}" alt="${d.name}">`
+        : `<div class="icon">${d.code}</div>`;
+      card.innerHTML =
+        `<div class="top">${visual}<h3>${d.name}</h3></div>` +
+        `<div class="stats">` +
+          `❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>` +
+          `👟 MOV <b>${d.movement_speed}</b> &nbsp; <span class="cost">$${d.cost}</span> each` +
+        `</div>` +
+        `<div class="stepper">` +
+          `<button class="dec" type="button">−</button>` +
+          `<span class="qty">1</span>` +
+          `<button class="inc" type="button">+</button>` +
+        `</div>` +
+        `<button class="buy" type="button">Buy ×1 ($${d.cost})</button>`;
+      grid.appendChild(card);
+      card.querySelector(".dec").addEventListener("click", () => step(k, -1));
+      card.querySelector(".inc").addEventListener("click", () => step(k, +1));
+      card.querySelector("button.buy").addEventListener("click", () => buy(k));
+    }
+
+    refresh();
+  </script>
+</body>
+</html>

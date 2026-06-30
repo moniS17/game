@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Turn-Based Strategy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; height: 100vh; background: #1b1f23; color: #e6e6e6;
+    }
+    #boardWrap { flex: 1; position: relative; min-width: 0; }
+    #board { display: block; width: 100%; height: 100%; cursor: grab; background: #0d0f11; touch-action: none; }
+    #board:active { cursor: grabbing; }
+
+    #sidebar {
+      width: 290px; flex-shrink: 0; padding: 16px; overflow-y: auto;
+      background: #23282e; border-left: 1px solid #333; display: flex; flex-direction: column; gap: 14px;
+    }
+
+    /* Phone / narrow screens: stack the board on top, sidebar below. */
+    @media (max-width: 760px) {
+      body { flex-direction: column; }
+      #boardWrap { flex: none; height: 56vh; }
+      #sidebar { width: 100%; border-left: none; border-top: 1px solid #333; }
+    }
+    h1 { font-size: 1.15rem; }
+    h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; margin-bottom: 6px; }
+    .panel { background: #2b3138; border-radius: 8px; padding: 12px; }
+
+    #turnBadge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-weight: 600; color: #fff; }
+    .econ-sign {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: #15181c; border: 1px solid #3a3f45; border-radius: 8px;
+      padding: 10px; margin: 10px 0; font-size: 1.4rem; font-weight: 800; color: #f5c542;
+    }
+    .econ-sign small { font-size: .7rem; color: #9aa4ad; font-weight: 600; }
+    button {
+      width: 100%; padding: 9px; font-size: .9rem; font-weight: 600; color: #fff;
+      background: #3a5bd9; border: none; border-radius: 6px; cursor: pointer; margin-top: 8px;
+    }
+    button:hover { background: #2f49b0; }
+    button.shop { background: #2e7d46; } button.shop:hover { background: #266b3b; }
+    button.ghost { background: #444c55; } button.ghost:hover { background: #525c66; }
+
+    .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; }
+    .muted { color: #9aa4ad; }
+    .legend-item { display: flex; align-items: center; gap: 10px; font-size: .82rem; padding: 4px 0; }
+    .legend-item img, .legend-item .icon {
+      width: 28px; height: 28px; background: #1b1f23; border-radius: 5px; display: flex;
+      align-items: center; justify-content: center; font-weight: 700;
+    }
+    .swatch { width: 24px; height: 24px; border-radius: 5px; flex-shrink: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    th, td { text-align: center; padding: 3px 2px; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: #9aa4ad; font-weight: 600; }
+    #log { height: 120px; overflow-y: auto; font-size: .78rem; line-height: 1.4; }
+    #log div { padding: 1px 0; border-bottom: 1px solid #333; }
+    .hint { font-size: .75rem; color: #7e8893; }
+  </style>
+</head>
+<body>
+  <div id="boardWrap"><canvas id="board"></canvas></div>
+
+  <aside id="sidebar">
+    <div>
+      <h1>⚔️ Battlegrid</h1>
+      <p class="hint">Drag/one-finger to pan, scroll/pinch to zoom. Tap a tile to select its stack, then a yellow tile to move or an adjacent enemy to attack.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Turn</h2>
+      <div>Now playing: <span id="turnBadge">—</span> &nbsp; <span class="muted">Round <span id="roundNum">1</span></span></div>
+
+      <!-- economy sign for the current player -->
+      <div class="econ-sign">💰 <span id="econ">0</span> <small>gold</small></div>
+
+      <div class="stat-row"><span>Blue units</span><span id="blueCount">0</span></div>
+      <div class="stat-row"><span>Red units</span><span id="redCount">0</span></div>
+      <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
+
+      <button class="shop" id="buyBtn">🛒 Buy units</button>
+      <button id="nextRoundBtn">Next round ▶</button>
+      <button class="ghost" id="menuBtn">Main menu</button>
+    </div>
+
+    <div class="panel" id="placePanel" style="display:none; border:1px solid #b8a23a;">
+      <h2>Deploy units</h2>
+      <div id="placeInfo"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Selection</h2>
+      <label style="display:flex; align-items:center; gap:8px; font-size:.82rem; margin-bottom:8px; cursor:pointer;">
+        <input type="checkbox" id="selectAllChk" checked style="width:auto; margin:0;" />
+        Select whole stack
+      </label>
+      <div id="selInfo" class="muted">Click a tile to select its units.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Units</h2>
+      <table id="unitTable"><tr><th>Unit</th><th>HP</th><th>ATK</th><th>MOV</th><th>$</th></tr></table>
+    </div>
+
+    <div class="panel">
+      <h2>Legend</h2>
+      <div id="unitLegend"></div>
+      <div style="margin-top:8px" id="terrainLegend"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Combat log</h2>
+      <div id="log"></div>
+    </div>
+  </aside>
+
+  <!-- data + algorithms + rules + persistence + renderer load before the engine -->
+  <script src="units.js"></script>
+  <script src="algorithms.js"></script>
+  <script src="board.js"></script>
+  <script src="rules.js"></script>
+  <script src="state.js"></script>
+  <script src="render.js"></script>
+  <script>
+    // UI glue. Defined before game.js; every handler reads the DOM at call time.
+    function stackAtTile(t) { return (Game.unitAt.get(t.r + ',' + t.c)) || []; }
+
+    function stackSummaryHtml(stack, owner) {
+      const counts = {};
+      for (const u of stack) counts[u.type] = (counts[u.type] || 0) + 1;
+      const lines = Object.keys(counts).map((t) =>
+        `<div class="stat-row"><span>${PIECES[t].name}</span><span>×${counts[t]}</span></div>`).join('');
+      const totHp = stack.reduce((a, u) => a + u.hp, 0);
+      const totAtk = stack.reduce((a, u) => a + PIECES[u.type].attack, 0);
+      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} stack</b></span><span>${stack.length}/17</span></div>` +
+        lines +
+        `<div class="stat-row"><span>Total HP / ATK</span><span>${totHp} / ${totAtk}</span></div>` +
+        (owner === Game.turn
+          ? `<p class="hint" style="margin-top:6px">Whole stack selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
+          : `<p class="hint" style="margin-top:6px">Enemy stack.</p>`);
+    }
+
+    function stackChecklistHtml(stack) {
+      const selIds = new Set(Game.selUnits.map((u) => u.id));
+      const rows = stack.map((u) => {
+        const d = PIECES[u.type];
+        const checked = selIds.has(u.id) ? 'checked' : '';
+        return `<label class="stat-row" style="cursor:pointer">` +
+          `<span><input type="checkbox" data-uid="${u.id}" ${checked} style="width:auto; margin-right:6px;"> ${d.name}</span>` +
+          `<span>${u.hp}/${u.maxHp} hp${u.acted ? ' ·acted' : ''}</span></label>`;
+      }).join('');
+      return `<div class="stat-row"><span><b>Pick units</b></span><span>${Game.selUnits.length}/${stack.length}</span></div>` +
+        rows +
+        `<p class="hint" style="margin-top:6px">Checked units move/attack together. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`;
+    }
+
+    const UI = {
+      refresh() {
+        const p = PLAYERS[Game.turn];
+        const badge = document.getElementById('turnBadge');
+        badge.textContent = p.name;
+        badge.style.background = p.color;
+        document.getElementById('roundNum').textContent = Game.round;
+
+        // economy sign reflects the player whose turn it is
+        const econ = document.getElementById('econ');
+        econ.textContent = Game.economy[Game.turn];
+        econ.parentElement.style.color = p.color === '#1e88e5' ? '#5aa9ff' : '#ff7a76';
+
+        let blue = 0, red = 0;
+        for (const u of Game.units) (u.owner === 0 ? blue++ : red++, 0);
+        document.getElementById('blueCount').textContent = blue;
+        document.getElementById('redCount').textContent = red;
+        let cb = 0, cr = 0;
+        for (const c of Game.cities) (c.owner === 0 ? cb++ : cr++, 0);
+        document.getElementById('cityCount').textContent = cb + ' / ' + cr;
+
+        // placement banner
+        const placePanel = document.getElementById('placePanel');
+        if (window.inPlacement && window.inPlacement()) {
+          placePanel.style.display = '';
+          document.getElementById('placeInfo').innerHTML =
+            `<b style="color:${p.color}">${p.name}</b>: ${window.pendingForTurn()} unit(s) to deploy.` +
+            `<p class="hint" style="margin-top:6px">Tap a highlighted tile in your 17-column zone to drop them (max 17 per tile).</p>`;
+        } else {
+          placePanel.style.display = 'none';
+        }
+
+        // selection panel
+        const sel = document.getElementById('selInfo');
+        if (Game.winner !== null) {
+          sel.className = '';
+          sel.innerHTML = `<b style="color:${PLAYERS[Game.winner].color}">${PLAYERS[Game.winner].name} wins!</b>`;
+        } else if (Game.selTile && stackAtTile(Game.selTile).length) {
+          const stack = stackAtTile(Game.selTile);
+          const owner = stack[0].owner;
+          const mine = owner === Game.turn;
+          sel.className = '';
+          if (Game.selectAll || !mine) {
+            sel.innerHTML = stackSummaryHtml(stack, owner);
+          } else {
+            sel.innerHTML = stackChecklistHtml(stack);
+            sel.querySelectorAll('input[data-uid]').forEach((cb) =>
+              cb.addEventListener('change', () => window.toggleUnitInSelection(+cb.dataset.uid)));
+          }
+        } else {
+          sel.className = 'muted';
+          sel.textContent = 'Click a tile to select its units.';
+        }
+      },
+      log(msg) {
+        const el = document.getElementById('log');
+        const div = document.createElement('div');
+        div.textContent = msg;
+        el.prepend(div);
+      },
+    };
+
+    // Build the static legend + unit table from the data files.
+    (function buildLegend() {
+      const tbl = document.getElementById('unitTable');
+      const uleg = document.getElementById('unitLegend');
+      for (const k in PIECES) {
+        const d = PIECES[k];
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${d.name}</td><td>${d.hp}</td><td>${d.attack}</td><td>${d.movement_speed}</td><td>${d.cost}</td>`;
+        tbl.appendChild(tr);
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = (d.art ? `<img src="${d.art}" alt="${d.name}">` : `<span class="icon">${d.code}</span>`) +
+          `<span>${d.name} (${d.code})</span>`;
+        uleg.appendChild(item);
+      }
+      const tleg = document.getElementById('terrainLegend');
+      const arts = { city: 'assets/city.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
+      for (const k in TERRAIN) {
+        const t = TERRAIN[k];
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        const visual = arts[k] ? `<img src="${arts[k]}" alt="${t.name}">` : `<span class="swatch" style="background:${t.color}"></span>`;
+        item.innerHTML = `${visual}<span>${t.name} (${t.code})</span>`;
+        tleg.appendChild(item);
+      }
+    })();
+
+    document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
+    document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
+    document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
+    document.getElementById('selectAllChk').addEventListener('change', (e) => window.setSelectAll(e.target.checked));
+  </script>
+  <script src="game.js"></script>
+</body>
+</html>

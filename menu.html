@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Menu</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1b2735 0%, #090a0f 100%); color: #e6e6e6;
+    }
+    .menu {
+      background: #23282e; padding: 2.5rem 2rem; border-radius: 14px; width: 100%;
+      max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,.5); text-align: center;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: .3rem; }
+    .sub { color: #9aa4ad; font-size: .85rem; margin-bottom: 1.8rem; }
+    .greeting { color: #7cb342; font-size: .85rem; margin-bottom: 1.4rem; }
+    button {
+      width: 100%; padding: 1rem; margin-bottom: .9rem; font-size: 1rem; font-weight: 600;
+      color: #fff; border: none; border-radius: 8px; cursor: pointer; transition: transform .1s, background .2s;
+      display: flex; align-items: center; justify-content: center; gap: .6rem;
+    }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    .pve { background: #b8412f; } .pve:hover { background: #9e3526; }
+    .new { background: #3a5bd9; } .new:hover { background: #2f49b0; }
+    .cont { background: #2e7d46; } .cont:hover { background: #266b3b; }
+    button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="menu">
+    <h1>⚔️ Battlegrid</h1>
+    <div class="sub">100 × 100 turn-based strategy</div>
+    <div class="greeting" id="greeting"></div>
+
+    <button class="new"  id="newBtn">🗺️ Start new map</button>
+    <button class="cont" id="contBtn">▶️ Continue</button>
+
+    <div class="hint" id="hint">No saved game yet.</div>
+  </div>
+
+  <script src="state.js"></script>
+  <script>
+    const greeting = document.getElementById("greeting");
+    const user = localStorage.getItem("battlegrid.user");
+    if (user) greeting.textContent = "Welcome, " + user + "!";
+
+    const contBtn = document.getElementById("contBtn");
+    const hint = document.getElementById("hint");
+    if (!SaveState.exists()) {
+      contBtn.disabled = true;
+    } else {
+      hint.textContent = "A saved game is available to continue.";
+    }
+
+    // New map: pick the opponent (PvP / PvE) on the next page before starting.
+    document.getElementById("newBtn").addEventListener("click", () => {
+      window.location.href = "mode.html";
+    });
+    // Continue resumes the saved game in whatever mode it was started in.
+    contBtn.addEventListener("click", () => {
+      if (contBtn.disabled) return;
+      SaveState.setIntent({ action: "continue" });
+      window.location.href = "index.html";
+    });
+  </script>
+</body>
+</html>
