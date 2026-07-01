@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Upgrades</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; background: #1b1f23; color: #e6e6e6; padding: 24px;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto 6px; }
+    h1 { font-size: 1.4rem; }
+    .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
+    .who { font-size: .85rem; color: #9aa4ad; max-width: 900px; margin: 0 auto 18px; }
+    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card .top { display: flex; align-items: center; gap: 12px; }
+    .card img, .card .icon {
+      width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
+      align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
+    }
+    .card h3 { font-size: 1rem; }
+    .owned { font-size: .75rem; color: #9aa4ad; }
+    .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.7; }
+    .stats b { color: #fff; }
+    .stats .up { color: #7cb342; font-weight: 700; }
+    .ups { display: flex; flex-direction: column; gap: 6px; }
+    .ups button {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: .55rem .7rem; border: none; border-radius: 6px; background: #3a5bd9; color: #fff;
+      font-weight: 600; font-size: .85rem; cursor: pointer;
+    }
+    .ups button:hover:not(:disabled) { background: #2f49b0; }
+    .ups button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .ups button .lvl { font-size: .72rem; color: #cdd6ff; font-weight: 700; }
+    .ups button:disabled .lvl { color: #6b727a; }
+    .cost { color: #f5c542; font-weight: 700; }
+    .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
+    .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; background: #2e7d46; }
+    .note { max-width: 900px; margin: 14px auto 0; font-size: .78rem; color: #7e8893; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⬆️ Unit Upgrades</h1>
+    <div class="gold">💰 <span id="gold">0</span> gold</div>
+  </header>
+  <div class="who" id="who"></div>
+
+  <div class="grid" id="grid"></div>
+  <div class="note">Upgrades cost gold, boost your existing and future units of that type, and last only for
+    <b>this game</b> — a new map starts everyone back at base stats. You can only upgrade your own units.</div>
+
+  <div class="bar">
+    <a href="index.html">⬅ Return to battle</a>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const save = SaveState.load();
+    if (!save) { window.location.href = "menu.html"; }
+
+    const me = save.turn;                     // the player whose turn it is upgrades
+    save.upgrades = save.upgrades || [{}, {}];
+    save.upgrades[me] = save.upgrades[me] || {};
+
+    document.getElementById("who").textContent =
+      PLAYERS[me].name + " — spend gold to strengthen your own units for this game.";
+
+    const goldEl = document.getElementById("gold");
+
+    const steps = (type, stat) => (save.upgrades[me][type] && save.upgrades[me][type][stat]) || 0;
+    const bonus = (type, stat) => steps(type, stat) * UPGRADES[stat].gain;
+    const cost  = (type, stat) => UPGRADES[stat].baseCost * (steps(type, stat) + 1);
+    const ownedOf = (type) => save.units.filter((u) => u.owner === me && u.type === type).length;
+
+    function apply(type, stat) {
+      const c = cost(type, stat);
+      if (save.economy[me] < c) return;
+      save.economy[me] -= c;
+      save.upgrades[me][type] = save.upgrades[me][type] || {};
+      save.upgrades[me][type][stat] = steps(type, stat) + 1;
+      const gain = UPGRADES[stat].gain;
+
+      // Apply immediately to the player's existing units of this type.
+      for (const u of save.units) {
+        if (u.owner !== me || u.type !== type) continue;
+        if (stat === 'atk') u.atkBonus = (u.atkBonus || 0) + gain;
+        else if (stat === 'mov') {
+          u.movBonus = (u.movBonus || 0) + gain;
+          if (!u.acted) u.movesLeft = (u.movesLeft || 0) + gain; // usable this turn
+        } else if (stat === 'hp') {
+          u.hpBonus = (u.hpBonus || 0) + gain;
+          u.maxHp = (u.maxHp || 0) + gain;
+          u.hp = (u.hp || 0) + gain;
+        }
+      }
+      SaveState.save(save);
+      render();
+    }
+
+    const grid = document.getElementById("grid");
+    function render() {
+      goldEl.textContent = save.economy[me];
+      grid.innerHTML = "";
+      for (const k in PIECES) {
+        const d = PIECES[k];
+        const eAtk = d.attack + bonus(k, 'atk');
+        const eHp  = d.hp + bonus(k, 'hp');
+        const eMov = d.movement_speed + bonus(k, 'mov');
+        const bump = (base, eff, cls) => eff > base
+          ? `<b>${base}</b> → <span class="${cls}">${eff}</span>` : `<b>${base}</b>`;
+
+        const card = document.createElement("div");
+        card.className = "card";
+        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
+        const btn = (stat, icon) => {
+          const c = cost(k, stat);
+          const dis = save.economy[me] < c ? "disabled" : "";
+          return `<button data-type="${k}" data-stat="${stat}" ${dis}>` +
+            `<span>${icon} ${UPGRADES[stat].label} +${UPGRADES[stat].gain} ` +
+            `<span class="lvl">Lv.${steps(k, stat)}</span></span>` +
+            `<span class="cost">$${c}</span></button>`;
+        };
+        card.innerHTML =
+          `<div class="top">${visual}<div><h3>${d.name}</h3>` +
+            `<div class="owned">You own: ${ownedOf(k)}</div></div></div>` +
+          `<div class="stats">` +
+            `⚔️ ATK ${bump(d.attack, eAtk, 'up')} &nbsp; ❤️ HP ${bump(d.hp, eHp, 'up')}<br>` +
+            `👟 MOV ${bump(d.movement_speed, eMov, 'up')}` +
+          `</div>` +
+          `<div class="ups">${btn('atk', '⚔️')}${btn('hp', '❤️')}${btn('mov', '👟')}</div>`;
+        grid.appendChild(card);
+      }
+      grid.querySelectorAll(".ups button").forEach((b) =>
+        b.addEventListener("click", () => apply(b.dataset.type, b.dataset.stat)));
+    }
+
+    render();
+  </script>
+</body>
+</html>

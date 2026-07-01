@@ -42,9 +42,31 @@ const Game = {
   selectAll: true,      // "select whole stack" toggle
   reachable: new Map(), // "r,c" -> remaining moves for the selected group
   toPlace: [],          // [{type, owner}] bought units awaiting deployment
+  upgrades: [{}, {}],   // per-player, per-type upgrade steps: {pawn:{atk,hp,mov}}
   winner: null,
 };
 let nextId = 1;
+
+// Upgrade tuning lives in units.js (window.UPGRADES) so the shop/upgrade pages
+// share one source of truth. Steps are stored per-player in the save.
+const UPGRADE = UPGRADES;
+// Steps of `stat` bought for `owner`'s `type` so far (0 if none).
+function upgradeSteps(owner, type, stat) {
+  const u = Game.upgrades[owner] && Game.upgrades[owner][type];
+  return (u && u[stat]) || 0;
+}
+// Cost of the NEXT step (escalates: baseCost * (steps + 1)).
+function upgradeCost(owner, type, stat) {
+  return UPGRADE[stat].baseCost * (upgradeSteps(owner, type, stat) + 1);
+}
+// Bonus fields a freshly-created unit should carry, given its owner's upgrades.
+function upgradeBonuses(owner, type) {
+  return {
+    atkBonus: upgradeSteps(owner, type, 'atk') * UPGRADE.atk.gain,
+    movBonus: upgradeSteps(owner, type, 'mov') * UPGRADE.mov.gain,
+    hpBonus:  upgradeSteps(owner, type, 'hp') * UPGRADE.hp.gain,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Stack helpers — keep Game.unitAt (a Map of arrays) in sync with Game.units
@@ -90,8 +112,10 @@ function serialize() {
     units: Game.units.map((u) => ({
       id: u.id, type: u.type, owner: u.owner, r: u.r, c: u.c,
       hp: u.hp, maxHp: u.maxHp, movesLeft: u.movesLeft, acted: u.acted,
+      atkBonus: u.atkBonus || 0, movBonus: u.movBonus || 0, hpBonus: u.hpBonus || 0,
     })),
     toPlace: Game.toPlace.slice(),
+    upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
     pendingSpawns: [], // always flushed into toPlace once applied
   };
 }
@@ -104,7 +128,7 @@ function buildInitialState(mode, seed) {
   return {
     seed, mode, turn: 0, round: 1,
     economy: [ECONOMY.start, ECONOMY.start],
-    cities, units, toPlace: [], pendingSpawns: [],
+    cities, units, toPlace: [], upgrades: [{}, {}], pendingSpawns: [],
   };
 }
 
@@ -145,7 +169,8 @@ function loadIntoGame(st) {
   Game.round = st.round || 1;
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
-  Game.units = (st.units || []).map((u) => ({ ...u }));
+  Game.units = (st.units || []).map((u) => ({ atkBonus: 0, movBonus: 0, hpBonus: 0, ...u }));
+  Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
   Game.winner = null;
@@ -188,8 +213,11 @@ function placeAt(r, c) {
     if (sp.owner !== owner) { i++; continue; }
     Game.toPlace.splice(i, 1);
     const def = PIECES[sp.type];
+    const b = upgradeBonuses(owner, sp.type);
+    const maxHp = def.hp + b.hpBonus;
     const u = { id: nextId++, type: sp.type, owner, r, c,
-      hp: def.hp, maxHp: def.hp, movesLeft: 0, acted: true }; // arrive; act next turn
+      hp: maxHp, maxHp, movesLeft: 0, acted: true, // arrive; act next turn
+      atkBonus: b.atkBonus, movBonus: b.movBonus, hpBonus: b.hpBonus };
     Game.units.push(u);
     addToStack(u);
     room--; placed++;
@@ -306,7 +334,7 @@ function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities,
 function startTurn(player) {
   Game.turn = player;
   for (const u of Game.units) {
-    if (u.owner === player) { u.movesLeft = PIECES[u.type].movement_speed; u.acted = false; }
+    if (u.owner === player) { u.movesLeft = PIECES[u.type].movement_speed + (u.movBonus || 0); u.acted = false; }
   }
   clearSelection();
 }

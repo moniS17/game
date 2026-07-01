@@ -87,7 +87,9 @@
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
 
       <button class="shop" id="buyBtn">🛒 Buy units</button>
+      <button id="upgradeBtn">⬆️ Upgrade units</button>
       <button id="nextRoundBtn">Next round ▶</button>
+      <button class="ghost" id="infoBtn">📖 Field manual</button>
       <button class="ghost" id="menuBtn">Main menu</button>
     </div>
 
@@ -139,7 +141,7 @@
       const lines = Object.keys(counts).map((t) =>
         `<div class="stat-row"><span>${PIECES[t].name}</span><span>×${counts[t]}</span></div>`).join('');
       const totHp = stack.reduce((a, u) => a + u.hp, 0);
-      const totAtk = stack.reduce((a, u) => a + PIECES[u.type].attack, 0);
+      const totAtk = stack.reduce((a, u) => a + Rules.unitAttack(u), 0);
       return `<div class="stat-row"><span><b>${PLAYERS[owner].name} stack</b></span><span>${stack.length}/17</span></div>` +
         lines +
         `<div class="stat-row"><span>Total HP / ATK</span><span>${totHp} / ${totAtk}</span></div>` +
@@ -253,6 +255,8 @@
 
     document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
+    document.getElementById('upgradeBtn').addEventListener('click', () => { window.location.href = 'upgrade.html'; });
+    document.getElementById('infoBtn').addEventListener('click', () => { window.location.href = 'info.html'; });
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
     document.getElementById('selectAllChk').addEventListener('change', (e) => window.setSelectAll(e.target.checked));
   </script>

@@ -56,3 +56,12 @@ window.ECONOMY = {
   base_income: 1,    // gold per round regardless of cities
   city_income: 2,    // extra gold per round for each owned city
 };
+
+// In-game unit upgrades (see upgrade.html + game.js). Bought with gold and
+// stored in the save, so they only ever apply to the CURRENT game. Each step
+// adds `gain` to the stat; the next step costs baseCost * (stepsBought + 1).
+window.UPGRADES = {
+  atk: { label: 'Attack',   gain: 1, baseCost: 3 },
+  hp:  { label: 'Health',   gain: 2, baseCost: 3 },
+  mov: { label: 'Movement', gain: 1, baseCost: 4 },
+};

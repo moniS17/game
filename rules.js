@@ -90,9 +90,12 @@ window.Rules = (function () {
     return reach;
   }
 
+  // A unit's effective attack = base (units.js) + any in-game upgrade bonus.
+  function unitAttack(u) { return PIECES[u.type].attack + (u.atkBonus || 0); }
+
   function sumAttack(group) {
     let s = 0;
-    for (const u of group) s += PIECES[u.type].attack;
+    for (const u of group) s += unitAttack(u);
     return s;
   }
 
@@ -128,5 +131,5 @@ window.Rules = (function () {
     return ECONOMY.base_income + ECONOMY.city_income * owned;
   }
 
-  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income };
+  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack };
 })();
