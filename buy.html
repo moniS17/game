@@ -31,13 +31,13 @@
     button.buy { padding: .6rem; border: none; border-radius: 6px; background: #2e7d46; color: #fff; font-weight: 600; cursor: pointer; }
     button.buy:hover:not(:disabled) { background: #266b3b; }
     button.buy:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
-    .stepper { display: flex; align-items: center; gap: 8px; }
+    .stepper { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
     .stepper button {
-      width: 32px; height: 32px; flex: 0 0 auto; border: none; border-radius: 6px;
-      background: #3a5bd9; color: #fff; font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+      width: 34px; height: 32px; flex: 0 0 auto; border: none; border-radius: 6px;
+      background: #3a5bd9; color: #fff; font-size: .95rem; font-weight: 700; cursor: pointer; line-height: 1;
     }
     .stepper button:hover { background: #2f49b0; }
-    .stepper .qty { flex: 1; text-align: center; font-weight: 700; font-size: 1rem; }
+    .stepper .qty { flex: 0 0 40px; text-align: center; font-weight: 700; font-size: 1rem; }
     .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; background: #3a5bd9; }
     .queue { max-width: 900px; margin: 18px auto 0; font-size: .85rem; color: #9aa4ad; }
@@ -131,14 +131,22 @@
           `👟 MOV <b>${d.movement_speed}</b> &nbsp; <span class="cost">$${d.cost}</span> each` +
         `</div>` +
         `<div class="stepper">` +
-          `<button class="dec" type="button">−</button>` +
+          `<button class="dec10" type="button">−10</button>` +
+          `<button class="dec3" type="button">−3</button>` +
+          `<button class="dec" type="button">−1</button>` +
           `<span class="qty">1</span>` +
-          `<button class="inc" type="button">+</button>` +
+          `<button class="inc" type="button">+1</button>` +
+          `<button class="inc3" type="button">+3</button>` +
+          `<button class="inc10" type="button">+10</button>` +
         `</div>` +
         `<button class="buy" type="button">Buy ×1 ($${d.cost})</button>`;
       grid.appendChild(card);
+      card.querySelector(".dec10").addEventListener("click", () => step(k, -10));
+      card.querySelector(".dec3").addEventListener("click", () => step(k, -3));
       card.querySelector(".dec").addEventListener("click", () => step(k, -1));
       card.querySelector(".inc").addEventListener("click", () => step(k, +1));
+      card.querySelector(".inc3").addEventListener("click", () => step(k, +3));
+      card.querySelector(".inc10").addEventListener("click", () => step(k, +10));
       card.querySelector("button.buy").addEventListener("click", () => buy(k));
     }
 

@@ -51,6 +51,23 @@ window.Render = (function () {
     return Math.min(Math.max(v, lo), hi);
   }
 
+  // Small-board convenience: if the whole board fits with room to spare, zoom in
+  // to fill the viewport (tiles capped at MAX_CELL) and center. Only ever zooms
+  // IN — a no-op for big boards (no room without cropping) or when already
+  // filling. Returns true if the zoom level changed.
+  function autoZoom() {
+    if (!canvas.width || !canvas.height || !Board.COLS || !Board.ROWS) return false;
+    const fit = Math.floor(Math.min(canvas.width / Board.COLS, canvas.height / Board.ROWS));
+    const target = Math.min(fit, MAX_CELL);
+    if (target > cam.cell) {
+      cam.cell = target;
+      clamp();
+      render();
+      return true;
+    }
+    return false;
+  }
+
   function cellFromPoint(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -194,5 +211,5 @@ window.Render = (function () {
   }
 
   preload();
-  return { canvas, cam, render, resize, clamp, cellFromPoint, MIN_CELL, MAX_CELL };
+  return { canvas, cam, render, resize, clamp, autoZoom, cellFromPoint, MIN_CELL, MAX_CELL };
 })();

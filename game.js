@@ -291,9 +291,21 @@ function doAttack(attackers, tr, tc) {
   for (const u of acting) { u.acted = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
 
   const foe = 1 - Game.turn;
+
+  // Note any terrain buff/debuff the target tile imposed on the attackers.
+  const dTerr = Game.terrain[tr][tc];
+  const mods = [], seen = new Set();
+  for (const u of acting) {
+    if (seen.has(u.type)) continue;
+    seen.add(u.type);
+    const m = Rules.terrainAtkMult(u.type, dTerr);
+    if (m !== 1) mods.push(`${PIECES[u.type].name} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
+  }
+  const terrainNote = mods.length ? ` [${TERRAIN[dTerr].name}: ${mods.join(', ')}]` : '';
+
   UI.log(`${PLAYERS[Game.turn].name} (${acting.length + atkKilled}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back). ` +
-    `Destroyed ${defKilled} / lost ${atkKilled}.`);
+    `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}`);
   checkWinner();
 }
 
@@ -377,6 +389,7 @@ function advanceTo(player) {
   persist();
   UI.refresh();
   Render.render();
+  Render.autoZoom(); // small boards: keep the board filling the viewport
   if (Game.mode === 'pve' && player === 1) runAiTurn();
 }
 
@@ -400,9 +413,98 @@ function nearestEnemyTile(r, c, owner) {
   return best;
 }
 
+// The AI (player 1) spends its gold on reinforcements and deploys them in its
+// own zone, aimed at the row where the enemy has pushed closest to the AI's home
+// edge. Called after the AI's existing units have already moved this turn, so a
+// freshly-arrived (0-move) unit never freezes a shared stack's movement.
+
+// Row where the enemy is nearest to `me`'s home edge (its most advanced threat).
+// me=1 defends the RIGHT edge (largest column), me=0 the LEFT (smallest column).
+function aiThreatRow(me) {
+  let best = null, bestC = me === 1 ? -1 : COLS();
+  for (const u of Game.units) {
+    if (u.owner === me) continue;
+    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
+  }
+  return best == null ? Math.floor(ROWS() / 2) : best;
+}
+
+// Greedily spend the AI's gold. Returns an array of purchased unit types. Cycles
+// through affordable types so the army is a mix rather than all of one kind.
+function aiBuyUnits(me) {
+  const roster = Object.keys(PIECES).sort((a, b) => PIECES[a].cost - PIECES[b].cost);
+  const cheapest = PIECES[roster[0]].cost;
+  const bought = [];
+  let budget = Game.economy[me];
+  // Guard the loop so a runaway can never spin (budget strictly decreases).
+  while (budget >= cheapest && bought.length < 200) {
+    const affordable = roster.filter((t) => PIECES[t].cost <= budget);
+    // Rotate the pick by how many we've bought — deterministic variety.
+    const pick = affordable[bought.length % affordable.length];
+    budget -= PIECES[pick].cost;
+    bought.push(pick);
+  }
+  Game.economy[me] = budget;
+  return bought;
+}
+
+// Deploy `bought` units into `me`'s zone, filling tiles closest to (threatRow,
+// front column) first and spilling outward. Mirrors placeAt's unit construction.
+function aiDeployUnits(me, bought) {
+  if (!bought.length) return 0;
+  const cols = COLS(), rows = ROWS(), zone = ZONE();
+  const frontCol = me === 1 ? cols - zone : zone - 1; // zone edge facing the enemy
+  const targetRow = aiThreatRow(me);
+
+  // Candidate tiles in the zone, nearest the threat first (row distance, then
+  // depth back from the front). Skip water and enemy-held tiles.
+  const cands = [];
+  for (let c = 0; c < cols; c++) {
+    if (!inZone(me, c)) continue;
+    for (let r = 0; r < rows; r++) {
+      if (Game.terrain[r][c] === 'water') continue;
+      const s = stackAt(r, c);
+      if (s.length && s[0].owner !== me) continue;
+      cands.push({ r, c, d: Math.abs(r - targetRow) * 2 + Math.abs(c - frontCol) });
+    }
+  }
+  cands.sort((a, b) => a.d - b.d);
+
+  let placed = 0, ci = 0;
+  for (const type of bought) {
+    // Advance to a candidate tile with room (< STACK_LIMIT), then place there.
+    while (ci < cands.length && stackAt(cands[ci].r, cands[ci].c).length >= Rules.STACK_LIMIT) ci++;
+    if (ci >= cands.length) break; // zone full — refund the rest
+    const { r, c } = cands[ci];
+    const def = PIECES[type];
+    const b = upgradeBonuses(me, type);
+    const maxHp = def.hp + b.hpBonus;
+    const u = { id: nextId++, type, owner: me, r, c,
+      hp: maxHp, maxHp, movesLeft: 0, acted: true, // arrive now, fight next turn
+      atkBonus: b.atkBonus, movBonus: b.movBonus, hpBonus: b.hpBonus };
+    Game.units.push(u);
+    addToStack(u);
+    placed++;
+  }
+  // Refund any units that couldn't fit (zone saturated).
+  for (let i = placed; i < bought.length; i++) Game.economy[me] += PIECES[bought[i]].cost;
+  return placed;
+}
+
+function aiSpendAndReinforce(me) {
+  if (Game.economy[me] < 1) return;
+  const bought = aiBuyUnits(me);
+  const placed = aiDeployUnits(me, bought);
+  if (placed) {
+    const counts = {};
+    for (let i = 0; i < placed; i++) counts[bought[i]] = (counts[bought[i]] || 0) + 1;
+    const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
+    UI.log(`${PLAYERS[me].name} reinforced with ${names.join(', ')}.`);
+  }
+}
+
 function runAiTurn() {
   const me = 1;
-  // Snapshot the AI's starting tiles; resolve each into a live group.
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
@@ -432,6 +534,7 @@ function runAiTurn() {
       doAttack(group, enemy.r, enemy.c);
     }
   }
+  aiSpendAndReinforce(me); // buy + deploy reinforcements for next turn
   Game.reachable = new Map();
   persist();
   UI.refresh();
@@ -446,7 +549,7 @@ function handleTapAt(r, c) {
   if (Game.winner !== null || !inBounds(r, c)) return;
 
   // Placement mode: taps deploy bought units into the player's zone.
-  if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); return; }
+  if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); Render.autoZoom(); return; }
 
   const tileStack = stackAt(r, c);
   const movers = Game.selUnits.filter((u) => u.owner === Game.turn);
@@ -459,7 +562,7 @@ function handleTapAt(r, c) {
       persist();
       Game.selUnits = Game.selUnits.filter((u) => Game.units.includes(u));
       if (Game.selUnits.length) recomputeReachable(); else clearSelection();
-      UI.refresh(); Render.render(); return;
+      UI.refresh(); Render.render(); Render.autoZoom(); return;
     }
     // Move: tapped a reachable (own/empty) tile.
     if (Game.reachable.has(key(r, c)) && (!tileStack.length || tileStack[0].owner === Game.turn)) {
@@ -469,7 +572,7 @@ function handleTapAt(r, c) {
         Game.selTile = { r, c };
         Game.selUnits = group;
         recomputeReachable();
-        UI.refresh(); Render.render(); return;
+        UI.refresh(); Render.render(); Render.autoZoom(); return;
       }
     }
   }
@@ -568,6 +671,7 @@ function boot() {
   }
   loadIntoGame(st);
   Render.resize();
+  Render.autoZoom(); // small boards: fill the viewport (also after buy/upgrade returns here)
   UI.refresh();
 }
 

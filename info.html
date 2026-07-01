@@ -43,6 +43,14 @@
     <h1>📖 Field Manual</h1>
     <div class="sub">Buffs, debuffs and rules for terrain, units and combat.</div>
 
+    <h2>Controls</h2>
+    <div class="panel">
+      <ul>
+        <li>Drag or use <b>one finger</b> to pan the map; <b>scroll or pinch</b> to zoom.</li>
+        <li>Tap a tile to select its stack, then tap a <b>yellow tile</b> to move, or an <b>adjacent enemy</b> to attack.</li>
+      </ul>
+    </div>
+
     <h2>Terrain effects</h2>
     <div class="panel">
       <table id="terrainTable">
@@ -56,6 +64,12 @@
       <table id="unitTable">
         <tr><th>Unit</th><th>HP</th><th>ATK</th><th>MOV</th><th>Cost</th><th>Role</th></tr>
       </table>
+    </div>
+
+    <h2>Unit vs terrain (attack)</h2>
+    <div class="panel">
+      <p class="sub" style="margin:0 0 8px">How much each unit's ATK changes when it strikes an enemy standing on a tile. Blank = no change.</p>
+      <table id="terrainCombatTable"></table>
     </div>
 
     <h2>Combat &amp; stacking</h2>
@@ -129,11 +143,34 @@
       ut.appendChild(tr);
     }
 
+    // --- Unit vs terrain (attack) matrix ---
+    const tct = document.getElementById("terrainCombatTable");
+    const terrCols = Object.keys(TERRAIN);
+    const header = document.createElement("tr");
+    header.innerHTML = `<th>Unit</th>` + terrCols.map((k) => `<th>${TERRAIN[k].name}</th>`).join("");
+    tct.appendChild(header);
+    for (const k in PIECES) {
+      const row = TERRAIN_COMBAT[k];
+      if (!row) continue; // only list units that actually change on some terrain
+      const d = PIECES[k];
+      const visual = d.art ? `<img class="swatch" src="${d.art}" alt="">` : `<span class="icon">${d.code}</span>`;
+      const cells = terrCols.map((t) => {
+        const m = row[t] || 1;
+        if (m === 1) return `<td><span class="neutral">—</span></td>`;
+        const pct = `${m < 1 ? "−" : "+"}${Math.round(Math.abs(1 - m) * 100)}%`;
+        return `<td><span class="${m < 1 ? "debuff" : "buff"}">${pct}</span></td>`;
+      }).join("");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><span class="name">${visual}${d.name}</span></td>` + cells;
+      tct.appendChild(tr);
+    }
+
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
       `<li>Up to <b>${Rules.STACK_LIMIT} units</b> of one side may <b>stack</b> on a single tile (shown as a letter + count, e.g. p₃).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b> (minus the other tile's terrain defense), spread through the stack 1 unit at a time.</li>` +
+      `<li><b>Terrain shapes attacks</b>: each unit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while artillery and cannons batter <b>cities</b> <span class="buff">harder</span> (see the table above). Counterattacks are scaled the same way.</li>` +
       `<li class="buff">If one side has at least <b>twice</b> the other's unit count, the outnumbered side takes <b>double damage</b> — numbers win regardless of unit quality.</li>` +
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn, so a high-MOV unit can still move after striking.</li>` +
       `<li>Deploy bought units anywhere in your own <b>17-column zone</b> (Blue = left, Red = right).</li>`;

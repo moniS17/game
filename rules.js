@@ -93,9 +93,28 @@ window.Rules = (function () {
   // A unit's effective attack = base (units.js) + any in-game upgrade bonus.
   function unitAttack(u) { return PIECES[u.type].attack + (u.atkBonus || 0); }
 
+  // Terrain combat modifier: how a unit type's ATK scales when it fights an enemy
+  // standing on `terrainType` (units.js / TERRAIN_COMBAT). 1 when unlisted.
+  function terrainAtkMult(type, terrainType) {
+    const row = (typeof TERRAIN_COMBAT !== 'undefined') && TERRAIN_COMBAT[type];
+    return (row && row[terrainType]) || 1;
+  }
+
+  // A unit's attack against a target on `terrainType` (base ATK × terrain buff).
+  function unitAttackOn(u, terrainType) {
+    return unitAttack(u) * terrainAtkMult(u.type, terrainType);
+  }
+
   function sumAttack(group) {
     let s = 0;
     for (const u of group) s += unitAttack(u);
+    return s;
+  }
+
+  // Sum of a group's attack against enemies standing on `terrainType`.
+  function sumAttackOn(group, terrainType) {
+    let s = 0;
+    for (const u of group) s += unitAttackOn(u, terrainType);
     return s;
   }
 
@@ -104,15 +123,17 @@ window.Rules = (function () {
   // they sit on adjacent tiles.
   function resolveCombat(terrain, attackers, defenders) {
     const aTile = attackers[0], dTile = defenders[0];
+    const aTerr = terrain[aTile.r][aTile.c], dTerr = terrain[dTile.r][dTile.c];
     const acrossRiver =
       Board.isWater(terrain, aTile.r, aTile.c) ||
       Board.isWater(terrain, dTile.r, dTile.c);
     const river = acrossRiver ? COMBAT.river_attack_penalty : 0;
 
-    let dmgToDef = sumAttack(attackers) - TERRAIN[terrain[dTile.r][dTile.c]].defense - river;
-    let dmgToAtk = sumAttack(defenders) - TERRAIN[terrain[aTile.r][aTile.c]].defense - river;
-    dmgToDef = Math.max(1, dmgToDef);
-    dmgToAtk = Math.max(1, dmgToAtk);
+    // Each side's ATK is scaled per-unit by how it fights the OTHER tile's terrain.
+    let dmgToDef = sumAttackOn(attackers, dTerr) - TERRAIN[dTerr].defense - river;
+    let dmgToAtk = sumAttackOn(defenders, aTerr) - TERRAIN[aTerr].defense - river;
+    dmgToDef = Math.max(1, Math.round(dmgToDef));
+    dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
     // The side outnumbered >= 2:1 takes double damage (counts only).
     if (attackers.length >= 2 * defenders.length) dmgToDef *= 2;
@@ -131,5 +152,5 @@ window.Rules = (function () {
     return ECONOMY.base_income + ECONOMY.city_income * owned;
   }
 
-  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack };
+  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult };
 })();

@@ -44,9 +44,27 @@ window.PIECES = {
   },
 };
 
+// Terrain combat modifiers — how well each unit type FIGHTS an enemy standing on
+// a given terrain. The multiplier scales that unit's ATK when it attacks a target
+// on that tile, and symmetrically when it counterattacks a unit on that tile.
+// 1 = no change, <1 = debuff, >1 = bonus; any terrain not listed defaults to 1.
+//
+// Design intent:
+//   tank / cavalry  — heavy & mounted units bog down assaulting cities and water.
+//   artillery / cannon — siege guns excel at battering fortified cities.
+//   archer          — shoots effectively into forest cover.
+//   pawn            — infantry are strong in close urban fighting.
+window.TERRAIN_COMBAT = {
+  tank:      { city: 0.5, water: 0.5, forest: 0.75 },
+  cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
+  artillery: { city: 1.5 },
+  cannon:    { city: 1.4 },
+  archer:    { forest: 1.25 },
+  pawn:      { city: 1.2 },
+};
+
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
-window.PLAYERS = [
-  { name: 'Blue', side: 'left',  color: '#1e88e5' },
+window.PLAYERS = [  { name: 'Blue', side: 'left',  color: '#1e88e5' },
   { name: 'Red',  side: 'right', color: '#e53935' },
 ];
 

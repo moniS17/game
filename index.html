@@ -19,6 +19,30 @@
     #board { display: block; width: 100%; height: 100%; cursor: grab; background: #0d0f11; touch-action: none; }
     #board:active { cursor: grabbing; }
 
+    /* Top-of-page overlay: the units standing on the tapped tile, each figure with HP above it. */
+    #tileList {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      max-height: 45%; overflow-y: auto;
+      background: rgba(21,24,28,0.93); border-bottom: 1px solid #3a3f45;
+      padding: 8px 12px; display: none; flex-direction: column; gap: 6px;
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    }
+    #tileList .tl-head {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+      color: #9aa4ad; text-align: center;
+    }
+    /* Overlapping cascade: strongest unit on top, each one below tucked half-under the one above. */
+    #tileList .tl-figs { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+    .tunit { position: relative; display: flex; flex-direction: column; align-items: center; }
+    .tunit:not(:first-child) { margin-top: -26px; }
+    .thp { font-size: .72rem; font-weight: 700; line-height: 1; margin-top: 1px; }
+    .tfig {
+      width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; color: #fff; font-weight: 700; font-family: monospace; font-size: 1.2rem;
+      border: 2px solid rgba(0,0,0,0.35); box-shadow: 0 -2px 5px rgba(0,0,0,0.45);
+    }
+    .tfig img { width: 72%; height: 72%; }
+
     #sidebar {
       width: 290px; flex-shrink: 0; padding: 16px; overflow-y: auto;
       background: #23282e; border-left: 1px solid #333; display: flex; flex-direction: column; gap: 14px;
@@ -57,12 +81,12 @@
   </style>
 </head>
 <body>
+  <div id="tileList"></div>
   <div id="boardWrap"><canvas id="board"></canvas></div>
 
   <aside id="sidebar">
     <div>
       <h1>⚔️ Battlegrid</h1>
-      <p class="hint">Drag/one-finger to pan, scroll/pinch to zoom. Tap a tile to select its stack, then a yellow tile to move or an adjacent enemy to attack.</p>
     </div>
 
     <div class="panel">
@@ -143,6 +167,38 @@
         `<p class="hint" style="margin-top:6px">Checked units move/attack together. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`;
     }
 
+    // HP colour: green when healthy, amber when hurt, red when near death.
+    function hpColor(u) {
+      const r = u.hp / u.maxHp;
+      return r > 0.66 ? '#4caf50' : r > 0.33 ? '#f5c542' : '#ff5a52';
+    }
+
+    // Overall strength of a unit — attack dominates, current HP breaks ties.
+    function unitStat(u) { return Rules.unitAttack(u) * 100 + u.hp; }
+
+    // Top overlay: units on the tapped tile, strongest first, each figure half-covering the next.
+    function renderTileList() {
+      const box = document.getElementById('tileList');
+      const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
+      if (!stack.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+      const owner = stack[0].owner;
+      const sorted = stack.slice().sort((a, b) => unitStat(b) - unitStat(a));
+      const figs = sorted.map((u, i) => {
+        const d = PIECES[u.type];
+        const color = PLAYERS[u.owner].color;
+        const inner = d.art
+          ? `<img src="${d.art}" alt="${d.name}">`
+          : d.code;
+        return `<div class="tunit" title="${d.name}" style="z-index:${sorted.length - i}">` +
+          `<div class="tfig" style="background:${color}">${inner}</div>` +
+          `<div class="thp" style="color:${hpColor(u)}">${u.hp}/${u.maxHp}</div></div>`;
+      }).join('');
+      box.innerHTML =
+        `<div class="tl-head">${PLAYERS[owner].name} · ${stack.length} unit${stack.length > 1 ? 's' : ''} on tile</div>` +
+        `<div class="tl-figs">${figs}</div>`;
+      box.style.display = 'flex';
+    }
+
     const UI = {
       refresh() {
         const p = PLAYERS[Game.turn];
@@ -196,6 +252,8 @@
           sel.className = 'muted';
           sel.textContent = 'Click a tile to select its units.';
         }
+
+        renderTileList();
       },
       log(msg) {
         const el = document.getElementById('log');
