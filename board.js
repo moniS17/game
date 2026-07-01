@@ -3,8 +3,8 @@
  *
  * Owns the terrain table and small query helpers used by rules.js, render.js
  * and game.js. Map *generation* lives in algorithms.js; this file just wraps
- * it (Board.fromSeed) and provides tile lookups, so the board representation
- * can evolve independently of the rules.
+ * it (Board.fromSeed) and provides tile lookups. Board dimensions (Board.ROWS,
+ * Board.COLS) are chosen per game and default to the classic 100x100.
  *
  *   move_cost - movement points to ENTER the tile (see rules.js for the
  *               extra water-crossing rules)
@@ -18,17 +18,33 @@ window.TERRAIN = {
 };
 
 window.Board = (function () {
-  const GRID = Algorithms.GRID;
+  // Board dimensions are chosen per game (see the setup screen). They default
+  // to the classic square 100x100 and can be any size within Algorithms' bounds.
+  let ROWS = Algorithms.GRID, COLS = Algorithms.GRID;
 
   const key = (r, c) => r + ',' + c;
-  const inBounds = (r, c) => r >= 0 && r < GRID && c >= 0 && c < GRID;
+  const inBounds = (r, c) => r >= 0 && r < ROWS && c >= 0 && c < COLS;
 
-  // Build terrain + cities for a seed (deterministic). See algorithms.js.
-  function fromSeed(seed) { return Algorithms.generateMap(seed); }
+  function setDims(rows, cols) {
+    ROWS = Algorithms.clampDim(rows);
+    COLS = Algorithms.clampDim(cols);
+  }
+
+  // Deployment-zone width (columns) per side, scaled to board width (17 at 100).
+  function zone() { return Math.max(1, Math.min(17, Math.floor(COLS / 3))); }
+
+  // Build terrain + cities for a seed at the current (or given) dimensions.
+  function fromSeed(seed, rows, cols) {
+    if (rows != null && cols != null) setDims(rows, cols);
+    return Algorithms.generateMap(seed, ROWS, COLS);
+  }
 
   const typeAt = (terrain, r, c) => terrain[r][c];
   const defAt = (terrain, r, c) => TERRAIN[terrain[r][c]];
   const isWater = (terrain, r, c) => terrain[r][c] === 'water';
 
-  return { GRID, key, inBounds, fromSeed, typeAt, defAt, isWater };
+  return {
+    key, inBounds, setDims, zone, fromSeed, typeAt, defAt, isWater,
+    get ROWS() { return ROWS; }, get COLS() { return COLS; },
+  };
 })();

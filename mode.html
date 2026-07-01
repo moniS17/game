@@ -30,31 +30,91 @@
     .pve { background: #b8412f; } .pve:hover { background: #9e3526; }
     .back { background: #444c55; } .back:hover { background: #525c66; }
     .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
+
+    /* Board-size setup */
+    .size { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+    .size h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
+    .dims { display: flex; align-items: center; justify-content: center; gap: .5rem; }
+    .dims input {
+      width: 5rem; padding: .55rem; font-size: 1rem; text-align: center; color: #e6e6e6;
+      background: #0f1216; border: 1px solid #3a3f45; border-radius: 6px;
+    }
+    .dims input:focus { outline: none; border-color: #3a5bd9; }
+    .dims span { color: #6b727a; font-weight: 700; }
+    .dims label { font-size: .62rem; color: #6b727a; display: block; margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .05em; }
+    .field { display: flex; flex-direction: column; align-items: center; }
+    .default {
+      width: auto; margin: .8rem auto 0; padding: .45rem .9rem; font-size: .78rem; font-weight: 600;
+      background: #2b3138; color: #cfd6dd;
+    }
+    .default:hover { background: #363d45; transform: none; }
+    #sizeErr { color: #ff7a76; font-size: .7rem; min-height: .9rem; margin-top: .5rem; }
   </style>
 </head>
 <body>
   <div class="menu">
     <h1>🗺️ New map</h1>
-    <div class="sub">Who are you playing against?</div>
+    <div class="sub">Set the board size, then pick your opponent to start.</div>
 
-    <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Player vs Player (PvP)</button>
-    <button class="pve" id="pveBtn">🤖 Player vs AI (PvE)</button>
+    <div class="size">
+      <h2>Board size (tiles)</h2>
+      <div class="dims">
+        <div class="field">
+          <label for="widthInput">Width</label>
+          <input id="widthInput" type="number" inputmode="numeric" min="5" max="400" step="1" value="100" />
+        </div>
+        <span>×</span>
+        <div class="field">
+          <label for="heightInput">Height</label>
+          <input id="heightInput" type="number" inputmode="numeric" min="5" max="400" step="1" value="100" />
+        </div>
+      </div>
+      <button type="button" class="default" id="defaultBtn">↺ Default 100 × 100</button>
+      <div id="sizeErr"></div>
+    </div>
+
+    <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
+    <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
     <button class="back" id="backBtn">← Back to menu</button>
 
-    <div class="hint">A fresh map is generated when the game starts.</div>
+    <div class="hint">A fresh map is generated at the chosen size (5–400 each side).</div>
   </div>
 
+  <script src="algorithms.js"></script>
   <script src="state.js"></script>
   <script>
-    // Start a new game in the chosen mode; index.html generates a fresh map.
-    function start(mode) {
-      SaveState.setIntent({ action: "new", mode });
-      window.location.href = "index.html";
+    const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
+    const widthInput = document.getElementById('widthInput');
+    const heightInput = document.getElementById('heightInput');
+    const errEl = document.getElementById('sizeErr');
+
+    // Read + validate a dimension input. Returns an integer in [MIN, MAX] or null.
+    function readDim(el) {
+      const n = Math.floor(Number(el.value));
+      if (!Number.isFinite(n) || n < MIN || n > MAX) return null;
+      return n;
     }
-    document.getElementById("pvpBtn").addEventListener("click", () => start("pvp"));
-    document.getElementById("pveBtn").addEventListener("click", () => start("pve"));
-    document.getElementById("backBtn").addEventListener("click", () => {
-      window.location.href = "menu.html";
+
+    document.getElementById('defaultBtn').addEventListener('click', () => {
+      widthInput.value = String(Algorithms.GRID);
+      heightInput.value = String(Algorithms.GRID);
+      errEl.textContent = '';
+    });
+
+    // Start a new game: validate size, hand off to index.html which generates the map.
+    function start(mode) {
+      const cols = readDim(widthInput), rows = readDim(heightInput);
+      if (cols == null || rows == null) {
+        errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
+        return;
+      }
+      SaveState.setIntent({ action: 'new', mode, rows, cols });
+      window.location.href = 'index.html';
+    }
+    document.getElementById('pvpBtn').addEventListener('click', () => start('pvp'));
+    document.getElementById('pveBtn').addEventListener('click', () => start('pve'));
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.location.href = 'menu.html';
     });
   </script>
 </body>

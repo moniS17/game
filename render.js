@@ -9,7 +9,6 @@
  *                          MIN_CELL, MAX_CELL }.
  */
 window.Render = (function () {
-  const GRID = Board.GRID;
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
 
@@ -40,9 +39,8 @@ window.Render = (function () {
 
   function clamp() {
     const pad = PAD_TILES * cam.cell;
-    const boardPx = GRID * cam.cell;
-    cam.x = clampAxis(cam.x, boardPx, canvas.width, pad);
-    cam.y = clampAxis(cam.y, boardPx, canvas.height, pad);
+    cam.x = clampAxis(cam.x, Board.COLS * cam.cell, canvas.width, pad);
+    cam.y = clampAxis(cam.y, Board.ROWS * cam.cell, canvas.height, pad);
   }
 
   // Keep at most `pad` of gray on each side. If the board is smaller than the
@@ -68,12 +66,13 @@ window.Render = (function () {
     ctx.fillStyle = '#6a6f76';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const cell = cam.cell;
+    const COLS = Board.COLS, ROWS = Board.ROWS;
     const c0 = Math.max(0, Math.floor(cam.x / cell));
     const r0 = Math.max(0, Math.floor(cam.y / cell));
-    const c1 = Math.min(GRID, Math.ceil((cam.x + canvas.width) / cell));
-    const r1 = Math.min(GRID, Math.ceil((cam.y + canvas.height) / cell));
+    const c1 = Math.min(COLS, Math.ceil((cam.x + canvas.width) / cell));
+    const r1 = Math.min(ROWS, Math.ceil((cam.y + canvas.height) / cell));
     const detailed = cell >= 22;
-    const ZONE = 17;
+    const ZONE = Board.zone();
     const placing = window.inPlacement && window.inPlacement();
 
     for (let r = r0; r < r1; r++) {
@@ -82,9 +81,9 @@ window.Render = (function () {
         const tkey = G.terrain[r][c];
         const terr = TERRAIN[tkey];
 
-        // Faint deployment-zone tint (17 columns each side).
+        // Faint deployment-zone tint (ZONE columns each side).
         if (c < ZONE) { ctx.globalAlpha = 0.10; ctx.fillStyle = PLAYERS[0].color; ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1; }
-        else if (c >= GRID - ZONE) { ctx.globalAlpha = 0.10; ctx.fillStyle = PLAYERS[1].color; ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1; }
+        else if (c >= COLS - ZONE) { ctx.globalAlpha = 0.10; ctx.fillStyle = PLAYERS[1].color; ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1; }
 
         ctx.fillStyle = terr.color;
         ctx.fillRect(x, y, cell, cell);
@@ -99,8 +98,8 @@ window.Render = (function () {
     // During placement, brighten the current player's zone and its dry tiles.
     if (placing) {
       const me = G.turn;
-      const zc0 = me === 0 ? 0 : GRID - ZONE;
-      const zc1 = me === 0 ? ZONE : GRID;
+      const zc0 = me === 0 ? 0 : COLS - ZONE;
+      const zc1 = me === 0 ? ZONE : COLS;
       for (let r = r0; r < r1; r++) {
         for (let c = Math.max(c0, zc0); c < Math.min(c1, zc1); c++) {
           if (G.terrain[r][c] === 'water') continue;

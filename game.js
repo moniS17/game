@@ -16,13 +16,15 @@
  *   "r,c" -> Unit[] (a "stack", capped at Rules.STACK_LIMIT = 17). Units move
  *   and fight as a selected GROUP chosen from one tile (whole stack, or a
  *   checkbox-picked subset). Bought units are placed by the player into their
- *   own 17-column zone. Combat is mutual (see rules.js).
+ *   own deployment zone. Combat is mutual (see rules.js).
  */
 
-const GRID = Board.GRID;
 const key = Board.key;
 const inBounds = Board.inBounds;
-const ZONE = 17; // each player deploys within their own 17 columns
+// Board dimensions and deployment-zone width are dynamic (chosen per game).
+const COLS = () => Board.COLS;
+const ROWS = () => Board.ROWS;
+const ZONE = () => Board.zone(); // each player deploys within their own zone columns
 
 // ---------------------------------------------------------------------------
 // Runtime game state
@@ -92,7 +94,7 @@ function rebuildUnitAt() {
 }
 
 // Placement-zone test for a column (Blue left 17, Red right 17).
-function inZone(owner, c) { return owner === 0 ? c < ZONE : c >= GRID - ZONE; }
+function inZone(owner, c) { return owner === 0 ? c < ZONE() : c >= COLS() - ZONE(); }
 
 // How many units the player-to-move still has to deploy.
 function pendingForTurn() { return Game.toPlace.filter((s) => s.owner === Game.turn).length; }
@@ -104,6 +106,8 @@ function inPlacement() { return pendingForTurn() > 0; }
 function serialize() {
   return {
     seed: Game.seed,
+    rows: Board.ROWS,
+    cols: Board.COLS,
     mode: Game.mode,
     turn: Game.turn,
     round: Game.round,
@@ -121,18 +125,19 @@ function serialize() {
 }
 function persist() { SaveState.save(serialize()); }
 
-// Build a brand-new game for the given mode and seed.
-function buildInitialState(mode, seed) {
-  const { terrain, cities } = Board.fromSeed(seed);
+// Build a brand-new game for the given mode, seed and board size.
+function buildInitialState(mode, seed, rows, cols) {
+  const { terrain, cities } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const units = buildInitialArmies(terrain);
   return {
-    seed, mode, turn: 0, round: 1,
+    seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
     economy: [ECONOMY.start, ECONOMY.start],
     cities, units, toPlace: [], upgrades: [{}, {}], pendingSpawns: [],
   };
 }
 
-// Mirror starting armies down each edge, skipping water tiles.
+// Mirror starting armies down each edge, skipping water tiles. Margins/spacing
+// scale with the board so small maps still get a sensible starting force.
 function buildInitialArmies(terrain) {
   const units = [];
   let id = 1;
@@ -151,11 +156,14 @@ function buildInitialArmies(terrain) {
       if (dry(r - d, c)) return put(type, owner, r - d, c);
     }
   };
-  for (let r = 8; r < GRID - 8; r += 6) {
+  const rows = Board.ROWS, cols = Board.COLS;
+  const margin = Math.max(1, Math.floor(rows * 0.08)); // 8 at rows=100
+  const step = Math.max(2, Math.floor(rows / 16));     // 6 at rows=100
+  for (let r = margin; r < rows - margin; r += step) {
     place('pawn', 0, r, 1);
-    place('pawn', 1, r, GRID - 2);
-    if ((r / 6) % 2 === 0) { place('cavalry', 0, r, 0); place('cavalry', 1, r, GRID - 1); }
-    if ((r / 6) % 3 === 0) { place('tank', 0, r, 2); place('tank', 1, r, GRID - 3); }
+    place('pawn', 1, r, cols - 2);
+    if ((r / 6) % 2 === 0) { place('cavalry', 0, r, 0); place('cavalry', 1, r, cols - 1); }
+    if ((r / 6) % 3 === 0 && cols >= 6) { place('tank', 0, r, 2); place('tank', 1, r, cols - 3); }
   }
   return units;
 }
@@ -164,7 +172,8 @@ function buildInitialArmies(terrain) {
 function loadIntoGame(st) {
   Game.seed = st.seed;
   Game.mode = st.mode || 'pvp';
-  Game.terrain = Board.fromSeed(st.seed).terrain;
+  // Restore board size (old saves predate this and default to 100x100).
+  Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
   Game.turn = st.turn || 0;
   Game.round = st.round || 1;
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
@@ -200,7 +209,7 @@ function captureIfCity(r, c, owner) {
 // Deploy pending units onto a tile in the current player's zone (stacked).
 function placeAt(r, c) {
   const owner = Game.turn;
-  if (!inZone(owner, c)) { UI.log('Deploy inside your own 17-column zone.'); return; }
+  if (!inZone(owner, c)) { UI.log('Deploy inside your own deployment zone.'); return; }
   if (Game.terrain[r][c] === 'water') { UI.log('Cannot deploy on water.'); return; }
   const stack = stackAt(r, c);
   if (stack.length && stack[0].owner !== owner) { UI.log('Tile is held by the enemy.'); return; }
@@ -531,7 +540,7 @@ function boot() {
   const intent = SaveState.takeIntent();
   let st;
   if (intent && intent.action === 'new') {
-    st = buildInitialState(intent.mode || 'pvp', Math.floor(Math.random() * 1e9));
+    st = buildInitialState(intent.mode || 'pvp', Math.floor(Math.random() * 1e9), intent.rows, intent.cols);
     SaveState.save(st);
   } else {
     st = SaveState.load();
