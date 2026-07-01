@@ -136,8 +136,9 @@ function buildInitialState(mode, seed, rows, cols) {
   };
 }
 
-// Mirror starting armies down each edge, skipping water tiles. Margins/spacing
-// scale with the board so small maps still get a sensible starting force.
+// Line up starting armies down the center-most column of each player's spawn
+// zone, skipping water tiles. Margins/spacing scale with the board so small
+// maps still get a sensible starting force.
 function buildInitialArmies(terrain) {
   const units = [];
   let id = 1;
@@ -159,11 +160,15 @@ function buildInitialArmies(terrain) {
   const rows = Board.ROWS, cols = Board.COLS;
   const margin = Math.max(1, Math.floor(rows * 0.08)); // 8 at rows=100
   const step = Math.max(2, Math.floor(rows / 16));     // 6 at rows=100
+  const zone = Board.zone();
+  // Center-most column of each player's spawn zone (Blue left, Red right).
+  const cLeft = Math.floor((zone - 1) / 2);
+  const cRight = cols - 1 - Math.floor((zone - 1) / 2);
   for (let r = margin; r < rows - margin; r += step) {
-    place('pawn', 0, r, 1);
-    place('pawn', 1, r, cols - 2);
-    if ((r / 6) % 2 === 0) { place('cavalry', 0, r, 0); place('cavalry', 1, r, cols - 1); }
-    if ((r / 6) % 3 === 0 && cols >= 6) { place('tank', 0, r, 2); place('tank', 1, r, cols - 3); }
+    place('pawn', 0, r, cLeft);
+    place('pawn', 1, r, cRight);
+    if ((r / 6) % 2 === 0) { place('cavalry', 0, r, cLeft); place('cavalry', 1, r, cRight); }
+    if ((r / 6) % 3 === 0 && cols >= 6) { place('tank', 0, r, cLeft); place('tank', 1, r, cRight); }
   }
   return units;
 }
