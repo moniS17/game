@@ -51,16 +51,6 @@
 
     .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; }
     .muted { color: #9aa4ad; }
-    .legend-item { display: flex; align-items: center; gap: 10px; font-size: .82rem; padding: 4px 0; }
-    .legend-item img, .legend-item .icon {
-      width: 28px; height: 28px; background: #1b1f23; border-radius: 5px; display: flex;
-      align-items: center; justify-content: center; font-weight: 700;
-    }
-    .swatch { width: 24px; height: 24px; border-radius: 5px; flex-shrink: 0; }
-    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-    th, td { text-align: center; padding: 3px 2px; }
-    th:first-child, td:first-child { text-align: left; }
-    th { color: #9aa4ad; font-weight: 600; }
     #log { height: 120px; overflow-y: auto; font-size: .78rem; line-height: 1.4; }
     #log div { padding: 1px 0; border-bottom: 1px solid #333; }
     .hint { font-size: .75rem; color: #7e8893; }
@@ -105,17 +95,6 @@
         Select whole stack
       </label>
       <div id="selInfo" class="muted">Click a tile to select its units.</div>
-    </div>
-
-    <div class="panel">
-      <h2>Units</h2>
-      <table id="unitTable"><tr><th>Unit</th><th>HP</th><th>ATK</th><th>MOV</th><th>$</th></tr></table>
-    </div>
-
-    <div class="panel">
-      <h2>Legend</h2>
-      <div id="unitLegend"></div>
-      <div style="margin-top:8px" id="terrainLegend"></div>
     </div>
 
     <div class="panel">
@@ -226,32 +205,8 @@
       },
     };
 
-    // Build the static legend + unit table from the data files.
-    (function buildLegend() {
-      const tbl = document.getElementById('unitTable');
-      const uleg = document.getElementById('unitLegend');
-      for (const k in PIECES) {
-        const d = PIECES[k];
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${d.name}</td><td>${d.hp}</td><td>${d.attack}</td><td>${d.movement_speed}</td><td>${d.cost}</td>`;
-        tbl.appendChild(tr);
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = (d.art ? `<img src="${d.art}" alt="${d.name}">` : `<span class="icon">${d.code}</span>`) +
-          `<span>${d.name} (${d.code})</span>`;
-        uleg.appendChild(item);
-      }
-      const tleg = document.getElementById('terrainLegend');
-      const arts = { city: 'assets/city.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
-      for (const k in TERRAIN) {
-        const t = TERRAIN[k];
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        const visual = arts[k] ? `<img src="${arts[k]}" alt="${t.name}">` : `<span class="swatch" style="background:${t.color}"></span>`;
-        item.innerHTML = `${visual}<span>${t.name} (${t.code})</span>`;
-        tleg.appendChild(item);
-      }
-    })();
+    // Unit stats and the terrain/unit legend now live in the Field Manual
+    // (info.html) to keep the board sidebar focused on play.
 
     document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
