@@ -40,10 +40,17 @@ window.Render = (function () {
 
   function clamp() {
     const pad = PAD_TILES * cam.cell;
-    const maxX = Math.max(0, GRID * cam.cell - canvas.width);
-    const maxY = Math.max(0, GRID * cam.cell - canvas.height);
-    cam.x = Math.min(Math.max(-pad, cam.x), maxX + pad);
-    cam.y = Math.min(Math.max(-pad, cam.y), maxY + pad);
+    const boardPx = GRID * cam.cell;
+    cam.x = clampAxis(cam.x, boardPx, canvas.width, pad);
+    cam.y = clampAxis(cam.y, boardPx, canvas.height, pad);
+  }
+
+  // Keep at most `pad` of gray on each side. If the board is smaller than the
+  // viewport (zoomed out / wide screen), center it so both sides match.
+  function clampAxis(v, boardPx, viewPx, pad) {
+    const lo = -pad, hi = boardPx - viewPx + pad;
+    if (hi < lo) return (boardPx - viewPx) / 2;
+    return Math.min(Math.max(v, lo), hi);
   }
 
   function cellFromPoint(clientX, clientY) {
