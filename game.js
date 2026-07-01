@@ -57,9 +57,9 @@ function upgradeSteps(owner, type, stat) {
   const u = Game.upgrades[owner] && Game.upgrades[owner][type];
   return (u && u[stat]) || 0;
 }
-// Cost of the NEXT step (escalates: baseCost * (steps + 1)).
+// Cost of the NEXT step (doubles per step: baseCost * 2^steps).
 function upgradeCost(owner, type, stat) {
-  return UPGRADE[stat].baseCost * (upgradeSteps(owner, type, stat) + 1);
+  return UPGRADE[stat].baseCost * Math.pow(2, upgradeSteps(owner, type, stat));
 }
 // Bonus fields a freshly-created unit should carry, given its owner's upgrades.
 function upgradeBonuses(owner, type) {
@@ -137,8 +137,9 @@ function buildInitialState(mode, seed, rows, cols) {
 }
 
 // Line up starting armies down the center-most column of each player's spawn
-// zone, skipping water tiles. Margins/spacing scale with the board so small
-// maps still get a sensible starting force.
+// zone, skipping water tiles. The army SIZE scales with the board area, so each
+// player gets Algorithms.unitsPerSide (34 at 100x100) units. The roster mix
+// (mostly pawns, some cavalry, a few tanks) is held roughly constant.
 function buildInitialArmies(terrain) {
   const units = [];
   let id = 1;
@@ -152,23 +153,37 @@ function buildInitialArmies(terrain) {
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water' && !occupied.has(key(r, c));
   const place = (type, owner, r, c) => {
     if (dry(r, c)) { put(type, owner, r, c); return; }
-    for (let d = 1; d <= 4; d++) { // nudge to a nearby dry tile
+    for (let d = 1; d <= 6; d++) { // nudge to a nearby dry tile
       if (dry(r + d, c)) return put(type, owner, r + d, c);
       if (dry(r - d, c)) return put(type, owner, r - d, c);
     }
   };
   const rows = Board.ROWS, cols = Board.COLS;
   const margin = Math.max(1, Math.floor(rows * 0.08)); // 8 at rows=100
-  const step = Math.max(2, Math.floor(rows / 16));     // 6 at rows=100
   const zone = Board.zone();
   // Center-most column of each player's spawn zone (Blue left, Red right).
   const cLeft = Math.floor((zone - 1) / 2);
   const cRight = cols - 1 - Math.floor((zone - 1) / 2);
-  for (let r = margin; r < rows - margin; r += step) {
-    place('pawn', 0, r, cLeft);
-    place('pawn', 1, r, cRight);
-    if ((r / 6) % 2 === 0) { place('cavalry', 0, r, cLeft); place('cavalry', 1, r, cRight); }
-    if ((r / 6) % 3 === 0 && cols >= 6) { place('tank', 0, r, cLeft); place('tank', 1, r, cRight); }
+
+  // Total units per side scales with board area (34 at 100x100). Compose the
+  // roster: a few tanks (heavy, skipped on very thin boards), some cavalry, the
+  // rest pawns — then place them evenly down each side's center column.
+  const total = Algorithms.unitsPerSide(rows, cols);
+  const tanks = cols >= 6 ? Math.round(total * 0.12) : 0; // ~4 at 34
+  const cavalry = Math.round(total * 0.29);               // ~10 at 34
+  const pawns = Math.max(0, total - tanks - cavalry);     // ~20 at 34
+  const roster = [];
+  for (let i = 0; i < tanks; i++) roster.push('tank');
+  for (let i = 0; i < cavalry; i++) roster.push('cavalry');
+  for (let i = 0; i < pawns; i++) roster.push('pawn');
+
+  // Spread the roster evenly over the usable rows [margin, rows-margin).
+  const span = Math.max(1, rows - 2 * margin);
+  const n = roster.length;
+  for (let i = 0; i < n; i++) {
+    const r = margin + (n > 1 ? Math.round((i * (span - 1)) / (n - 1)) : Math.floor(span / 2));
+    place(roster[i], 0, r, cLeft);
+    place(roster[i], 1, r, cRight);
   }
   return units;
 }

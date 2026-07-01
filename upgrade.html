@@ -77,7 +77,7 @@
 
     const steps = (type, stat) => (save.upgrades[me][type] && save.upgrades[me][type][stat]) || 0;
     const bonus = (type, stat) => steps(type, stat) * UPGRADES[stat].gain;
-    const cost  = (type, stat) => UPGRADES[stat].baseCost * (steps(type, stat) + 1);
+    const cost  = (type, stat) => UPGRADES[stat].baseCost * Math.pow(2, steps(type, stat));
     const ownedOf = (type) => save.units.filter((u) => u.owner === me && u.type === type).length;
 
     function apply(type, stat) {

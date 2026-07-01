@@ -59,9 +59,10 @@ window.ECONOMY = {
 
 // In-game unit upgrades (see upgrade.html + game.js). Bought with gold and
 // stored in the save, so they only ever apply to the CURRENT game. Each step
-// adds `gain` to the stat; the next step costs baseCost * (stepsBought + 1).
+// adds `gain` to the stat; cost DOUBLES per step: baseCost * 2^stepsBought
+// (so 17, 34, 68, 136, ...).
 window.UPGRADES = {
-  atk: { label: 'Attack',   gain: 1, baseCost: 3 },
-  hp:  { label: 'Health',   gain: 2, baseCost: 3 },
-  mov: { label: 'Movement', gain: 1, baseCost: 4 },
+  atk: { label: 'Attack',   gain: 1, baseCost: 17 },
+  hp:  { label: 'Health',   gain: 2, baseCost: 17 },
+  mov: { label: 'Movement', gain: 1, baseCost: 17 },
 };

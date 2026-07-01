@@ -18,6 +18,17 @@ window.Algorithms = (function () {
   const MIN = 5, MAX = 400;      // hard bounds on either dimension
   const clampDim = (n) => Math.max(MIN, Math.min(MAX, Math.floor(n) || GRID));
 
+  // --- board-size scaling ----------------------------------------------------
+  // Cities and starting armies scale with the board AREA so density is constant:
+  // the classic 100x100 map yields exactly CITIES_PER_SIDE cities and
+  // UNITS_PER_SIDE units for each player; bigger/smaller maps get proportionally
+  // more/fewer (always at least 1 so any legal board stays playable).
+  const CITIES_PER_SIDE = 17;    // per player at 100x100
+  const UNITS_PER_SIDE = 34;     // per player at 100x100
+  const areaScale = (rows, cols) => (rows * cols) / (GRID * GRID); // 1 at 100x100
+  const citiesPerSide = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
+  const unitsPerSide = (rows, cols) => Math.max(1, Math.round(UNITS_PER_SIDE * areaScale(rows, cols)));
+
   // --- seeded PRNG (mulberry32): deterministic given the seed ---------------
   function makeRng(seed) {
     let s = seed >>> 0;
@@ -144,7 +155,7 @@ window.Algorithms = (function () {
   function placeCities(t, rng, rows, cols) {
     const cities = [];
     const occupied = new Set();
-    const perSide = Math.max(1, Math.min(17, Math.round(cols / 6))); // 17 at cols=100
+    const perSide = citiesPerSide(rows, cols); // scales with board area (17 at 100x100)
     const leftMax = Math.max(1, Math.floor(cols * 0.44));            // 44 at cols=100
     const rightMin = cols - 1 - Math.floor(cols * 0.44);            // 55 at cols=100
     const placeSide = (owner, cMin, cMax) => {
@@ -183,6 +194,7 @@ window.Algorithms = (function () {
 
   return {
     GRID, MIN, MAX, clampDim, makeRng, generateMap,
+    CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide,
     generateLakes, generateRivers, carveRiver, generateForests, placeCities,
   };
 })();
