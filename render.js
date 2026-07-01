@@ -13,8 +13,9 @@ window.Render = (function () {
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
 
-  const cam = { x: 0, y: 0, cell: 9 }; // x,y = world px at canvas top-left
+  const cam = { x: 0, y: 0, cell: 12 }; // x,y = world px at canvas top-left (base tile ~30% larger)
   const MIN_CELL = 5, MAX_CELL = 48;
+  const PAD_TILES = 3; // gray scroll padding around the board (~3 tiles each side)
 
   // Preload SVG art so it can be drawn when zoomed in.
   const images = {};
@@ -38,10 +39,11 @@ window.Render = (function () {
   }
 
   function clamp() {
+    const pad = PAD_TILES * cam.cell;
     const maxX = Math.max(0, GRID * cam.cell - canvas.width);
     const maxY = Math.max(0, GRID * cam.cell - canvas.height);
-    cam.x = Math.min(Math.max(0, cam.x), maxX);
-    cam.y = Math.min(Math.max(0, cam.y), maxY);
+    cam.x = Math.min(Math.max(-pad, cam.x), maxX + pad);
+    cam.y = Math.min(Math.max(-pad, cam.y), maxY + pad);
   }
 
   function cellFromPoint(clientX, clientY) {
@@ -55,7 +57,9 @@ window.Render = (function () {
   function render() {
     const G = window.Game;
     if (!G || !G.terrain.length) return; // not booted yet
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Gray backdrop shows through the scroll padding around the board edges.
+    ctx.fillStyle = '#6a6f76';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     const cell = cam.cell;
     const c0 = Math.max(0, Math.floor(cam.x / cell));
     const r0 = Math.max(0, Math.floor(cam.y / cell));
@@ -80,11 +84,6 @@ window.Render = (function () {
 
         if (detailed && images[tkey] && images[tkey].complete) {
           ctx.drawImage(images[tkey], x, y, cell, cell);
-        } else if (cell >= 11 && terr.code !== '.') {
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.font = `${Math.floor(cell * 0.55)}px monospace`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText(terr.code, x + cell / 2, y + cell / 2);
         }
         if (cell >= 14) { ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.strokeRect(x, y, cell, cell); }
       }
@@ -152,15 +151,15 @@ window.Render = (function () {
 
     if (detailed && images[u.type] && images[u.type].complete) {
       ctx.globalAlpha = 0.85; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.46, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.414, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.drawImage(images[u.type], x + cell * 0.12, y + cell * 0.12, cell * 0.76, cell * 0.76);
+      ctx.drawImage(images[u.type], x + cell * 0.158, y + cell * 0.158, cell * 0.684, cell * 0.684);
     } else {
       ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.36, 0, Math.PI * 2); ctx.fill();
       if (cell >= 9) {
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.floor(cell * 0.55)}px monospace`;
+        ctx.font = `bold ${Math.floor(cell * 0.495)}px monospace`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         // letter + subscript count, e.g. "p₃"
         const label = stack.length > 1 ? def.code + toSub(stack.length) : def.code;
