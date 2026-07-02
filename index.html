@@ -109,7 +109,9 @@
       <div class="stat-row"><span>Red units</span><span id="redCount">0</span></div>
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
 
-      <button class="shop" id="buyBtn">🛒 Buy units</button>
+      <button class="shop" id="buyBtn">🛒 Buy subunits</button>
+      <button id="templateBtn">▦ Templates</button>
+      <button id="techBtn">🔬 Tech tree</button>
       <button id="upgradeBtn">⬆️ Upgrade units</button>
       <button id="nextRoundBtn">Next round ▶</button>
       <button class="ghost" id="infoBtn">📖 Field manual</button>
@@ -166,12 +168,12 @@
         `<div class="stat-row"><span>${PIECES[t].name}</span><span>×${counts[t]}</span></div>`).join('');
       const totHp = stack.reduce((a, u) => a + u.hp, 0);
       const totAtk = stack.reduce((a, u) => a + Rules.unitAttack(u), 0);
-      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} stack</b></span><span>${stack.length}/17</span></div>` +
+      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} ${PIECES[stack[0].type].name} template</b></span><span>${stack.length}/25</span></div>` +
         lines +
         `<div class="stat-row"><span>Total HP / ATK</span><span>${totHp} / ${totAtk}</span></div>` +
         (owner === Game.turn
-          ? `<p class="hint" style="margin-top:6px">Whole stack selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
-          : `<p class="hint" style="margin-top:6px">Enemy stack.</p>`);
+          ? `<p class="hint" style="margin-top:6px">Whole template selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
+          : `<p class="hint" style="margin-top:6px">Enemy template.</p>`);
     }
 
     function stackChecklistHtml(stack) {
@@ -299,6 +301,8 @@
 
     document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
+    document.getElementById('templateBtn').addEventListener('click', () => { window.location.href = 'template.html'; });
+    document.getElementById('techBtn').addEventListener('click', () => { window.location.href = 'tech.html'; });
     document.getElementById('upgradeBtn').addEventListener('click', () => { window.location.href = 'upgrade.html'; });
     document.getElementById('infoBtn').addEventListener('click', () => { window.location.href = 'info.html'; });
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });

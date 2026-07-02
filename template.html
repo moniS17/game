@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Templates</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; background: #1b1f23; color: #e6e6e6; padding: 24px;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; max-width: 960px; margin: 0 auto 6px; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; max-width: 960px; margin: 22px auto 10px; }
+    .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
+    .who { font-size: .85rem; color: #9aa4ad; max-width: 960px; margin: 0 auto 6px; }
+    .grid { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+    .card .top { display: flex; align-items: center; gap: 12px; align-self: stretch; }
+    .card img, .card .icon {
+      width: 40px; height: 40px; background: #1b1f23; border-radius: 8px; display: flex;
+      align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem;
+    }
+    .card h3 { font-size: 1rem; }
+    .card .sub { font-size: .75rem; color: #9aa4ad; }
+    /* 5x5 template grid */
+    .tmpl { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; width: 150px; }
+    .cell {
+      aspect-ratio: 1 / 1; border-radius: 5px; background: #1b1f23; border: 1px solid #3a3f45;
+      display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700;
+      color: rgba(255,255,255,0.92);
+    }
+    .count { font-size: .85rem; }
+    .count b { color: #fff; }
+    .stepper { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+    .stepper button {
+      min-width: 40px; height: 32px; border: none; border-radius: 6px; background: #3a5bd9;
+      color: #fff; font-size: .9rem; font-weight: 700; cursor: pointer; line-height: 1; padding: 0 8px;
+    }
+    .stepper button:hover:not(:disabled) { background: #2f49b0; }
+    .stepper button.rm { background: #7a3b3b; } .stepper button.rm:hover:not(:disabled) { background: #6a3333; }
+    .stepper button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .empty { max-width: 960px; margin: 0 auto; color: #7e8893; font-size: .85rem; }
+    .queue { max-width: 960px; margin: 16px auto 0; font-size: .85rem; color: #9aa4ad; }
+    .queue b { color: #7cb342; }
+    .bar { max-width: 960px; margin: 22px auto 0; display: flex; gap: 12px; }
+    .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
+    .bar a.battle { background: #3a5bd9; } .bar a.tech { background: #6a4bd9; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>▦ Templates</h1>
+    <div class="gold">💰 <span id="gold">0</span> gold</div>
+  </header>
+  <div class="who" id="who"></div>
+
+  <h2>Build a template (5 × 5 = 25 subunits)</h2>
+  <div class="grid" id="build"></div>
+  <div id="noTypes" class="empty" style="display:none">Only Infantry is unlocked. Visit the
+    <a href="tech.html" style="color:#8ea2ff">Tech tree</a> to research more types.</div>
+  <div class="queue" id="queue"></div>
+
+  <h2>Your templates on the board</h2>
+  <div class="grid" id="onboard"></div>
+  <div id="noBoard" class="empty" style="display:none">No templates deployed yet.</div>
+
+  <div class="bar">
+    <a class="battle" href="index.html">⬅ Return to battle</a>
+    <a class="tech" href="tech.html">🔬 Tech tree</a>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const save = SaveState.load();
+    if (!save) { window.location.href = "menu.html"; }
+
+    const me = save.turn;                        // the player whose turn it is builds
+    const CAP = 25;                              // 5x5 template capacity
+    save.pendingSpawns = save.pendingSpawns || [];
+    save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
+    save.unlocked[me] = save.unlocked[me] || {};
+    save.unlocked[me].infantry = true;
+
+    document.getElementById("who").textContent =
+      PLAYERS[me].name + " — spend gold to fill a template with subunits, then deploy it on the board.";
+
+    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
+    const unlockedTypes = () => Object.keys(PIECES).filter(isUnlocked);
+    // Subunits of `type` queued for this player (one build = one template, capped at CAP).
+    const queuedOf = (type) => save.pendingSpawns.filter((s) => s.owner === me && s.type === type).length;
+
+    function add(type, n) {
+      const cost = PIECES[type].cost;
+      let added = 0;
+      while (added < n && queuedOf(type) < CAP && save.economy[me] >= cost) {
+        save.economy[me] -= cost;
+        save.pendingSpawns.push({ type, owner: me });
+        added++;
+      }
+      if (added) { SaveState.save(save); render(); }
+    }
+    function remove(type, n) {
+      let removed = 0;
+      for (let i = save.pendingSpawns.length - 1; i >= 0 && removed < n; i--) {
+        const s = save.pendingSpawns[i];
+        if (s.owner === me && s.type === type) {
+          save.economy[me] += PIECES[type].cost; // refund
+          save.pendingSpawns.splice(i, 1);
+          removed++;
+        }
+      }
+      if (removed) { SaveState.save(save); render(); }
+    }
+
+    // A 5x5 grid where the first `filled` cells carry the type's code/colour.
+    function gridHtml(type, filled) {
+      const code = PIECES[type].code;
+      const color = PLAYERS[me].color;
+      let cells = "";
+      for (let i = 0; i < CAP; i++) {
+        cells += i < filled
+          ? `<div class="cell" style="background:${color}">${code}</div>`
+          : `<div class="cell"></div>`;
+      }
+      return `<div class="tmpl">${cells}</div>`;
+    }
+
+    function renderBuild() {
+      const wrap = document.getElementById("build");
+      wrap.innerHTML = "";
+      const types = unlockedTypes();
+      document.getElementById("noTypes").style.display = types.length <= 1 ? "" : "none";
+      for (const k of types) {
+        const d = PIECES[k];
+        const n = queuedOf(k);
+        const card = document.createElement("div");
+        card.className = "card";
+        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
+        const cantAdd = n >= CAP || save.economy[me] < d.cost;
+        card.innerHTML =
+          `<div class="top">${visual}<div><h3>${d.name}</h3>` +
+            `<div class="sub">$${d.cost}/subunit · ${d.hp} HP · ${d.attack} ATK each</div></div></div>` +
+          gridHtml(k, n) +
+          `<div class="count">Queued: <b>${n}</b> / ${CAP}</div>` +
+          `<div class="stepper">` +
+            `<button class="rm" data-t="${k}" data-n="5" ${n === 0 ? "disabled" : ""}>−5</button>` +
+            `<button class="rm" data-t="${k}" data-n="1" ${n === 0 ? "disabled" : ""}>−1</button>` +
+            `<button data-t="${k}" data-n="1" ${cantAdd ? "disabled" : ""}>+1</button>` +
+            `<button data-t="${k}" data-n="5" ${cantAdd ? "disabled" : ""}>+5</button>` +
+          `</div>`;
+        wrap.appendChild(card);
+      }
+      wrap.querySelectorAll("button[data-t]").forEach((b) => {
+        const t = b.dataset.t, n = +b.dataset.n;
+        b.addEventListener("click", () => b.classList.contains("rm") ? remove(t, n) : add(t, n));
+      });
+    }
+
+    function renderQueue() {
+      const el = document.getElementById("queue");
+      const mine = save.pendingSpawns.filter((s) => s.owner === me);
+      if (!mine.length) { el.textContent = ""; return; }
+      const counts = {};
+      for (const s of mine) counts[s.type] = (counts[s.type] || 0) + 1;
+      const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
+      el.innerHTML = "Ready to deploy: <b>" + names.join(", ") +
+        "</b> — return to battle and tap a tile in your zone to drop each template.";
+    }
+
+    function renderOnboard() {
+      const wrap = document.getElementById("onboard");
+      wrap.innerHTML = "";
+      // Group this player's units by tile — each tile is one template.
+      const tiles = {};
+      for (const u of save.units) {
+        if (u.owner !== me) continue;
+        const k = u.r + "," + u.c;
+        (tiles[k] = tiles[k] || []).push(u);
+      }
+      const keys = Object.keys(tiles);
+      document.getElementById("noBoard").style.display = keys.length ? "none" : "";
+      for (const k of keys) {
+        const stack = tiles[k];
+        const type = stack[0].type;
+        const d = PIECES[type];
+        const [r, c] = k.split(",");
+        const totHp = stack.reduce((a, u) => a + u.hp, 0);
+        const card = document.createElement("div");
+        card.className = "card";
+        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
+        card.innerHTML =
+          `<div class="top">${visual}<div><h3>${d.name}</h3>` +
+            `<div class="sub">tile r${r}, c${c} · ${totHp} HP total</div></div></div>` +
+          gridHtml(type, Math.min(stack.length, CAP)) +
+          `<div class="count">Subunits: <b>${stack.length}</b> / ${CAP}</div>`;
+        wrap.appendChild(card);
+      }
+    }
+
+    function render() {
+      document.getElementById("gold").textContent = save.economy[me];
+      renderBuild();
+      renderQueue();
+      renderOnboard();
+    }
+
+    render();
+  </script>
+</body>
+</html>

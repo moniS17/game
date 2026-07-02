@@ -69,6 +69,11 @@
     const me = save.turn;                     // the player whose turn it is upgrades
     save.upgrades = save.upgrades || [{}, {}];
     save.upgrades[me] = save.upgrades[me] || {};
+    save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
+    save.unlocked[me] = save.unlocked[me] || {};
+    save.unlocked[me].infantry = true;
+    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
+    const upgradeTypes = Object.keys(PIECES).filter(isUnlocked);
 
     document.getElementById("who").textContent =
       PLAYERS[me].name + " — spend gold to strengthen your own units for this game.";
@@ -109,7 +114,7 @@
     function render() {
       goldEl.textContent = save.economy[me];
       grid.innerHTML = "";
-      for (const k in PIECES) {
+      for (const k of upgradeTypes) {
         const d = PIECES[k];
         const eAtk = d.attack + bonus(k, 'atk');
         const eHp  = d.hp + bonus(k, 'hp');

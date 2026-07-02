@@ -4,10 +4,11 @@
  * Keeping every rule here means balance and mechanics can change without
  * touching state management (game.js), the board (board.js) or rendering.
  *
- * STACKING
- *   - Many units of the SAME owner may share a tile (a "stack"), up to
- *     STACK_LIMIT (17). `unitAt` is a Map "r,c" -> Unit[] (the stack).
- *   - Units move and fight as a selected GROUP (1..N units chosen from a tile).
+ * STACKING (templates)
+ *   - A board piece is a "template": a stack of same-owner, same-type SUBUNITS
+ *     sharing a tile, up to STACK_LIMIT (25 — a 5x5 grid). `unitAt` is a Map
+ *     "r,c" -> Subunit[] (the template). A template's HP/ATK scale with count.
+ *   - Subunits move and fight as a selected GROUP (1..N chosen from a tile).
  *
  * MOVEMENT
  *   - Each tile costs its terrain move_cost to enter (board.js / TERRAIN).
@@ -29,7 +30,7 @@
  */
 window.Rules = (function () {
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const STACK_LIMIT = 17;
+  const STACK_LIMIT = 25; // a template is a 5x5 grid of subunits (max 25)
 
   const COMBAT = {
     river_attack_penalty: 2, // attacking while you or your target stands in water

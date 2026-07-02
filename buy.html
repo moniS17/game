@@ -58,6 +58,8 @@
 
   <div class="bar">
     <a href="index.html">⬅ Return to battle</a>
+    <a href="template.html" style="background:#2e7d46">▦ Templates</a>
+    <a href="tech.html" style="background:#6a4bd9">🔬 Tech tree</a>
   </div>
 
   <script src="units.js"></script>
@@ -68,14 +70,19 @@
 
     const buyer = save.turn;                 // the player whose turn it is shops
     save.pendingSpawns = save.pendingSpawns || [];
+    save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
+    save.unlocked[buyer] = save.unlocked[buyer] || {};
+    save.unlocked[buyer].infantry = true;
+    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[buyer][type];
+    const shopTypes = Object.keys(PIECES).filter(isUnlocked);
 
     document.getElementById("who").textContent =
-      PLAYERS[buyer].name + "'s turn — units arrive at your home edge.";
+      PLAYERS[buyer].name + "'s turn — subunits arrive to deploy at your home edge.";
 
     const goldEl = document.getElementById("gold");
     const queueEl = document.getElementById("queue");
     const qty = {};                          // per-type quantity selected in the stepper
-    for (const k in PIECES) qty[k] = 1;
+    for (const k of shopTypes) qty[k] = 1;
 
     function refresh() {
       goldEl.textContent = save.economy[buyer];
@@ -89,7 +96,7 @@
         btn.textContent = `Buy ×${qty[type]} ($${total})`;
         btn.disabled = total > gold;
       });
-      // queue summary, grouped by type ("Pawn ×5, Tank ×2")
+      // queue summary, grouped by type ("Infantry ×5, Tank ×2")
       if (save.pendingSpawns.length) {
         const counts = {};
         for (const s of save.pendingSpawns) counts[s.type] = (counts[s.type] || 0) + 1;
@@ -116,7 +123,7 @@
     }
 
     const grid = document.getElementById("grid");
-    for (const k in PIECES) {
+    for (const k of shopTypes) {
       const d = PIECES[k];
       const card = document.createElement("div");
       card.className = "card";

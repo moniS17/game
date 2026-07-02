@@ -13,7 +13,7 @@
  *
  * STACKING MODEL
  *   Many units of the same owner may share a tile. `Game.unitAt` maps
- *   "r,c" -> Unit[] (a "stack", capped at Rules.STACK_LIMIT = 17). Units move
+ *   "r,c" -> Unit[] (a "template", capped at Rules.STACK_LIMIT = 25). Units move
  *   and fight as a selected GROUP chosen from one tile (whole stack, or a
  *   checkbox-picked subset). Bought units are placed by the player into their
  *   own deployment zone. Combat is mutual (see rules.js).
@@ -43,8 +43,9 @@ const Game = {
   selUnits: [],         // units chosen from selTile (whole stack or a subset)
   selectAll: true,      // "select whole stack" toggle
   reachable: new Map(), // "r,c" -> remaining moves for the selected group
-  toPlace: [],          // [{type, owner}] bought units awaiting deployment
-  upgrades: [{}, {}],   // per-player, per-type upgrade steps: {pawn:{atk,hp,mov}}
+  toPlace: [],          // [{type, owner}] bought subunits awaiting deployment
+  upgrades: [{}, {}],   // per-player, per-type upgrade steps: {infantry:{atk,hp,mov}}
+  unlocked: [{ infantry: true }, { infantry: true }], // tech tree: types each player may field
   winner: null,
 };
 let nextId = 1;
@@ -68,6 +69,25 @@ function upgradeBonuses(owner, type) {
     movBonus: upgradeSteps(owner, type, 'mov') * UPGRADE.mov.gain,
     hpBonus:  upgradeSteps(owner, type, 'hp') * UPGRADE.hp.gain,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tech tree — which unit types a player has unlocked this game (units.js TECH).
+// Infantry is always unlocked; other types must be researched with gold.
+// ---------------------------------------------------------------------------
+function isUnlocked(owner, type) {
+  return type === 'infantry' || !!(Game.unlocked[owner] && Game.unlocked[owner][type]);
+}
+// Spend gold to unlock `type` for `owner`. Returns true on success.
+function unlockType(owner, type) {
+  if (isUnlocked(owner, type)) return false;
+  const cost = (typeof TECH !== 'undefined' && TECH[type]) || 0;
+  if (Game.economy[owner] < cost) return false;
+  Game.economy[owner] -= cost;
+  Game.unlocked[owner] = Game.unlocked[owner] || {};
+  Game.unlocked[owner][type] = true;
+  persist();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +140,7 @@ function serialize() {
     })),
     toPlace: Game.toPlace.slice(),
     upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
+    unlocked: [ { ...Game.unlocked[0] }, { ...Game.unlocked[1] } ],
     pendingSpawns: [], // always flushed into toPlace once applied
   };
 }
@@ -132,58 +153,46 @@ function buildInitialState(mode, seed, rows, cols) {
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
     economy: [ECONOMY.start, ECONOMY.start],
-    cities, units, toPlace: [], upgrades: [{}, {}], pendingSpawns: [],
+    cities, units, toPlace: [], upgrades: [{}, {}],
+    unlocked: [{ infantry: true }, { infantry: true }], pendingSpawns: [],
   };
 }
 
-// Line up starting armies down the center-most column of each player's spawn
-// zone, skipping water tiles. The army SIZE scales with the board area, so each
-// player gets Algorithms.unitsPerSide (34 at 100x100) units. The roster mix
-// (mostly pawns, some cavalry, a few tanks) is held roughly constant.
+// Seed each player's starting force: ONE infantry template holding 4 infantry
+// subunits, placed at the center of that player's deployment zone (nudged off
+// water). Everything else must be researched (tech tree) and built (templates).
 function buildInitialArmies(terrain) {
   const units = [];
   let id = 1;
-  const occupied = new Set();
   const put = (type, owner, r, c) => {
     const def = PIECES[type];
     units.push({ id: id++, type, owner, r, c, hp: def.hp, maxHp: def.hp,
-      movesLeft: def.movement_speed, acted: false });
-    occupied.add(key(r, c));
+      movesLeft: def.movement_speed, acted: false,
+      atkBonus: 0, movBonus: 0, hpBonus: 0 });
   };
-  const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water' && !occupied.has(key(r, c));
-  const place = (type, owner, r, c) => {
-    if (dry(r, c)) { put(type, owner, r, c); return; }
-    for (let d = 1; d <= 6; d++) { // nudge to a nearby dry tile
-      if (dry(r + d, c)) return put(type, owner, r + d, c);
-      if (dry(r - d, c)) return put(type, owner, r - d, c);
+  const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
+  // Nearest dry tile to (r,c), scanning outward along the column.
+  const dryNear = (r, c) => {
+    if (dry(r, c)) return { r, c };
+    for (let d = 1; d <= 12; d++) {
+      if (dry(r + d, c)) return { r: r + d, c };
+      if (dry(r - d, c)) return { r: r - d, c };
     }
+    return { r, c };
   };
-  const rows = Board.ROWS, cols = Board.COLS;
-  const margin = Math.max(1, Math.floor(rows * 0.08)); // 8 at rows=100
-  const zone = Board.zone();
+
+  const rows = Board.ROWS, cols = Board.COLS, zone = Board.zone();
+  const midRow = Math.floor(rows / 2);
   // Center-most column of each player's spawn zone (Blue left, Red right).
   const cLeft = Math.floor((zone - 1) / 2);
   const cRight = cols - 1 - Math.floor((zone - 1) / 2);
+  const SUBUNITS = 4; // starting infantry template size
 
-  // Total units per side scales with board area (34 at 100x100). Compose the
-  // roster: a few tanks (heavy, skipped on very thin boards), some cavalry, the
-  // rest pawns — then place them evenly down each side's center column.
-  const total = Algorithms.unitsPerSide(rows, cols);
-  const tanks = cols >= 6 ? Math.round(total * 0.12) : 0; // ~4 at 34
-  const cavalry = Math.round(total * 0.29);               // ~10 at 34
-  const pawns = Math.max(0, total - tanks - cavalry);     // ~20 at 34
-  const roster = [];
-  for (let i = 0; i < tanks; i++) roster.push('tank');
-  for (let i = 0; i < cavalry; i++) roster.push('cavalry');
-  for (let i = 0; i < pawns; i++) roster.push('pawn');
-
-  // Spread the roster evenly over the usable rows [margin, rows-margin).
-  const span = Math.max(1, rows - 2 * margin);
-  const n = roster.length;
-  for (let i = 0; i < n; i++) {
-    const r = margin + (n > 1 ? Math.round((i * (span - 1)) / (n - 1)) : Math.floor(span / 2));
-    place(roster[i], 0, r, cLeft);
-    place(roster[i], 1, r, cRight);
+  const spot0 = dryNear(midRow, cLeft);
+  const spot1 = dryNear(midRow, cRight);
+  for (let i = 0; i < SUBUNITS; i++) {
+    put('infantry', 0, spot0.r, spot0.c);
+    put('infantry', 1, spot1.r, spot1.c);
   }
   return units;
 }
@@ -200,6 +209,10 @@ function loadIntoGame(st) {
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
   Game.units = (st.units || []).map((u) => ({ atkBonus: 0, movBonus: 0, hpBonus: 0, ...u }));
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
+  Game.unlocked = [
+    { infantry: true, ...(st.unlocked && st.unlocked[0]) },
+    { infantry: true, ...(st.unlocked && st.unlocked[1]) },
+  ];
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
   Game.winner = null;
@@ -226,7 +239,9 @@ function captureIfCity(r, c, owner) {
   }
 }
 
-// Deploy pending units onto a tile in the current player's zone (stacked).
+// Deploy pending subunits onto a tile in the current player's zone. A tile is a
+// single-type template, so all subunits placed on it must share the type of any
+// already there (capped at Rules.STACK_LIMIT = 25).
 function placeAt(r, c) {
   const owner = Game.turn;
   if (!inZone(owner, c)) { UI.log('Deploy inside your own deployment zone.'); return; }
@@ -234,12 +249,15 @@ function placeAt(r, c) {
   const stack = stackAt(r, c);
   if (stack.length && stack[0].owner !== owner) { UI.log('Tile is held by the enemy.'); return; }
   let room = Rules.STACK_LIMIT - stack.length;
-  if (room <= 0) { UI.log('That tile is full (17).'); return; }
+  if (room <= 0) { UI.log('That template is full (25).'); return; }
+  const tileType = stack.length ? stack[0].type : null; // one type per template
 
   let placed = 0;
   for (let i = 0; i < Game.toPlace.length && room > 0; ) {
     const sp = Game.toPlace[i];
     if (sp.owner !== owner) { i++; continue; }
+    if (!isUnlocked(owner, sp.type)) { i++; continue; }     // not researched yet
+    if (tileType && sp.type !== tileType) { i++; continue; } // wrong template type
     Game.toPlace.splice(i, 1);
     const def = PIECES[sp.type];
     const b = upgradeBonuses(owner, sp.type);
@@ -251,8 +269,12 @@ function placeAt(r, c) {
     addToStack(u);
     room--; placed++;
   }
-  UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +
-    (pendingForTurn() ? ` ${pendingForTurn()} left to place.` : ''));
+  if (!placed && tileType) {
+    UI.log('That tile holds a different template — deploy on an empty tile or a matching one.');
+  } else {
+    UI.log(`Deployed ${placed} subunit(s) at r${r}, c${c}.` +
+      (pendingForTurn() ? ` ${pendingForTurn()} left to place.` : ''));
+  }
   persist();
 }
 
@@ -429,10 +451,13 @@ function aiThreatRow(me) {
   return best == null ? Math.floor(ROWS() / 2) : best;
 }
 
-// Greedily spend the AI's gold. Returns an array of purchased unit types. Cycles
-// through affordable types so the army is a mix rather than all of one kind.
+// Greedily spend the AI's gold on its UNLOCKED types. Returns an array of
+// purchased unit types. Cycles through affordable types so the army is a mix.
 function aiBuyUnits(me) {
-  const roster = Object.keys(PIECES).sort((a, b) => PIECES[a].cost - PIECES[b].cost);
+  const roster = Object.keys(PIECES)
+    .filter((t) => isUnlocked(me, t))
+    .sort((a, b) => PIECES[a].cost - PIECES[b].cost);
+  if (!roster.length) return [];
   const cheapest = PIECES[roster[0]].cost;
   const bought = [];
   let budget = Game.economy[me];
@@ -446,6 +471,19 @@ function aiBuyUnits(me) {
   }
   Game.economy[me] = budget;
   return bought;
+}
+
+// The AI researches the cheapest still-locked type it can comfortably afford,
+// so over time it fields more than just infantry. Keeps a reserve for units.
+function aiResearchTech(me) {
+  if (typeof TECH === 'undefined') return;
+  const locked = Object.keys(TECH)
+    .filter((t) => !isUnlocked(me, t))
+    .sort((a, b) => TECH[a] - TECH[b]);
+  for (const t of locked) {
+    // Only unlock if it still leaves some gold to actually build the new type.
+    if (Game.economy[me] >= TECH[t] + PIECES[t].cost) { unlockType(me, t); break; }
+  }
 }
 
 // Deploy `bought` units into `me`'s zone, filling tiles closest to (threatRow,
@@ -470,12 +508,21 @@ function aiDeployUnits(me, bought) {
   }
   cands.sort((a, b) => a.d - b.d);
 
-  let placed = 0, ci = 0;
-  for (const type of bought) {
-    // Advance to a candidate tile with room (< STACK_LIMIT), then place there.
-    while (ci < cands.length && stackAt(cands[ci].r, cands[ci].c).length >= Rules.STACK_LIMIT) ci++;
-    if (ci >= cands.length) break; // zone full — refund the rest
-    const { r, c } = cands[ci];
+  // Deploy grouped by type so each tile stays a single-type template. For each
+  // subunit, drop it on the nearest candidate tile that is empty or already
+  // holds its type and still has room (< STACK_LIMIT).
+  const order = bought.slice().sort();
+  let placed = 0;
+  for (const type of order) {
+    let dest = null;
+    for (const cand of cands) {
+      const s = stackAt(cand.r, cand.c);
+      if (s.length >= Rules.STACK_LIMIT) continue;
+      if (s.length && s[0].type !== type) continue; // different template
+      dest = cand; break;
+    }
+    if (!dest) break; // zone full for this type — refund the rest
+    const { r, c } = dest;
     const def = PIECES[type];
     const b = upgradeBonuses(me, type);
     const maxHp = def.hp + b.hpBonus;
@@ -487,12 +534,13 @@ function aiDeployUnits(me, bought) {
     placed++;
   }
   // Refund any units that couldn't fit (zone saturated).
-  for (let i = placed; i < bought.length; i++) Game.economy[me] += PIECES[bought[i]].cost;
+  for (let i = placed; i < order.length; i++) Game.economy[me] += PIECES[order[i]].cost;
   return placed;
 }
 
 function aiSpendAndReinforce(me) {
   if (Game.economy[me] < 1) return;
+  aiResearchTech(me); // occasionally unlock a new type before spending on units
   const bought = aiBuyUnits(me);
   const placed = aiDeployUnits(me, bought);
   if (placed) {
@@ -689,4 +737,6 @@ window.inPlacement = inPlacement;
 window.pendingForTurn = pendingForTurn;
 window.setSelectAll = setSelectAll;
 window.toggleUnitInSelection = toggleUnitInSelection;
+window.isUnlocked = isUnlocked;
+window.unlockType = unlockType;
 window.startNewGame = (mode) => { SaveState.setIntent({ action: 'new', mode }); location.reload(); };

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Tech Tree</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; background: #1b1f23; color: #e6e6e6; padding: 24px;
+    }
+    header { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto 6px; }
+    h1 { font-size: 1.4rem; }
+    .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
+    .who { font-size: .85rem; color: #9aa4ad; max-width: 900px; margin: 0 auto 18px; }
+    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card.locked { opacity: .96; }
+    .card .top { display: flex; align-items: center; gap: 12px; }
+    .card img, .card .icon {
+      width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
+      align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
+    }
+    .card h3 { font-size: 1rem; }
+    .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
+    .stats b { color: #fff; }
+    .status { font-size: .8rem; font-weight: 700; }
+    .status.unlocked { color: #7cb342; }
+    button.unlock { padding: .6rem; border: none; border-radius: 6px; background: #6a4bd9; color: #fff; font-weight: 600; cursor: pointer; }
+    button.unlock:hover:not(:disabled) { background: #573bb3; }
+    button.unlock:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
+    .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
+    .bar a.battle { background: #3a5bd9; } .bar a.tmpl { background: #2e7d46; }
+    .note { max-width: 900px; margin: 14px auto 0; font-size: .78rem; color: #7e8893; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔬 Tech Tree</h1>
+    <div class="gold">💰 <span id="gold">0</span> gold</div>
+  </header>
+  <div class="who" id="who"></div>
+
+  <div class="grid" id="grid"></div>
+  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a type once with gold to
+    build it into templates and buy its subunits for the rest of <b>this game</b> — a new map resets the tree.
+    Each player has their own tech tree.</div>
+
+  <div class="bar">
+    <a class="battle" href="index.html">⬅ Return to battle</a>
+    <a class="tmpl" href="template.html">▦ Templates</a>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const save = SaveState.load();
+    if (!save) { window.location.href = "menu.html"; }
+
+    const me = save.turn;                       // the player whose turn it is researches
+    save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
+    save.unlocked[me] = save.unlocked[me] || {};
+    save.unlocked[me].infantry = true;          // always available
+
+    document.getElementById("who").textContent =
+      PLAYERS[me].name + " — spend gold to research new unit types for this game.";
+
+    const goldEl = document.getElementById("gold");
+    const grid = document.getElementById("grid");
+
+    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
+
+    function unlock(type) {
+      if (isUnlocked(type)) return;
+      const cost = TECH[type] || 0;
+      if (save.economy[me] < cost) return;
+      save.economy[me] -= cost;
+      save.unlocked[me][type] = true;
+      SaveState.save(save);
+      render();
+    }
+
+    function render() {
+      goldEl.textContent = save.economy[me];
+      grid.innerHTML = "";
+      // Order: infantry first, then by unlock cost ascending.
+      const types = Object.keys(PIECES).sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));
+      for (const k of types) {
+        const d = PIECES[k];
+        const cost = TECH[k] || 0;
+        const unlocked = isUnlocked(k);
+        const card = document.createElement("div");
+        card.className = "card" + (unlocked ? "" : " locked");
+        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
+        const action = unlocked
+          ? `<div class="status unlocked">✓ Unlocked</div>`
+          : `<button class="unlock" data-type="${k}" ${save.economy[me] < cost ? "disabled" : ""}>Research ($${cost})</button>`;
+        card.innerHTML =
+          `<div class="top">${visual}<h3>${d.name}</h3></div>` +
+          `<div class="stats">` +
+            `❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>` +
+            `👟 MOV <b>${d.movement_speed}</b> &nbsp; 💰 <b>$${d.cost}</b>/subunit` +
+          `</div>` +
+          action;
+        grid.appendChild(card);
+      }
+      grid.querySelectorAll("button.unlock").forEach((b) =>
+        b.addEventListener("click", () => unlock(b.dataset.type)));
+    }
+
+    render();
+  </script>
+</body>
+</html>

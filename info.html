@@ -127,7 +127,7 @@
     // --- Units table ---
     const ut = document.getElementById("unitTable");
     const roles = {
-      pawn: "Cheap frontline body; stack them deep.",
+      infantry: "Cheap frontline body; stack them deep.",
       archer: "Cheap ranged-value attacker.",
       cavalry: "Fast flanker, hard hitter.",
       artillery: "Glass cannon: huge ATK, crawls.",
@@ -169,20 +169,23 @@
 
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
-      `<li>Up to <b>${Rules.STACK_LIMIT} units</b> of one side may <b>stack</b> on a single tile (shown as a letter + count, e.g. p₃).</li>` +
+      `<li>A board piece is a <b>template</b>: up to <b>${Rules.STACK_LIMIT} subunits</b> (a 5×5 grid) of one type share a tile, shown as a letter + count, e.g. i₄. A template's HP &amp; ATK scale with its subunit count.</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
-      `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b> (minus the other tile's terrain defense), spread through the stack 1 unit at a time.</li>` +
-      `<li><b>Terrain shapes attacks</b>: each unit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while artillery and cannons batter <b>cities</b> <span class="buff">harder</span> (see the table above). Counterattacks are scaled the same way.</li>` +
-      `<li class="buff">If one side has at least <b>twice</b> the other's unit count, the outnumbered side takes <b>double damage</b> — numbers win regardless of unit quality.</li>` +
-      `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn, so a high-MOV unit can still move after striking.</li>` +
-      `<li>Deploy bought units anywhere in your own <b>17-column zone</b> (Blue = left, Red = right).</li>`;
+      `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their subunits' ATK</b> (minus the other tile's terrain defense), spread through the template one subunit at a time.</li>` +
+      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while artillery and cannons batter <b>cities</b> <span class="buff">harder</span> (see the table above). Counterattacks are scaled the same way.</li>` +
+      `<li class="buff">If one side has at least <b>twice</b> the other's subunit count, the outnumbered side takes <b>double damage</b> — numbers win regardless of unit quality.</li>` +
+      `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn, so a high-MOV template can still move after striking.</li>` +
+      `<li>Deploy built templates anywhere in your own deployment zone (Blue = left, Red = right); one type per tile.</li>`;
 
-    // --- Economy & upgrades ---
+    // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
-      `<li>Each player starts with <b>${ECONOMY.start}</b> gold.</li>` +
+      `<li>Each player starts with <b>${ECONOMY.start}</b> gold and <b>one Infantry template of 4 subunits</b>.</li>` +
       `<li>Income per round = <b>${ECONOMY.base_income}</b> base + <b>${ECONOMY.city_income}</b> per owned city.</li>` +
+      `<li><b>Tech tree</b>: only <b>Infantry</b> is unlocked at the start. Research other types with gold ` +
+        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} $${TECH[t]}`).join(", ")}) before you can build or buy them — per player, per game.</li>` +
+      `<li><b>Templates</b>: spend gold to fill a 5×5 template with subunits, then deploy it on the board.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
-        `strengthen your own units of a type, and apply only to the <b>current game</b>.</li>`;
+        `strengthen your own subunits of a type, and apply only to the <b>current game</b>.</li>`;
   </script>
 </body>
 </html>

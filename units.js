@@ -5,17 +5,21 @@
  * without touching game rules (rules.js), the board (board.js) or rendering
  * (render.js). Add a unit here and it appears in the game, legend and shop.
  *
+ * Stats are PER SUBUNIT. A board piece is a "template" — a stack of same-type
+ * subunits (see rules.js STACK_LIMIT = 25, a 5x5 grid). A template's strength
+ * scales with how many subunits it holds: total HP / ATK = sum over its subunits.
+ *
  * Stats:
- *   hp              - hit points; destroyed at 0
- *   attack          - base damage to an adjacent enemy (modified by rules.js)
+ *   hp              - hit points of ONE subunit; the subunit dies at 0
+ *   attack          - base damage ONE subunit deals (modified by rules.js)
  *   movement_speed  - movement points per turn (terrain costs defined in board.js)
- *   cost            - gold to buy from the shop
+ *   cost            - gold to buy one subunit from the shop
  *   code            - single character drawn on the board
  *   art             - SVG icon (legend / shop / zoomed board), or null
  */
 window.PIECES = {
-  pawn: {
-    name: 'Pawn', code: 'p', art: 'assets/pawn.svg',
+  infantry: {
+    name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
     hp: 30, attack: 20, movement_speed: 2, cost: 1,
   },
   archer: {
@@ -53,14 +57,14 @@ window.PIECES = {
 //   tank / cavalry  — heavy & mounted units bog down assaulting cities and water.
 //   artillery / cannon — siege guns excel at battering fortified cities.
 //   archer          — shoots effectively into forest cover.
-//   pawn            — infantry are strong in close urban fighting.
+//   infantry        — foot soldiers are strong in close urban fighting.
 window.TERRAIN_COMBAT = {
   tank:      { city: 0.5, water: 0.5, forest: 0.75 },
   cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
   artillery: { city: 1.5 },
   cannon:    { city: 1.4 },
   archer:    { forest: 1.25 },
-  pawn:      { city: 1.2 },
+  infantry:  { city: 1.2 },
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
@@ -83,4 +87,17 @@ window.UPGRADES = {
   atk: { label: 'Attack',   gain: 1, baseCost: 17 },
   hp:  { label: 'Health',   gain: 2, baseCost: 17 },
   mov: { label: 'Movement', gain: 1, baseCost: 17 },
+};
+
+// Tech tree — gold cost to UNLOCK each unit type for the current game (see
+// tech.html + game.js Game.unlocked). Infantry is free and unlocked from the
+// start; every other type must be researched before it can be bought, built
+// into a template, or upgraded. Unlocks are per-player and per-game (in the save).
+window.TECH = {
+  infantry:  0,
+  archer:    12,
+  cavalry:   18,
+  cannon:    24,
+  artillery: 30,
+  tank:      40,
 };
