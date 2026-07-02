@@ -20,12 +20,12 @@
 window.PIECES = {
   infantry: {
     name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
-    hp: 30, attack: 20, movement_speed: 2, cost: 1,
+    hp: 30, attack: 20, movement_speed: 3, cost: 1,
   },
   motorized: {
     // Truck-borne infantry: quick, ranged-value attacker.
     name: 'Motorized', code: 'm', art: 'assets/truck.svg',
-    hp: 30, attack: 30, movement_speed: 2, cost: 2,
+    hp: 30, attack: 30, movement_speed: 6, cost: 2,
   },
   cavalry: {
     // Formerly the chess "knight": fast and hard-hitting.
@@ -35,12 +35,12 @@ window.PIECES = {
   cannon: {
     // Siege gun: heavy hitter, slow.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
-    hp: 60, attack: 70, movement_speed: 1, cost: 6,
+    hp: 60, attack: 70, movement_speed: 3, cost: 6,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
     name: 'Tank', code: 't', art: 'assets/tank.svg',
-    hp: 120, attack: 80, movement_speed: 3, cost: 9,
+    hp: 120, attack: 80, movement_speed: 6, cost: 9,
   },
 };
 
@@ -50,16 +50,17 @@ window.PIECES = {
 // 1 = no change, <1 = debuff, >1 = bonus; any terrain not listed defaults to 1.
 //
 // Design intent:
-//   tank / cavalry  — heavy & mounted units bog down assaulting cities and water.
-//   cannon          — siege gun excels at battering fortified cities.
-//   motorized       — mobile troops shoot effectively into forest cover.
-//   infantry        — foot soldiers are strong in close urban fighting.
+//   tank      — overruns open ground but bogs down fighting through a village.
+//   cavalry   — mounted units bog down assaulting cities and water.
+//   cannon    — siege gun batters villages; struggles firing through forest/water.
+//   motorized — wheeled troops lose bite in forest and across water.
+//   infantry  — foot soldiers hold cities and forest; weak fighting over water.
 window.TERRAIN_COMBAT = {
-  tank:      { city: 0.5, water: 0.5, forest: 0.75 },
+  tank:      { plains: 1.5, village: 0.8 },
   cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
-  cannon:    { city: 1.4 },
-  motorized: { forest: 1.25 },
-  infantry:  { city: 1.2 },
+  cannon:    { village: 1.2, forest: 0.9, water: 0.5 },
+  motorized: { forest: 0.9, water: 0.5 },
+  infantry:  { city: 1.05, forest: 1.05, water: 0.65 },
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
@@ -72,6 +73,18 @@ window.ECONOMY = {
   start: 10,         // gold each player begins with
   base_income: 1,    // gold per round regardless of cities
   city_income: 2,    // extra gold per round for each owned city
+};
+
+// HP regeneration (applied by game.js). A unit that did NOT move during its turn
+// recovers HP at the start of its next turn. Motorized subunits carry field-repair
+// and heal ANYWHERE, scaled by their share of the unit; every other subunit needs
+// supply — being near an OWNED city or village. Cavalry/tank units (heavy, longer
+// logistics tail) draw supply from farther out. Values are fractions of max HP.
+window.REGEN = {
+  motor: 0.25,        // fully-motorized unit heals 25% of max HP per idle turn
+  supply: 0.2,        // within supply range: +20% of max HP per idle turn
+  range:      { city: 3, village: 1 }, // Manhattan tiles for normal units
+  heavyRange: { city: 5, village: 2 }, // cavalry / tank reach farther
 };
 
 // In-game subunit upgrades (see tech.html + game.js). Bought with gold and

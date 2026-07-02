@@ -157,7 +157,7 @@ function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
     templateId: tmpl.id, name: tmpl.name, type: s.primary, parts: s.parts,
     hp: s.maxHp, maxHp: s.maxHp, mov: s.mov,
     movesLeft: o.movesLeft != null ? o.movesLeft : s.mov,
-    acted: !!o.acted,
+    acted: !!o.acted, moved: false,
   };
 }
 // A player's default starting template library: one "Infantry" template (4 bodies).
@@ -219,7 +219,7 @@ function serialize() {
       id: u.id, owner: u.owner, r: u.r, c: u.c,
       templateId: u.templateId, name: u.name, type: u.type,
       parts: (u.parts || []).map((p) => ({ type: p.type, count: p.count, atk: p.atk, hp: p.hp, mov: p.mov })),
-      hp: u.hp, maxHp: u.maxHp, mov: u.mov, movesLeft: u.movesLeft, acted: u.acted,
+      hp: u.hp, maxHp: u.maxHp, mov: u.mov, movesLeft: u.movesLeft, acted: u.acted, moved: !!u.moved,
     })),
     toPlace: Game.toPlace.slice(),
     upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
@@ -237,7 +237,7 @@ function migrateUnit(u) {
     return { id: u.id, owner: u.owner, r: u.r, c: u.c, templateId: u.templateId,
       name: u.name || (PIECES[u.type] ? PIECES[u.type].name : 'Unit'), type: u.type,
       parts: u.parts.map((p) => ({ ...p })),
-      hp: u.hp, maxHp: u.maxHp, mov: u.mov != null ? u.mov : u.movesLeft, movesLeft: u.movesLeft, acted: !!u.acted };
+      hp: u.hp, maxHp: u.maxHp, mov: u.mov != null ? u.mov : u.movesLeft, movesLeft: u.movesLeft, acted: !!u.acted, moved: !!u.moved };
   }
   const d = PIECES[u.type] || PIECES.infantry;
   const atk = d.attack + (u.atkBonus || 0);
@@ -246,7 +246,7 @@ function migrateUnit(u) {
   return { id: u.id, owner: u.owner, r: u.r, c: u.c, templateId: null,
     name: d.name, type: u.type in PIECES ? u.type : 'infantry',
     parts: [{ type: u.type in PIECES ? u.type : 'infantry', count: 1, atk, hp, mov }],
-    hp: u.hp != null ? u.hp : hp, maxHp: hp, mov, movesLeft: u.movesLeft || 0, acted: !!u.acted };
+    hp: u.hp != null ? u.hp : hp, maxHp: hp, mov, movesLeft: u.movesLeft || 0, acted: !!u.acted, moved: !!u.moved };
 }
 function persist() { SaveState.save(serialize()); }
 
@@ -352,6 +352,44 @@ function captureIfCity(r, c, owner) {
   }
 }
 
+// --- HP regeneration --------------------------------------------------------
+// A unit that did NOT move on its turn recovers HP at the start of its next one.
+// Motorized subunits self-repair anywhere (scaled by their share of the unit);
+// every other subunit needs supply from a nearby OWNED city/village, with
+// cavalry/tank units drawing that supply from farther out. Tuning: units.js REGEN.
+
+// Share (0..1) of a unit's subunits that are `type`.
+function subunitShare(u, type) {
+  let total = 0, n = 0;
+  for (const p of (u.parts || [])) { total += p.count; if (p.type === type) n += p.count; }
+  return total ? n / total : 0;
+}
+function unitHasType(u, type) {
+  return (u.parts || []).some((p) => p.type === type && p.count > 0);
+}
+// Is (r,c) within `dist` Manhattan tiles of a site in `sites` owned by `owner`?
+function nearOwnedSite(r, c, sites, owner, dist) {
+  for (const s of sites) {
+    if (s.owner !== owner) continue;
+    if (Math.abs(s.r - r) + Math.abs(s.c - c) <= dist) return true;
+  }
+  return false;
+}
+// HP a rested unit recovers this turn (0 if none / already full).
+function regenAmount(u) {
+  if (u.hp >= u.maxHp) return 0;
+  let frac = 0;
+  const mot = subunitShare(u, 'motorized');
+  if (mot > 0) frac += mot * REGEN.motor;
+  const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
+  if (nearOwnedSite(u.r, u.c, Game.cities, u.owner, range.city) ||
+      nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village)) {
+    frac += REGEN.supply;
+  }
+  if (frac <= 0) return 0;
+  return Math.min(u.maxHp - u.hp, Math.round(u.maxHp * frac));
+}
+
 // Deploy pending UNITS (each built from a template) onto a tile in the current
 // player's zone. Multiple units may stack on a tile up to Rules.STACK_LIMIT.
 // A queued unit is skipped if its template contains a still-locked subunit.
@@ -382,6 +420,7 @@ function placeAt(r, c) {
   if (!placed && blockedLocked) {
     UI.log('That template needs a subunit you have not researched yet.');
   } else {
+    if (placed) captureIfCity(r, c, owner); // deploying onto a neutral/enemy site captures it
     UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +
       (pendingForTurn() ? ` ${pendingForTurn()} left to place.` : ''));
   }
@@ -493,6 +532,7 @@ function moveGroup(group, r, c) {
     removeFromStack(u);
     u.r = r; u.c = c;
     u.movesLeft = Math.max(0, u.movesLeft - spent);
+    u.moved = true; // moved this turn -> no HP regen next turn
     addToStack(u);
   }
   captureIfCity(r, c, owner);
@@ -506,9 +546,18 @@ function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities,
 
 function startTurn(player) {
   Game.turn = player;
+  let healed = 0, healedUnits = 0;
   for (const u of Game.units) {
-    if (u.owner === player) { u.movesLeft = u.mov || 0; u.acted = false; }
+    if (u.owner !== player) continue;
+    if (!u.moved) { // rested last turn -> recover HP
+      const gain = regenAmount(u);
+      if (gain > 0) { u.hp += gain; healed += gain; healedUnits++; }
+    }
+    u.moved = false;
+    u.movesLeft = u.mov || 0;
+    u.acted = false;
   }
+  if (healedUnits) UI.log(`${PLAYERS[player].name} recovered ${healed} HP across ${healedUnits} resting unit(s).`);
   clearSelection();
 }
 
