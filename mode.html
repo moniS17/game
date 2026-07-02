@@ -61,12 +61,12 @@
       <div class="dims">
         <div class="field">
           <label for="widthInput">Width</label>
-          <input id="widthInput" type="number" inputmode="numeric" min="5" max="400" step="1" value="100" />
+          <input id="widthInput" type="number" inputmode="numeric" min="10" max="1717" step="1" value="100" />
         </div>
         <span>×</span>
         <div class="field">
           <label for="heightInput">Height</label>
-          <input id="heightInput" type="number" inputmode="numeric" min="5" max="400" step="1" value="100" />
+          <input id="heightInput" type="number" inputmode="numeric" min="10" max="1717" step="1" value="100" />
         </div>
       </div>
       <button type="button" class="default" id="defaultBtn">↺ Default 100 × 100</button>
@@ -77,13 +77,15 @@
     <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
     <button class="back" id="backBtn">← Back to menu</button>
 
-    <div class="hint">A fresh map is generated at the chosen size (5–400 each side).</div>
+    <div class="hint" id="rangeHint">A fresh map is generated at the chosen size.</div>
   </div>
 
   <script src="algorithms.js"></script>
   <script src="state.js"></script>
   <script>
     const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
+    document.getElementById('rangeHint').textContent =
+      `A fresh map is generated at the chosen size (${MIN}–${MAX} each side).`;
     const widthInput = document.getElementById('widthInput');
     const heightInput = document.getElementById('heightInput');
     const errEl = document.getElementById('sizeErr');

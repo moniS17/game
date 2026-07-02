@@ -51,12 +51,9 @@
       </ul>
     </div>
 
-    <h2>Terrain effects</h2>
+    <h2>Income</h2>
     <div class="panel">
-      <table id="terrainTable">
-        <tr><th>Tile</th><th>Move cost</th><th>Defense</th><th>Effect</th></tr>
-      </table>
-      <ul id="terrainNotes"></ul>
+      <ul id="incomeRules"></ul>
     </div>
 
     <h2>Units</h2>
@@ -96,33 +93,14 @@
   <script>
     const arts = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
 
-    // --- Terrain table ---
-    const tt = document.getElementById("terrainTable");
-    for (const k in TERRAIN) {
-      const t = TERRAIN[k];
-      const move = t.move_cost > 1
-        ? `<span class="debuff">${t.move_cost}</span>` : `<span class="neutral">${t.move_cost}</span>`;
-      const def = t.defense > 0
-        ? `<span class="buff">+${t.defense}</span>` : `<span class="neutral">0</span>`;
-      let effect = [];
-      if (t.defense > 0) effect.push(`<span class="tag buff">+${t.defense} defense (cover)</span>`);
-      if (t.attack_penalty) effect.push(`<span class="tag debuff">−${t.attack_penalty} attack for occupants</span>`);
-      if (t.move_cost > 1) effect.push(`<span class="tag debuff">slower to enter</span>`);
-      if (!effect.length) effect.push(`<span class="neutral">—</span>`);
-      const visual = arts[k]
-        ? `<img class="swatch" src="${arts[k]}" alt="">` : `<span class="swatch" style="background:${t.color}"></span>`;
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        `<td><span class="name">${visual}${t.name} (${t.code})</span></td>` +
-        `<td>${move}</td><td>${def}</td><td>${effect.join(" ")}</td>`;
-      tt.appendChild(tr);
-    }
-    document.getElementById("terrainNotes").innerHTML =
-      `<li><b>Defense</b> is subtracted from incoming attack damage on that tile (minimum 1 damage).</li>` +
-      `<li><b>Villages</b> are defensive strongholds: units standing on one gain <span class="buff">+${TERRAIN.village.defense} defense</span> when defending, but deal <span class="debuff">−${TERRAIN.village.attack_penalty} attack</span> — great to hold, weak to assault from.</li>` +
-      `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot.</li>` +
-      `<li>Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Rules.COMBAT.river_attack_penalty}</span> river penalty.</li>` +
-      `<li><b>Cities</b> give the strongest cover and can be <b>captured</b> by moving onto them; each owned city adds income.</li>`;
+    // --- Income (cities & villages) ---
+    const villageInc = Math.round(ECONOMY.city_income * 0.5);
+    document.getElementById("incomeRules").innerHTML =
+      `<li>Each player earns gold at the start of every round: <b>${ECONOMY.base_income}</b> base income, no matter what.</li>` +
+      `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
+      `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
+      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
+      `<li>Standing on a <b>city</b> gives <span class="buff">+${TERRAIN.city.defense} defense</span>; a <b>village</b> gives <span class="buff">+${TERRAIN.village.defense} defense</span> but <span class="debuff">−${TERRAIN.village.attack_penalty} attack</span> to its occupants.</li>`;
 
     // --- Units table ---
     const ut = document.getElementById("unitTable");
@@ -175,12 +153,14 @@
       `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while cannons batter <b>cities</b> <span class="buff">harder</span> and motorized troops shoot better in <b>forest</b> (see the table above). Counterattacks are scaled the same way.</li>` +
       `<li class="buff">If one side has at least <b>twice</b> the other's unit count, the outnumbered side takes <b>double damage</b>.</li>` +
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
+      `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot. Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Rules.COMBAT.river_attack_penalty}</span> river penalty.</li>` +
+      `<li><b>Forest</b> costs ${TERRAIN.forest.move_cost} to enter and gives <span class="buff">+${TERRAIN.forest.defense} defense</span>.</li>` +
       `<li>Deploy bought units anywhere in your own deployment zone (Blue = left, Red = right).</li>`;
 
     // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and <b>one unit built from the Infantry template (4 infantry)</b>.</li>` +
-      `<li>Income per round = <b>${ECONOMY.base_income}</b> base + <b>${ECONOMY.city_income}</b> per owned city.</li>` +
+      `<li>Income per round = <b>${ECONOMY.base_income}</b> base + <b>${ECONOMY.city_income}</b> per owned city + <b>${villageInc}</b> per owned village (see Income above).</li>` +
       `<li><b>Tech tree</b>: only the <b>Infantry</b> subunit is unlocked at the start. Research other subunits with gold ` +
         `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} $${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
       `<li><b>Templates</b>: design reusable 5×5 blueprints of subunits; a unit's <b>cost = the sum of its subunits' costs</b>.</li>` +

@@ -26,7 +26,7 @@
  *   - Damage is dealt 1-by-1 down each stack (see game.js applyDamage).
  *
  * ECONOMY
- *   income(player) = base_income + city_income * (cities owned)
+ *   income(player) = base_income + city_income*(cities owned) + 50%*(villages owned)
  */
 window.Rules = (function () {
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -166,10 +166,14 @@ window.Rules = (function () {
     return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
   }
 
-  function income(cities, player) {
-    let owned = 0;
-    for (const ci of cities) if (ci.owner === player) owned++;
-    return ECONOMY.base_income + ECONOMY.city_income * owned;
+  // Gold per round for `player`: flat base + city_income per owned city +
+  // half that (rounded) per owned village. `villages` may be omitted.
+  function income(cities, villages, player) {
+    let cityOwned = 0, villageOwned = 0;
+    for (const ci of (cities || [])) if (ci.owner === player) cityOwned++;
+    for (const v of (villages || [])) if (v.owner === player) villageOwned++;
+    const villageInc = Math.round(ECONOMY.city_income * 0.5);
+    return ECONOMY.base_income + ECONOMY.city_income * cityOwned + villageInc * villageOwned;
   }
 
   return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult };

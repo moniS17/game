@@ -40,6 +40,7 @@
 </head>
 <body>
   <div class="menu">
+    <div class="greeting" id="greeting"></div>
     <button class="new"  id="newBtn">🗺️ Start new map</button>
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
     <button class="cont" id="contBtn">▶️ Continue</button>
@@ -47,6 +48,9 @@
 
   <script src="state.js"></script>
   <script>
+    const user = localStorage.getItem("battlegrid.user") || "player";
+    document.getElementById("greeting").textContent = "hello: " + user;
+
     const contBtn = document.getElementById("contBtn");
     contBtn.disabled = !SaveState.exists();
 

@@ -9,13 +9,15 @@
  *   1. lakes   — rectangular blocks of water
  *   2. rivers  — single-tile-wide connected paths of water
  *   3. forests — blobby patches placed only on plains (avoid water)
- *   4. cities  — per player on their half of the board, on plains only
+ *   4. cities  — per player, clustered toward each side's 30% width mark,
+ *                plus neutral cities near the board center (fought over)
+ *   5. villages — scattered neutral tiles (capturable; pay 50% of a city)
  *
  * Exposes window.Algorithms.
  */
 window.Algorithms = (function () {
   const GRID = 100;              // legacy default (square)
-  const MIN = 5, MAX = 400;      // hard bounds on either dimension
+  const MIN = 10, MAX = 1717;    // hard bounds on either dimension
   const clampDim = (n) => Math.max(MIN, Math.min(MAX, Math.floor(n) || GRID));
 
   // --- board-size scaling ----------------------------------------------------
@@ -28,6 +30,8 @@ window.Algorithms = (function () {
   const areaScale = (rows, cols) => (rows * cols) / (GRID * GRID); // 1 at 100x100
   const citiesPerSide = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
   const unitsPerSide = (rows, cols) => Math.max(1, Math.round(UNITS_PER_SIDE * areaScale(rows, cols)));
+  // Neutral cities near the board center: 1 at 10x10, 17 at 100x100, more on larger boards.
+  const neutralCount = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
 
   // --- seeded PRNG (mulberry32): deterministic given the seed ---------------
   function makeRng(seed) {
@@ -151,14 +155,19 @@ window.Algorithms = (function () {
     }
   }
 
-  // --- 4. CITIES: per player, on their half, avoiding water and trees -------
+  // --- 4. CITIES: per player, clustered toward each side's 30% width mark ----
   function placeCities(t, rng, rows, cols) {
     const cities = [];
     const occupied = new Set();
     const perSide = citiesPerSide(rows, cols); // scales with board area (17 at 100x100)
-    const leftMax = Math.max(1, Math.floor(cols * 0.44));            // 44 at cols=100
-    const rightMin = cols - 1 - Math.floor(cols * 0.44);            // 55 at cols=100
-    const placeSide = (owner, cMin, cMax) => {
+    // Cluster each side's cities around the column 30% of the way in from THEIR
+    // own edge (Blue ~0.30·W, Red ~0.70·W), leaving the center for neutral cities.
+    const half = Math.max(1, Math.round(cols * 0.12));
+    const blueMid = Math.round(0.30 * (cols - 1));
+    const redMid = Math.round(0.70 * (cols - 1));
+    const clampC = (c) => Math.max(1, Math.min(cols - 2, c));
+    const placeBand = (owner, mid) => {
+      const cMin = clampC(mid - half), cMax = clampC(mid + half);
       let placed = 0, attempts = 0;
       while (placed < perSide && attempts < 20000) {
         attempts++;
@@ -171,16 +180,43 @@ window.Algorithms = (function () {
         cities.push({ r, c, owner });
         placed++;
       }
+      return occupied;
     };
-    placeSide(0, 1, leftMax);            // Blue / left half
-    placeSide(1, rightMin, cols - 2);    // Red / right half
+    placeBand(0, blueMid);   // Blue / left cluster
+    placeBand(1, redMid);    // Red / right cluster
+    return { cities, occupied };
+  }
+
+  // --- 4b. NEUTRAL CITIES: unowned cities in a central band, fought over ------
+  function placeNeutralCities(t, rng, rows, cols, occupied) {
+    const cities = [];
+    const count = neutralCount(rows, cols);
+    const half = Math.max(2, Math.round(cols * 0.12)); // central ~0.38–0.62·W
+    const mid = Math.round((cols - 1) / 2);
+    const cMin = Math.max(1, mid - half), cMax = Math.min(cols - 2, mid + half);
+    let placed = 0, attempts = 0;
+    const cap = count * 200 + 500;
+    while (placed < count && attempts < cap) {
+      attempts++;
+      const r = randInt(rng, 1, rows - 2);
+      const c = randInt(rng, cMin, cMax);
+      const k = r + ',' + c;
+      if (t[r][c] !== 'plains' || occupied.has(k)) continue;
+      t[r][c] = 'city';
+      occupied.add(k);
+      cities.push({ r, c, owner: null }); // neutral until captured
+      placed++;
+    }
     return cities;
   }
 
   // --- 5. VILLAGES: single neutral tiles scattered on plains ---------------
   // Placed LAST so lakes/rivers/forests/cities are byte-for-byte unchanged for a
   // given seed; villages only paint onto leftover plains (never over a city).
+  // Returns the placed positions so they can be tracked as capturable, income-
+  // generating sites (each village pays 50% of a city).
   function generateVillages(t, rng, count, rows, cols) {
+    const villages = [];
     let placed = 0, attempts = 0;
     const cap = count * 200 + 500;
     while (placed < count && attempts < cap) {
@@ -189,8 +225,10 @@ window.Algorithms = (function () {
       const c = randInt(rng, 0, cols - 1);
       if (t[r][c] !== 'plains') continue; // avoid water, forest, city
       t[r][c] = 'village';
+      villages.push({ r, c, owner: null });
       placed++;
     }
+    return villages;
   }
 
   // --- top-level: build a full map from a seed + dimensions -----------------
@@ -204,14 +242,16 @@ window.Algorithms = (function () {
     const lakes = generateLakes(t, rng, Math.max(1, Math.round(randInt(rng, 3, 6) * scale)), rows, cols, inB);
     generateRivers(t, rng, lakes, Math.max(1, Math.round(randInt(rng, 3, 5) * scale)), rows, cols, inB);
     generateForests(t, rng, Math.max(2, Math.round(randInt(rng, 18, 28) * scale)), rows, cols);
-    const cities = placeCities(t, rng, rows, cols);
-    generateVillages(t, rng, Math.max(1, Math.round(randInt(rng, 14, 20) * scale)), rows, cols);
-    return { terrain: t, cities };
+    const { cities, occupied } = placeCities(t, rng, rows, cols);
+    const neutral = placeNeutralCities(t, rng, rows, cols, occupied);
+    for (const nc of neutral) cities.push(nc);
+    const villages = generateVillages(t, rng, Math.max(1, Math.round(randInt(rng, 14, 20) * scale)), rows, cols);
+    return { terrain: t, cities, villages };
   }
 
   return {
     GRID, MIN, MAX, clampDim, makeRng, generateMap,
-    CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide,
-    generateLakes, generateRivers, carveRiver, generateForests, placeCities, generateVillages,
+    CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide, neutralCount,
+    generateLakes, generateRivers, carveRiver, generateForests, placeCities, placeNeutralCities, generateVillages,
   };
 })();

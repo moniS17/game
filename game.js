@@ -33,7 +33,8 @@ const Game = {
   seed: 0,
   mode: 'pvp',          // 'pvp' | 'pve' (pve: player 1 is the AI)
   terrain: [],
-  cities: [],           // [{r, c, owner}]
+  cities: [],           // [{r, c, owner}]  owner: 0 | 1 | null (neutral)
+  villages: [],         // [{r, c, owner}]  capturable; each pays 50% of a city
   units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
   economy: [0, 0],
@@ -213,6 +214,7 @@ function serialize() {
     creative: Game.creative,
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
+    villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
     units: Game.units.map((u) => ({
       id: u.id, owner: u.owner, r: u.r, c: u.c,
       templateId: u.templateId, name: u.name, type: u.type,
@@ -250,14 +252,14 @@ function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
 function buildInitialState(mode, seed, rows, cols, creative) {
-  const { terrain, cities } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
+  const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const templates = [defaultTemplates(), defaultTemplates()];
   const units = buildInitialArmies(terrain, templates);
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
     creative: !!creative,
     economy: [ECONOMY.start, ECONOMY.start],
-    cities, units, toPlace: [], upgrades: [{}, {}],
+    cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
     templates, pendingSpawns: [],
   };
@@ -306,6 +308,7 @@ function loadIntoGame(st) {
   Game.round = st.round || 1;
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
+  Game.villages = (st.villages || []).map((v) => ({ ...v }));
   Game.units = (st.units || []).map(migrateUnit);
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
   Game.unlocked = [
@@ -336,11 +339,16 @@ function loadIntoGame(st) {
 function cityAt(r, c) {
   return Game.cities.find((ci) => ci.r === r && ci.c === c) || null;
 }
+function villageAt(r, c) {
+  return Game.villages.find((v) => v.r === r && v.c === c) || null;
+}
+// Capture a city OR village on move-on (neutral owner===null counts as capture).
 function captureIfCity(r, c, owner) {
-  const ci = cityAt(r, c);
-  if (ci && ci.owner !== owner) {
-    ci.owner = owner;
-    UI.log(`${PLAYERS[owner].name} captured a city at r${r}, c${c}.`);
+  const site = cityAt(r, c) || villageAt(r, c);
+  if (site && site.owner !== owner) {
+    const kind = TERRAIN[Game.terrain[r][c]] ? TERRAIN[Game.terrain[r][c]].name.toLowerCase() : 'site';
+    site.owner = owner;
+    UI.log(`${PLAYERS[owner].name} captured a ${kind} at r${r}, c${c}.`);
   }
 }
 
@@ -494,7 +502,7 @@ function moveGroup(group, r, c) {
 // ---------------------------------------------------------------------------
 // Turns & economy
 // ---------------------------------------------------------------------------
-function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities, player); }
+function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities, Game.villages, player); }
 
 function startTurn(player) {
   Game.turn = player;

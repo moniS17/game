@@ -126,11 +126,12 @@ window.Render = (function () {
       }
     }
 
-    // city ownership rings
-    for (const ci of G.cities) {
+    // city / village ownership rings (neutral = gray)
+    const sites = G.villages ? G.cities.concat(G.villages) : G.cities;
+    for (const ci of sites) {
       if (ci.r < r0 || ci.r >= r1 || ci.c < c0 || ci.c >= c1) continue;
       const x = ci.c * cell - cam.x, y = ci.r * cell - cam.y;
-      ctx.strokeStyle = PLAYERS[ci.owner].color;
+      ctx.strokeStyle = ci.owner == null ? '#9aa4ad' : PLAYERS[ci.owner].color;
       ctx.lineWidth = Math.max(1.5, cell * 0.12);
       ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
       ctx.lineWidth = 1;

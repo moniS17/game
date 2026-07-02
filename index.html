@@ -111,6 +111,7 @@
       <div class="stat-row"><span>Blue units</span><span id="blueCount">0</span></div>
       <div class="stat-row"><span>Red units</span><span id="redCount">0</span></div>
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
+      <div class="stat-row"><span>Villages (Blue / Red)</span><span id="villageCount">0 / 0</span></div>
 
       <button class="shop" id="buyBtn">🛒 Buy subunits</button>
       <button id="templateBtn">▦ Templates</button>
@@ -246,8 +247,11 @@
         document.getElementById('blueCount').textContent = blue;
         document.getElementById('redCount').textContent = red;
         let cb = 0, cr = 0;
-        for (const c of Game.cities) (c.owner === 0 ? cb++ : cr++, 0);
+        for (const c of Game.cities) { if (c.owner === 0) cb++; else if (c.owner === 1) cr++; }
         document.getElementById('cityCount').textContent = cb + ' / ' + cr;
+        let vb = 0, vr = 0;
+        for (const v of (Game.villages || [])) { if (v.owner === 0) vb++; else if (v.owner === 1) vr++; }
+        document.getElementById('villageCount').textContent = vb + ' / ' + vr;
 
         // placement banner
         const placePanel = document.getElementById('placePanel');
