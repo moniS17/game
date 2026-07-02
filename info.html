@@ -128,10 +128,9 @@
     const ut = document.getElementById("unitTable");
     const roles = {
       infantry: "Cheap frontline body; stack them deep.",
-      archer: "Cheap ranged-value attacker.",
+      motorized: "Truck-borne troops; ranged value, strong in forest.",
       cavalry: "Fast flanker, hard hitter.",
-      artillery: "Glass cannon: huge ATK, crawls.",
-      cannon: "Siege gun: heavy, slow, tanky-ish.",
+      cannon: "Siege gun: heavy, slow, batters cities.",
       tank: "Heavy: high HP + ATK, priciest.",
     };
     for (const k in PIECES) {
@@ -173,7 +172,7 @@
       `<li>Up to <b>${Rules.STACK_LIMIT} units</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b> (minus the other tile's terrain defense), applied one unit at a time; a unit is destroyed when its HP reaches 0.</li>` +
-      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while artillery and cannons batter <b>cities</b> <span class="buff">harder</span> (see the table above). Counterattacks are scaled the same way.</li>` +
+      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while cannons batter <b>cities</b> <span class="buff">harder</span> and motorized troops shoot better in <b>forest</b> (see the table above). Counterattacks are scaled the same way.</li>` +
       `<li class="buff">If one side has at least <b>twice</b> the other's unit count, the outnumbered side takes <b>double damage</b>.</li>` +
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
       `<li>Deploy bought units anywhere in your own deployment zone (Blue = left, Red = right).</li>`;

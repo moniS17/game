@@ -17,22 +17,37 @@
     h1 { font-size: 1.4rem; }
     .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
     .who { font-size: .85rem; color: #9aa4ad; max-width: 900px; margin: 0 auto 18px; }
-    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
     .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-    .card.locked { opacity: .96; }
+    .card.unlocked .top { cursor: pointer; }
+    .card.open { outline: 2px solid #6a4bd9; }
     .card .top { display: flex; align-items: center; gap: 12px; }
     .card img, .card .icon {
       width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
       align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
     }
     .card h3 { font-size: 1rem; }
+    .owned { font-size: .72rem; color: #9aa4ad; }
     .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
-    .stats b { color: #fff; }
-    .status { font-size: .8rem; font-weight: 700; }
+    .stats b { color: #fff; } .stats .up { color: #7cb342; font-weight: 700; }
+    .status { font-size: .8rem; font-weight: 700; margin-left: auto; }
     .status.unlocked { color: #7cb342; }
     button.unlock { padding: .6rem; border: none; border-radius: 6px; background: #6a4bd9; color: #fff; font-weight: 600; cursor: pointer; }
     button.unlock:hover:not(:disabled) { background: #573bb3; }
     button.unlock:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    /* upgrade steppers (shown when an unlocked subunit is opened) */
+    .ups { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #3a3f45; padding-top: 10px; }
+    .ups button {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: .55rem .7rem; border: none; border-radius: 6px; background: #3a5bd9; color: #fff;
+      font-weight: 600; font-size: .85rem; cursor: pointer;
+    }
+    .ups button:hover:not(:disabled) { background: #2f49b0; }
+    .ups button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .ups button .lvl { font-size: .72rem; color: #cdd6ff; font-weight: 700; }
+    .ups button:disabled .lvl { color: #6b727a; }
+    .ups .cost { color: #f5c542; font-weight: 700; }
+    .hint { font-size: .72rem; color: #7e8893; }
     .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
     .bar a.battle { background: #3a5bd9; } .bar a.tmpl { background: #2e7d46; }
@@ -41,15 +56,15 @@
 </head>
 <body>
   <header>
-    <h1>🔬 Tech Tree</h1>
+    <h1>🔬 Tech &amp; Upgrades</h1>
     <div class="gold">💰 <span id="gold">0</span> gold</div>
   </header>
   <div class="who" id="who"></div>
 
   <div class="grid" id="grid"></div>
-  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a subunit once with gold to
-    place it into your <a href="template.html" style="color:#8ea2ff">templates</a> for the rest of
-    <b>this game</b> — a new map resets the tree. Each player has their own tech tree.</div>
+  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a subunit once to place it in your
+    <a href="template.html" style="color:#8ea2ff">templates</a>; then <b>click an unlocked subunit</b> to buy
+    Attack / Health / Movement upgrades for it. Everything lasts for <b>this game</b> only — a new map resets it.</div>
 
   <div class="bar">
     <a class="battle" href="index.html">⬅ Return to battle</a>
@@ -62,18 +77,26 @@
     const save = SaveState.load();
     if (!save) { window.location.href = "menu.html"; }
 
-    const me = save.turn;                       // the player whose turn it is researches
+    const me = save.turn;                       // the player whose turn it is
     save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
-    save.unlocked[me] = save.unlocked[me] || {};
-    save.unlocked[me].infantry = true;          // always available
+    save.unlocked[me] = save.unlocked[me] || {}; save.unlocked[me].infantry = true;
+    save.upgrades = save.upgrades || [{}, {}];
+    save.upgrades[me] = save.upgrades[me] || {};
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — spend gold to research new subunits for this game.";
+      PLAYERS[me].name + " — research subunits and click one to upgrade it.";
 
     const goldEl = document.getElementById("gold");
     const grid = document.getElementById("grid");
 
     const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
+    const steps = (type, stat) => (save.upgrades[me][type] && save.upgrades[me][type][stat]) || 0;
+    const bonus = (type, stat) => steps(type, stat) * UPGRADES[stat].gain;
+    const upCost = (type, stat) => UPGRADES[stat].baseCost * Math.pow(2, steps(type, stat));
+    const partsOf = (u) => u.parts || [];
+    const ownedOf = (type) => save.units.filter((u) => u.owner === me && partsOf(u).some((p) => p.type === type)).length;
+
+    let openType = null;                        // which unlocked subunit is expanded
 
     function unlock(type) {
       if (isUnlocked(type)) return;
@@ -81,36 +104,91 @@
       if (save.economy[me] < cost) return;
       save.economy[me] -= cost;
       save.unlocked[me][type] = true;
+      openType = type;                          // reveal its upgrades right away
       SaveState.save(save);
       render();
+    }
+
+    // Buy one upgrade step of `stat` for subunit `type`; apply to existing units.
+    function upgrade(type, stat) {
+      const c = upCost(type, stat);
+      if (save.economy[me] < c) return;
+      save.economy[me] -= c;
+      save.upgrades[me][type] = save.upgrades[me][type] || {};
+      save.upgrades[me][type][stat] = steps(type, stat) + 1;
+      const gain = UPGRADES[stat].gain;
+      for (const u of save.units) {
+        if (u.owner !== me) continue;
+        let touched = false;
+        for (const p of partsOf(u)) {
+          if (p.type !== type) continue;
+          touched = true;
+          if (stat === "atk") p.atk = (p.atk || 0) + gain;
+          else if (stat === "hp") p.hp = (p.hp || 0) + gain;
+          else if (stat === "mov") p.mov = (p.mov || 0) + gain;
+        }
+        if (!touched) continue;
+        if (stat === "hp") {
+          const cnt = partsOf(u).filter((p) => p.type === type).reduce((a, p) => a + p.count, 0);
+          u.maxHp = (u.maxHp || 0) + gain * cnt; u.hp = (u.hp || 0) + gain * cnt;
+        } else if (stat === "mov") {
+          const newMov = Math.min(...partsOf(u).map((p) => p.mov));
+          if (!u.acted && newMov > (u.mov || 0)) u.movesLeft = (u.movesLeft || 0) + (newMov - u.mov);
+          u.mov = newMov;
+        }
+      }
+      SaveState.save(save);
+      render();
+    }
+
+    function upsHtml(k) {
+      const d = PIECES[k];
+      const eAtk = d.attack + bonus(k, "atk"), eHp = d.hp + bonus(k, "hp"), eMov = d.movement_speed + bonus(k, "mov");
+      const bump = (base, eff) => eff > base ? `<b>${base}</b> → <span class="up">${eff}</span>` : `<b>${base}</b>`;
+      const btn = (stat, icon) => {
+        const c = upCost(k, stat), dis = save.economy[me] < c ? "disabled" : "";
+        return `<button data-type="${k}" data-stat="${stat}" ${dis}>` +
+          `<span>${icon} ${UPGRADES[stat].label} +${UPGRADES[stat].gain} <span class="lvl">Lv.${steps(k, stat)}</span></span>` +
+          `<span class="cost">$${c}</span></button>`;
+      };
+      return `<div class="stats">⚔️ ATK ${bump(d.attack, eAtk)} &nbsp; ❤️ HP ${bump(d.hp, eHp)} &nbsp; 👟 MOV ${bump(d.movement_speed, eMov)}</div>` +
+        `<div class="ups">${btn("atk", "⚔️")}${btn("hp", "❤️")}${btn("mov", "👟")}` +
+        `<div class="hint">You own ${ownedOf(k)} unit(s) using this subunit.</div></div>`;
     }
 
     function render() {
       goldEl.textContent = save.economy[me];
       grid.innerHTML = "";
-      // Order: infantry first, then by unlock cost ascending.
+      // Infantry first, then by unlock cost.
       const types = Object.keys(PIECES).sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));
       for (const k of types) {
         const d = PIECES[k];
         const cost = TECH[k] || 0;
         const unlocked = isUnlocked(k);
+        const open = unlocked && openType === k;
         const card = document.createElement("div");
-        card.className = "card" + (unlocked ? "" : " locked");
+        card.className = "card" + (unlocked ? " unlocked" : " locked") + (open ? " open" : "");
         const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
-        const action = unlocked
-          ? `<div class="status unlocked">✓ Unlocked</div>`
-          : `<button class="unlock" data-type="${k}" ${save.economy[me] < cost ? "disabled" : ""}>Research ($${cost})</button>`;
+        const status = unlocked
+          ? `<div class="status unlocked">${open ? "▲" : "⚙ upgrade"}</div>`
+          : "";
         card.innerHTML =
-          `<div class="top">${visual}<h3>${d.name}</h3></div>` +
-          `<div class="stats">` +
-            `❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>` +
-            `👟 MOV <b>${d.movement_speed}</b> &nbsp; 💰 <b>$${d.cost}</b>/subunit` +
-          `</div>` +
-          action;
+          `<div class="top" data-type="${k}">${visual}<div><h3>${d.name}</h3>` +
+            (unlocked ? `<div class="owned">Own ${ownedOf(k)}</div>` : "") + `</div>${status}</div>` +
+          (unlocked
+            ? (open ? upsHtml(k)
+              : `<div class="stats">❤️ HP <b>${d.hp + bonus(k,'hp')}</b> &nbsp; ⚔️ ATK <b>${d.attack + bonus(k,'atk')}</b> &nbsp; 👟 MOV <b>${d.movement_speed + bonus(k,'mov')}</b></div>`)
+            : `<div class="stats">❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>👟 MOV <b>${d.movement_speed}</b> &nbsp; 💰 <b>$${d.cost}</b>/subunit</div>` +
+              `<button class="unlock" data-type="${k}" ${save.economy[me] < cost ? "disabled" : ""}>Research ($${cost})</button>`);
         grid.appendChild(card);
       }
+      // Clicking an unlocked card's header toggles its upgrade panel.
+      grid.querySelectorAll(".card.unlocked .top").forEach((t) =>
+        t.addEventListener("click", () => { const k = t.dataset.type; openType = (openType === k) ? null : k; render(); }));
       grid.querySelectorAll("button.unlock").forEach((b) =>
-        b.addEventListener("click", () => unlock(b.dataset.type)));
+        b.addEventListener("click", (e) => { e.stopPropagation(); unlock(b.dataset.type); }));
+      grid.querySelectorAll(".ups button[data-stat]").forEach((b) =>
+        b.addEventListener("click", (e) => { e.stopPropagation(); upgrade(b.dataset.type, b.dataset.stat); }));
     }
 
     render();

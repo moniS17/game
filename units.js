@@ -22,8 +22,9 @@ window.PIECES = {
     name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
     hp: 30, attack: 20, movement_speed: 2, cost: 1,
   },
-  archer: {
-    name: 'Archer', code: 'a', art: null,
+  motorized: {
+    // Truck-borne infantry: quick, ranged-value attacker.
+    name: 'Motorized', code: 'm', art: 'assets/truck.svg',
     hp: 30, attack: 30, movement_speed: 2, cost: 2,
   },
   cavalry: {
@@ -31,13 +32,8 @@ window.PIECES = {
     name: 'Cavalry', code: 'c', art: 'assets/cavalry.svg',
     hp: 50, attack: 40, movement_speed: 4, cost: 3,
   },
-  artillery: {
-    // Glass cannon: huge attack, very slow, expensive.
-    name: 'Artillery', code: 'A', art: null,
-    hp: 50, attack: 90, movement_speed: 1, cost: 8,
-  },
   cannon: {
-    // Siege gun: heavy hitter, slow and a touch tougher than artillery.
+    // Siege gun: heavy hitter, slow.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
     hp: 60, attack: 70, movement_speed: 1, cost: 6,
   },
@@ -55,15 +51,14 @@ window.PIECES = {
 //
 // Design intent:
 //   tank / cavalry  — heavy & mounted units bog down assaulting cities and water.
-//   artillery / cannon — siege guns excel at battering fortified cities.
-//   archer          — shoots effectively into forest cover.
+//   cannon          — siege gun excels at battering fortified cities.
+//   motorized       — mobile troops shoot effectively into forest cover.
 //   infantry        — foot soldiers are strong in close urban fighting.
 window.TERRAIN_COMBAT = {
   tank:      { city: 0.5, water: 0.5, forest: 0.75 },
   cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
-  artillery: { city: 1.5 },
   cannon:    { city: 1.4 },
-  archer:    { forest: 1.25 },
+  motorized: { forest: 1.25 },
   infantry:  { city: 1.2 },
 };
 
@@ -79,7 +74,7 @@ window.ECONOMY = {
   city_income: 2,    // extra gold per round for each owned city
 };
 
-// In-game unit upgrades (see upgrade.html + game.js). Bought with gold and
+// In-game subunit upgrades (see tech.html + game.js). Bought with gold and
 // stored in the save, so they only ever apply to the CURRENT game. Each step
 // adds `gain` to the stat; cost DOUBLES per step: baseCost * 2^stepsBought
 // (so 17, 34, 68, 136, ...).
@@ -95,9 +90,8 @@ window.UPGRADES = {
 // into a template, or upgraded. Unlocks are per-player and per-game (in the save).
 window.TECH = {
   infantry:  0,
-  archer:    12,
+  motorized: 12,
   cavalry:   18,
   cannon:    24,
-  artillery: 30,
   tank:      40,
 };
