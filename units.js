@@ -56,11 +56,27 @@ window.PIECES = {
 //   motorized — wheeled troops lose bite in forest and across water.
 //   infantry  — foot soldiers hold cities and forest; weak fighting over water.
 window.TERRAIN_COMBAT = {
-  tank:      { plains: 1.5, village: 0.8 },
+  tank:      { plains: 1.5, city: 0.8, village: 0.8, forest: 0.75, water: 0.5 },
   cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
   cannon:    { village: 1.2, forest: 0.9, water: 0.5 },
   motorized: { forest: 0.9, water: 0.5 },
   infantry:  { city: 1.05, forest: 1.05, water: 0.65 },
+};
+
+// Unit-vs-unit combat modifiers — how well an ATTACKER of one type fights a
+// DEFENDER of another type (a rock/paper/scissors layer on top of raw ATK and
+// the terrain modifiers above). The multiplier scales the attacker's ATK; it is
+// keyed [attackerType][defenderType]. 1 = no change; any pair not listed is 1.
+// The defending stack's FRONT unit type is used as the representative target.
+//
+// Design intent:
+//   tank      — crushes infantry, beats cavalry, but is vulnerable to cannon.
+//   infantry  — soft vs motorized/cavalry, but storms cannon crews.
+//   motorized — outmaneuvers cavalry and overruns cannon.
+window.UNIT_COMBAT = {
+  tank:      { infantry: 1.2, cavalry: 1.1, cannon: 0.8 },
+  infantry:  { motorized: 0.8, cavalry: 0.9, cannon: 1.2 },
+  motorized: { cavalry: 1.1, cannon: 1.1 },
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.

@@ -16,7 +16,7 @@ window.TERRAIN = {
   plains:  { name: 'Plains',  code: '.', color: '#7cb342', move_cost: 1, defense: 0 },
   city:    { name: 'City',    code: 'C', color: '#9e9e9e', move_cost: 1, defense: 2 },
   village: { name: 'Village', code: 'V', color: '#caa16a', move_cost: 1, defense: 3, attack_penalty: 2 },
-  forest:  { name: 'Forest',  code: 'F', color: '#2e7d32', move_cost: 2, defense: 1 },
+  forest:  { name: 'Forest',  code: 'F', color: '#2e7d32', move_cost: 1, defense: 1 },
   water:   { name: 'Water',   code: 'W', color: '#1976d2', move_cost: 2, defense: 0 },
 };
 

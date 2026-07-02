@@ -49,6 +49,11 @@
     }
     .default:hover { background: #363d45; transform: none; }
     #sizeErr { color: #ff7a76; font-size: .7rem; min-height: .9rem; margin-top: .5rem; }
+    .creative {
+      display: flex; align-items: center; justify-content: center; gap: .5rem;
+      font-size: .85rem; color: #cfd6dd; margin: 0 0 1rem; cursor: pointer;
+    }
+    .creative input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -73,6 +78,7 @@
       <div id="sizeErr"></div>
     </div>
 
+    <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
     <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
     <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
     <button class="back" id="backBtn">← Back to menu</button>
@@ -111,7 +117,7 @@
         return;
       }
       SaveState.setIntent({ action: 'new', mode, rows, cols,
-        creative: localStorage.getItem('battlegrid.creative') === '1' });
+        creative: document.getElementById('creativeChk').checked });
       window.location.href = 'index.html';
     }
     document.getElementById('pvpBtn').addEventListener('click', () => start('pvp'));

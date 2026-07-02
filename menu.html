@@ -30,11 +30,6 @@
     .new { background: #3a5bd9; } .new:hover { background: #2f49b0; }
     .cont { background: #2e7d46; } .cont:hover { background: #266b3b; }
     button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
-    .creative {
-      display: flex; align-items: center; justify-content: center; gap: .5rem;
-      font-size: .85rem; color: #cfd6dd; margin: -.2rem 0 1.1rem; cursor: pointer;
-    }
-    .creative input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
     .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
   </style>
 </head>
@@ -42,7 +37,6 @@
   <div class="menu">
     <div class="greeting" id="greeting"></div>
     <button class="new"  id="newBtn">🗺️ Start new map</button>
-    <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
     <button class="cont" id="contBtn">▶️ Continue</button>
   </div>
 
@@ -54,10 +48,8 @@
     const contBtn = document.getElementById("contBtn");
     contBtn.disabled = !SaveState.exists();
 
-    // New map: remember the Creative-mode choice, then pick the opponent / size.
+    // New map: go pick the opponent, board size and Creative mode.
     document.getElementById("newBtn").addEventListener("click", () => {
-      const creative = document.getElementById("creativeChk").checked;
-      localStorage.setItem("battlegrid.creative", creative ? "1" : "0");
       window.location.href = "mode.html";
     });
     // Continue resumes the saved game in whatever mode it was started in.

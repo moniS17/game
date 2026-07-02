@@ -69,6 +69,12 @@
       <table id="terrainCombatTable"></table>
     </div>
 
+    <h2>Unit vs unit (attack)</h2>
+    <div class="panel">
+      <p class="sub" style="margin:0 0 8px">How much each attacker's ATK changes versus the defending stack's lead unit type. Blank = no change.</p>
+      <table id="unitCombatTable"></table>
+    </div>
+
     <h2>Combat &amp; stacking</h2>
     <div class="panel">
       <ul id="combatRules"></ul>
@@ -105,11 +111,11 @@
     // --- Units table ---
     const ut = document.getElementById("unitTable");
     const roles = {
-      infantry: "Cheap frontline body; stack them deep.",
-      motorized: "Truck-borne troops; ranged value, strong in forest.",
+      infantry: "Cheap frontline body; storms cannon, holds cities & forest.",
+      motorized: "Truck-borne troops: fast, outmaneuvers cavalry & cannon.",
       cavalry: "Fast flanker, hard hitter.",
-      cannon: "Siege gun: heavy, slow, batters cities.",
-      tank: "Heavy: high HP + ATK, priciest.",
+      cannon: "Siege gun: heavy, slow, batters villages; counters tanks.",
+      tank: "Heavy: high HP + ATK; crushes infantry, priciest.",
     };
     for (const k in PIECES) {
       const d = PIECES[k];
@@ -144,13 +150,36 @@
       tct.appendChild(tr);
     }
 
+    // --- Unit vs unit (attack) matrix ---
+    const uct = document.getElementById("unitCombatTable");
+    const unitCols = Object.keys(PIECES);
+    const uHeader = document.createElement("tr");
+    uHeader.innerHTML = `<th>Attacker \\ Defender</th>` + unitCols.map((k) => `<th>${PIECES[k].name}</th>`).join("");
+    uct.appendChild(uHeader);
+    for (const k in PIECES) {
+      const row = (typeof UNIT_COMBAT !== "undefined") && UNIT_COMBAT[k];
+      if (!row) continue; // only list attackers that actually change vs some unit
+      const d = PIECES[k];
+      const visual = d.art ? `<img class="swatch" src="${d.art}" alt="">` : `<span class="icon">${d.code}</span>`;
+      const cells = unitCols.map((t) => {
+        const m = row[t] || 1;
+        if (m === 1) return `<td><span class="neutral">—</span></td>`;
+        const pct = `${m < 1 ? "−" : "+"}${Math.round(Math.abs(1 - m) * 100)}%`;
+        return `<td><span class="${m < 1 ? "debuff" : "buff"}">${pct}</span></td>`;
+      }).join("");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><span class="name">${visual}${d.name}</span></td>` + cells;
+      uct.appendChild(tr);
+    }
+
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
       `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>subunits</b>. A board piece is a <b>unit</b> built from a template; its HP &amp; ATK are the <b>sum of its subunits</b>. Many units can share one template.</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} units</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b> (minus the other tile's terrain defense), applied one unit at a time; a unit is destroyed when its HP reaches 0.</li>` +
-      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. tanks and cavalry hit <span class="debuff">softer</span> into <b>cities</b> and <b>water</b>, while cannons batter <b>cities</b> <span class="buff">harder</span> and motorized troops shoot better in <b>forest</b> (see the table above). Counterattacks are scaled the same way.</li>` +
+      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by how well it fights an enemy on that tile — e.g. <b>tanks</b> hit <span class="buff">harder</span> on open <b>plains</b> but <span class="debuff">softer</span> into <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <b>villages</b> <span class="buff">harder</span> (see the table above). Counterattacks are scaled the same way.</li>` +
+      `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
       `<li class="buff">If one side has at least <b>twice</b> the other's unit count, the outnumbered side takes <b>double damage</b>.</li>` +
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
       `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot. Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Rules.COMBAT.river_attack_penalty}</span> river penalty.</li>` +

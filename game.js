@@ -13,7 +13,7 @@
  *
  * STACKING MODEL
  *   Many units of the same owner may share a tile. `Game.unitAt` maps
- *   "r,c" -> Unit[] (a "template", capped at Rules.STACK_LIMIT = 25). Units move
+ *   "r,c" -> Unit[] (a "template", capped at Rules.STACK_LIMIT = 17). Units move
  *   and fight as a selected GROUP chosen from one tile (whole stack, or a
  *   checkbox-picked subset). Bought units are placed by the player into their
  *   own deployment zone. Combat is mutual (see rules.js).

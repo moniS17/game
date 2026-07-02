@@ -7,7 +7,7 @@
  * STACKING (units built from templates)
  *   - A board piece is a UNIT built from a template (a 5x5 blueprint of subunits).
  *     Its HP/ATK are the sum of its subunits (see `parts`). Many units may share
- *     one template. Up to STACK_LIMIT (25) units of one owner may share a tile.
+ *     one template. Up to STACK_LIMIT (17) units of one owner may share a tile.
  *   - Units move and fight as a selected GROUP (1..N chosen from a tile).
  *
  * MOVEMENT
@@ -30,7 +30,7 @@
  */
 window.Rules = (function () {
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const STACK_LIMIT = 25; // max UNITS that may stack on one tile (a template's 5x5 = 25 subunits is separate)
+  const STACK_LIMIT = 17; // max UNITS that may stack on one tile (a template's 5x5 = 25 subunits is separate)
 
   const COMBAT = {
     river_attack_penalty: 2, // attacking while you or your target stands in water
@@ -113,11 +113,28 @@ window.Rules = (function () {
     return (row && row[terrainType]) || 1;
   }
 
+  // Unit-vs-unit combat modifier: how an attacker subunit `type` fares against a
+  // defender of `foeType` (units.js / UNIT_COMBAT). 1 when unlisted.
+  function unitMatchupMult(type, foeType) {
+    const row = (typeof UNIT_COMBAT !== 'undefined') && UNIT_COMBAT[type];
+    return (row && row[foeType]) || 1;
+  }
+
   // A unit's attack against a target on `terrainType`: each part scaled by how
   // its subunit type fights that terrain, then summed.
   function unitAttackOn(u, terrainType) {
     let s = 0;
     for (const p of unitParts(u)) s += p.count * p.atk * terrainAtkMult(p.type, terrainType);
+    return s;
+  }
+
+  // A unit's attack against a `foeType` stack on `terrainType`: each part scaled
+  // by BOTH its terrain modifier and its unit-vs-unit matchup, then summed.
+  function unitAttackOnFoe(u, terrainType, foeType) {
+    let s = 0;
+    for (const p of unitParts(u)) {
+      s += p.count * p.atk * terrainAtkMult(p.type, terrainType) * unitMatchupMult(p.type, foeType);
+    }
     return s;
   }
 
@@ -134,6 +151,14 @@ window.Rules = (function () {
     return s;
   }
 
+  // Sum of a group's attack against a `foeType` stack on `terrainType` (terrain
+  // + unit-vs-unit matchup both applied per subunit part).
+  function sumAttackOnFoe(group, terrainType, foeType) {
+    let s = 0;
+    for (const u of group) s += unitAttackOnFoe(u, terrainType, foeType);
+    return s;
+  }
+
   // Mutual stack-vs-stack damage. Returns total damage each side deals to the
   // other (to be applied 1-by-1 by the caller). attackers/defenders are arrays;
   // they sit on adjacent tiles.
@@ -146,12 +171,14 @@ window.Rules = (function () {
     const river = acrossRiver ? COMBAT.river_attack_penalty : 0;
 
     // Each side's ATK is scaled per-unit by how it fights the OTHER tile's
-    // terrain, then reduced by an attack_penalty for the tile the SIDE stands on
+    // terrain AND how its subunits match up against the OTHER stack's front unit
+    // type, then reduced by an attack_penalty for the tile the SIDE stands on
     // (e.g. a village debuffs its occupants' outgoing damage).
+    const aType = attackers[0].type, dType = defenders[0].type;
     const aPen = TERRAIN[aTerr].attack_penalty || 0;
     const dPen = TERRAIN[dTerr].attack_penalty || 0;
-    let dmgToDef = sumAttackOn(attackers, dTerr) - aPen - TERRAIN[dTerr].defense - river;
-    let dmgToAtk = sumAttackOn(defenders, aTerr) - dPen - TERRAIN[aTerr].defense - river;
+    let dmgToDef = sumAttackOnFoe(attackers, dTerr, dType) - aPen - TERRAIN[dTerr].defense - river;
+    let dmgToAtk = sumAttackOnFoe(defenders, aTerr, aType) - dPen - TERRAIN[aTerr].defense - river;
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
@@ -176,5 +203,5 @@ window.Rules = (function () {
     return ECONOMY.base_income + ECONOMY.city_income * cityOwned + villageInc * villageOwned;
   }
 
-  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult };
+  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult };
 })();
