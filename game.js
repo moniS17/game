@@ -31,7 +31,7 @@ const ZONE = () => Board.zone(); // each player deploys within their own zone co
 // ---------------------------------------------------------------------------
 const Game = {
   seed: 0,
-  mode: 'pvp',          // 'pvp' | 'pve' (pve: player 1 is the AI)
+  mode: 'pvp',          // 'pvp' | 'pve' (pve: Game.aiPlayer is controlled by the AI)
   terrain: [],
   cities: [],           // [{r, c, owner}]  owner: 0 | 1 | null (neutral)
   villages: [],         // [{r, c, owner}]  capturable; each pays 50% of a city
@@ -49,9 +49,14 @@ const Game = {
   unlocked: [{ infantry: true }, { infantry: true }], // tech tree: subunits each player has researched
   templates: [[], []],  // per-player library of blueprints: {id, name, cells:[type|null ×25]}
   creative: false,      // creative mode: enables the in-game "+gold" cheat button
+  aiPlayer: 1,          // pve: which side (0/1) the AI controls; null in pvp
   winner: null,
 };
 let nextId = 1;
+// True only while the AI is mid-turn: suppresses declaring the AI eliminated
+// before it has had a chance to reinforce (a failed AI attack must not hand the
+// human a premature win — the AI reinforces at the end of its turn).
+let aiTurnActive = false;
 
 // Upgrade tuning lives in units.js (window.UPGRADES) so the shop/upgrade pages
 // share one source of truth. Steps are stored per-player in the save.
@@ -212,6 +217,7 @@ function serialize() {
     turn: Game.turn,
     round: Game.round,
     creative: Game.creative,
+    aiPlayer: Game.aiPlayer,
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
@@ -251,13 +257,15 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative) {
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer) {
   const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const templates = [defaultTemplates(), defaultTemplates()];
   const units = buildInitialArmies(terrain, templates);
+  const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
   return {
-    seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
-    creative: !!creative,
+    seed, mode, rows: Board.ROWS, cols: Board.COLS,
+    turn: startPlayer === 1 ? 1 : 0, round: 1,
+    creative: !!creative, aiPlayer: ai,
     economy: [ECONOMY.start, ECONOMY.start],
     cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
@@ -301,6 +309,7 @@ function buildInitialArmies(terrain, templates) {
 function loadIntoGame(st) {
   Game.seed = st.seed;
   Game.mode = st.mode || 'pvp';
+  Game.aiPlayer = (st.aiPlayer === 0 || st.aiPlayer === 1) ? st.aiPlayer : (Game.mode === 'pve' ? 1 : null);
   Game.creative = !!st.creative;
   // Restore board size (old saves predate this and default to 100x100).
   Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
@@ -483,8 +492,12 @@ function doAttack(attackers, tr, tc) {
 function checkWinner() {
   const alive = [0, 0];
   for (const u of Game.units) alive[u.owner]++;
-  if (alive[0] === 0 && alive[1] > 0) Game.winner = 1;
-  else if (alive[1] === 0 && alive[0] > 0) Game.winner = 0;
+  const ai = Game.aiPlayer;
+  // A side with no units on the board loses — EXCEPT the AI mid-turn: it may
+  // hit zero units while attacking, then reinforce before its turn ends, so we
+  // don't lock in the human's win until runAiTurn finishes (see aiTurnActive).
+  if (alive[0] === 0 && alive[1] > 0) { if (!(aiTurnActive && ai === 0)) Game.winner = 1; }
+  else if (alive[1] === 0 && alive[0] > 0) { if (!(aiTurnActive && ai === 1)) Game.winner = 0; }
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +584,7 @@ function advanceTo(player) {
   UI.refresh();
   Render.render();
   Render.autoZoom(); // small boards: keep the board filling the viewport
-  if (Game.mode === 'pve' && player === 1) runAiTurn();
+  if (Game.mode === 'pve' && player === Game.aiPlayer) runAiTurn();
 }
 
 function nextRound() {
@@ -594,10 +607,10 @@ function nearestEnemyTile(r, c, owner) {
   return best;
 }
 
-// The AI (player 1) spends its gold on reinforcements and deploys them in its
-// own zone, aimed at the row where the enemy has pushed closest to the AI's home
-// edge. Called after the AI's existing units have already moved this turn, so a
-// freshly-arrived (0-move) unit never freezes a shared stack's movement.
+// The AI (Game.aiPlayer) spends its gold on reinforcements and deploys them in
+// its own zone, aimed at the row where the enemy has pushed closest to the AI's
+// home edge. Called after the AI's existing units have already moved this turn,
+// so a freshly-arrived (0-move) unit never freezes a shared stack's movement.
 
 // Row where the enemy is nearest to `me`'s home edge (its most advanced threat).
 // me=1 defends the RIGHT edge (largest column), me=0 the LEFT (smallest column).
@@ -709,7 +722,8 @@ function aiSpendAndReinforce(me) {
 }
 
 function runAiTurn() {
-  const me = 1;
+  const me = Game.aiPlayer;
+  aiTurnActive = true; // defer any "AI eliminated" verdict until after reinforcing
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
@@ -740,14 +754,16 @@ function runAiTurn() {
       doAttack(group, enemy.r, enemy.c);
     }
   }
-  aiSpendAndReinforce(me); // buy + deploy reinforcements for next turn
+  if (Game.winner === null) aiSpendAndReinforce(me); // buy + deploy reinforcements
+  aiTurnActive = false;
+  checkWinner(); // now the AI has had its full turn: settle the result honestly
   Game.reachable = new Map();
   persist();
   UI.refresh();
   Render.render();
   // Show what the enemy did this turn as a pop-up (if the Combat log is on).
   if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  advanceTo(0); // hand control back to the human
+  advanceTo(1 - me); // hand control back to the human
 }
 
 // ---------------------------------------------------------------------------
@@ -871,7 +887,12 @@ function boot() {
   const intent = SaveState.takeIntent();
   let st;
   if (intent && intent.action === 'new') {
-    st = buildInitialState(intent.mode || 'pvp', Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative);
+    const mode = intent.mode || 'pvp';
+    const start = intent.start === 1 ? 1 : 0;               // which side moves first
+    // In PvE the human picks a side; the AI takes the other. `human` defaults to
+    // Blue (0), so the AI defaults to Red (1) — the classic setup.
+    const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
+    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer);
     SaveState.save(st);
   } else {
     st = SaveState.load();
@@ -881,6 +902,8 @@ function boot() {
   Render.resize();
   Render.autoZoom(); // small boards: fill the viewport (also after buy/upgrade returns here)
   UI.refresh();
+  // If the AI is set to move first, let it take its opening turn immediately.
+  if (Game.mode === 'pve' && Game.winner === null && Game.turn === Game.aiPlayer) runAiTurn();
 }
 
 window.addEventListener('resize', () => Render.resize());

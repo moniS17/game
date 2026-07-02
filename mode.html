@@ -54,6 +54,19 @@
       font-size: .85rem; color: #cfd6dd; margin: 0 0 1rem; cursor: pointer;
     }
     .creative input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
+
+    /* Segmented Blue/Red pickers */
+    .opt { margin-bottom: 1rem; text-align: left; }
+    .opt h2 { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .45rem; }
+    .opt .note { font-size: .62rem; color: #6b727a; margin-top: .3rem; }
+    .seg { display: flex; gap: .5rem; }
+    .seg button {
+      flex: 1; margin: 0; padding: .6rem; font-size: .9rem; background: #1b2026;
+      border: 1px solid #3a3f45; color: #9aa4ad;
+    }
+    .seg button:hover { transform: none; background: #232a31; }
+    .seg button.on[data-v="0"] { background: #1e88e5; border-color: #1e88e5; color: #fff; }
+    .seg button.on[data-v="1"] { background: #e53935; border-color: #e53935; color: #fff; }
   </style>
 </head>
 <body>
@@ -76,6 +89,23 @@
       </div>
       <button type="button" class="default" id="defaultBtn">↺ Default 100 × 100</button>
       <div id="sizeErr"></div>
+    </div>
+
+    <div class="opt">
+      <h2>First move</h2>
+      <div class="seg" id="firstSeg">
+        <button type="button" data-v="0" class="on">🔵 Blue</button>
+        <button type="button" data-v="1">🔴 Red</button>
+      </div>
+    </div>
+
+    <div class="opt">
+      <h2>You play (vs AI)</h2>
+      <div class="seg" id="sideSeg">
+        <button type="button" data-v="0" class="on">🔵 Blue</button>
+        <button type="button" data-v="1">🔴 Red</button>
+      </div>
+      <div class="note">Only applies to Player vs AI — the AI takes the other side.</div>
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
@@ -109,6 +139,19 @@
       errEl.textContent = '';
     });
 
+    // Segmented Blue/Red pickers: track the selected value, highlight the choice.
+    function wireSeg(id) {
+      const seg = document.getElementById(id);
+      seg.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-v]');
+        if (!btn) return;
+        for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b === btn);
+      });
+      return () => Number(seg.querySelector('button.on').dataset.v);
+    }
+    const firstMove = wireSeg('firstSeg'); // which side moves first (both modes)
+    const humanSide = wireSeg('sideSeg');  // which side the human plays (PvE only)
+
     // Start a new game: validate size, hand off to index.html which generates the map.
     function start(mode) {
       const cols = readDim(widthInput), rows = readDim(heightInput);
@@ -117,6 +160,7 @@
         return;
       }
       SaveState.setIntent({ action: 'new', mode, rows, cols,
+        start: firstMove(), human: humanSide(),
         creative: document.getElementById('creativeChk').checked });
       window.location.href = 'index.html';
     }
