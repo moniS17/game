@@ -108,7 +108,8 @@
         errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
         return;
       }
-      SaveState.setIntent({ action: 'new', mode, rows, cols });
+      SaveState.setIntent({ action: 'new', mode, rows, cols,
+        creative: localStorage.getItem('battlegrid.creative') === '1' });
       window.location.href = 'index.html';
     }
     document.getElementById('pvpBtn').addEventListener('click', () => start('pvp'));

@@ -46,6 +46,7 @@ const Game = {
   toPlace: [],          // [{type, owner}] bought subunits awaiting deployment
   upgrades: [{}, {}],   // per-player, per-type upgrade steps: {infantry:{atk,hp,mov}}
   unlocked: [{ infantry: true }, { infantry: true }], // tech tree: types each player may field
+  creative: false,      // creative mode: enables the in-game "+gold" cheat button
   winner: null,
 };
 let nextId = 1;
@@ -131,6 +132,7 @@ function serialize() {
     mode: Game.mode,
     turn: Game.turn,
     round: Game.round,
+    creative: Game.creative,
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     units: Game.units.map((u) => ({
@@ -147,11 +149,12 @@ function serialize() {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols) {
+function buildInitialState(mode, seed, rows, cols, creative) {
   const { terrain, cities } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const units = buildInitialArmies(terrain);
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
+    creative: !!creative,
     economy: [ECONOMY.start, ECONOMY.start],
     cities, units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }], pendingSpawns: [],
@@ -201,6 +204,7 @@ function buildInitialArmies(terrain) {
 function loadIntoGame(st) {
   Game.seed = st.seed;
   Game.mode = st.mode || 'pvp';
+  Game.creative = !!st.creative;
   // Restore board size (old saves predate this and default to 100x100).
   Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
   Game.turn = st.turn || 0;
@@ -714,7 +718,7 @@ function boot() {
   const intent = SaveState.takeIntent();
   let st;
   if (intent && intent.action === 'new') {
-    st = buildInitialState(intent.mode || 'pvp', Math.floor(Math.random() * 1e9), intent.rows, intent.cols);
+    st = buildInitialState(intent.mode || 'pvp', Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative);
     SaveState.save(st);
   } else {
     st = SaveState.load();
@@ -739,4 +743,11 @@ window.setSelectAll = setSelectAll;
 window.toggleUnitInSelection = toggleUnitInSelection;
 window.isUnlocked = isUnlocked;
 window.unlockType = unlockType;
+// Creative-mode cheat: hand the current player a pile of gold.
+window.creativeGrant = function () {
+  if (!Game.creative || Game.winner !== null) return;
+  Game.economy[Game.turn] += 171717;
+  persist();
+  UI.refresh();
+};
 window.startNewGame = (mode) => { SaveState.setIntent({ action: 'new', mode }); location.reload(); };

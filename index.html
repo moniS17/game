@@ -105,6 +105,9 @@
       <!-- economy sign for the current player -->
       <div class="econ-sign">💰 <span id="econ">0</span> <small>gold</small></div>
 
+      <!-- creative-mode cheat: only shown when the game was started in creative mode -->
+      <button id="creativeBtn" style="display:none; background:#8e5bd9;">🎁 +171,717 gold</button>
+
       <div class="stat-row"><span>Blue units</span><span id="blueCount">0</span></div>
       <div class="stat-row"><span>Red units</span><span id="redCount">0</span></div>
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
@@ -235,6 +238,9 @@
         econ.textContent = Game.economy[Game.turn];
         econ.parentElement.style.color = p.color === '#1e88e5' ? '#5aa9ff' : '#ff7a76';
 
+        // creative-mode cheat button (only when the game is in creative mode)
+        document.getElementById('creativeBtn').style.display = Game.creative ? '' : 'none';
+
         let blue = 0, red = 0;
         for (const u of Game.units) (u.owner === 0 ? blue++ : red++, 0);
         document.getElementById('blueCount').textContent = blue;
@@ -306,6 +312,7 @@
     document.getElementById('upgradeBtn').addEventListener('click', () => { window.location.href = 'upgrade.html'; });
     document.getElementById('infoBtn').addEventListener('click', () => { window.location.href = 'info.html'; });
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
+    document.getElementById('creativeBtn').addEventListener('click', () => window.creativeGrant());
     document.getElementById('selectAllChk').addEventListener('change', (e) => window.setSelectAll(e.target.checked));
 
     // Combat-log pop-up: OK closes it; the checkbox preference is remembered.

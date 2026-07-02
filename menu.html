@@ -27,41 +27,33 @@
       display: flex; align-items: center; justify-content: center; gap: .6rem;
     }
     button:hover:not(:disabled) { transform: translateY(-1px); }
-    .pve { background: #b8412f; } .pve:hover { background: #9e3526; }
     .new { background: #3a5bd9; } .new:hover { background: #2f49b0; }
     .cont { background: #2e7d46; } .cont:hover { background: #266b3b; }
     button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .creative {
+      display: flex; align-items: center; justify-content: center; gap: .5rem;
+      font-size: .85rem; color: #cfd6dd; margin: -.2rem 0 1.1rem; cursor: pointer;
+    }
+    .creative input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
     .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
   </style>
 </head>
 <body>
   <div class="menu">
-    <h1>⚔️ Battlegrid</h1>
-    <div class="sub">100 × 100 turn-based strategy</div>
-    <div class="greeting" id="greeting"></div>
-
     <button class="new"  id="newBtn">🗺️ Start new map</button>
+    <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
     <button class="cont" id="contBtn">▶️ Continue</button>
-
-    <div class="hint" id="hint">No saved game yet.</div>
   </div>
 
   <script src="state.js"></script>
   <script>
-    const greeting = document.getElementById("greeting");
-    const user = localStorage.getItem("battlegrid.user");
-    if (user) greeting.textContent = "Welcome, " + user + "!";
-
     const contBtn = document.getElementById("contBtn");
-    const hint = document.getElementById("hint");
-    if (!SaveState.exists()) {
-      contBtn.disabled = true;
-    } else {
-      hint.textContent = "A saved game is available to continue.";
-    }
+    contBtn.disabled = !SaveState.exists();
 
-    // New map: pick the opponent (PvP / PvE) on the next page before starting.
+    // New map: remember the Creative-mode choice, then pick the opponent / size.
     document.getElementById("newBtn").addEventListener("click", () => {
+      const creative = document.getElementById("creativeChk").checked;
+      localStorage.setItem("battlegrid.creative", creative ? "1" : "0");
       window.location.href = "mode.html";
     });
     // Continue resumes the saved game in whatever mode it was started in.
