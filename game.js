@@ -505,6 +505,7 @@ function aiSpendAndReinforce(me) {
 
 function runAiTurn() {
   const me = 1;
+  const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
@@ -539,6 +540,8 @@ function runAiTurn() {
   persist();
   UI.refresh();
   Render.render();
+  // Show what the enemy did this turn as a pop-up (if the Combat log is on).
+  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
   advanceTo(0); // hand control back to the human
 }
 
