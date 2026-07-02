@@ -129,9 +129,13 @@ window.Rules = (function () {
       Board.isWater(terrain, dTile.r, dTile.c);
     const river = acrossRiver ? COMBAT.river_attack_penalty : 0;
 
-    // Each side's ATK is scaled per-unit by how it fights the OTHER tile's terrain.
-    let dmgToDef = sumAttackOn(attackers, dTerr) - TERRAIN[dTerr].defense - river;
-    let dmgToAtk = sumAttackOn(defenders, aTerr) - TERRAIN[aTerr].defense - river;
+    // Each side's ATK is scaled per-unit by how it fights the OTHER tile's
+    // terrain, then reduced by an attack_penalty for the tile the SIDE stands on
+    // (e.g. a village debuffs its occupants' outgoing damage).
+    const aPen = TERRAIN[aTerr].attack_penalty || 0;
+    const dPen = TERRAIN[dTerr].attack_penalty || 0;
+    let dmgToDef = sumAttackOn(attackers, dTerr) - aPen - TERRAIN[dTerr].defense - river;
+    let dmgToAtk = sumAttackOn(defenders, aTerr) - dPen - TERRAIN[aTerr].defense - river;
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 

@@ -94,7 +94,7 @@
   <script src="units.js"></script>
   <script src="rules.js"></script>
   <script>
-    const arts = { city: 'assets/city.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
+    const arts = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
 
     // --- Terrain table ---
     const tt = document.getElementById("terrainTable");
@@ -106,6 +106,7 @@
         ? `<span class="buff">+${t.defense}</span>` : `<span class="neutral">0</span>`;
       let effect = [];
       if (t.defense > 0) effect.push(`<span class="tag buff">+${t.defense} defense (cover)</span>`);
+      if (t.attack_penalty) effect.push(`<span class="tag debuff">−${t.attack_penalty} attack for occupants</span>`);
       if (t.move_cost > 1) effect.push(`<span class="tag debuff">slower to enter</span>`);
       if (!effect.length) effect.push(`<span class="neutral">—</span>`);
       const visual = arts[k]
@@ -118,6 +119,7 @@
     }
     document.getElementById("terrainNotes").innerHTML =
       `<li><b>Defense</b> is subtracted from incoming attack damage on that tile (minimum 1 damage).</li>` +
+      `<li><b>Villages</b> are defensive strongholds: units standing on one gain <span class="buff">+${TERRAIN.village.defense} defense</span> when defending, but deal <span class="debuff">−${TERRAIN.village.attack_penalty} attack</span> — great to hold, weak to assault from.</li>` +
       `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot.</li>` +
       `<li>Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Rules.COMBAT.river_attack_penalty}</span> river penalty.</li>` +
       `<li><b>Cities</b> give the strongest cover and can be <b>captured</b> by moving onto them; each owned city adds income.</li>`;

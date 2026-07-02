@@ -16,31 +16,31 @@
 window.PIECES = {
   pawn: {
     name: 'Pawn', code: 'p', art: 'assets/pawn.svg',
-    hp: 3, attack: 2, movement_speed: 2, cost: 1,
+    hp: 30, attack: 20, movement_speed: 2, cost: 1,
   },
   archer: {
     name: 'Archer', code: 'a', art: null,
-    hp: 3, attack: 3, movement_speed: 2, cost: 2,
+    hp: 30, attack: 30, movement_speed: 2, cost: 2,
   },
   cavalry: {
     // Formerly the chess "knight": fast and hard-hitting.
     name: 'Cavalry', code: 'c', art: 'assets/cavalry.svg',
-    hp: 5, attack: 4, movement_speed: 4, cost: 3,
+    hp: 50, attack: 40, movement_speed: 4, cost: 3,
   },
   artillery: {
     // Glass cannon: huge attack, very slow, expensive.
     name: 'Artillery', code: 'A', art: null,
-    hp: 5, attack: 9, movement_speed: 1, cost: 8,
+    hp: 50, attack: 90, movement_speed: 1, cost: 8,
   },
   cannon: {
     // Siege gun: heavy hitter, slow and a touch tougher than artillery.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
-    hp: 6, attack: 7, movement_speed: 1, cost: 6,
+    hp: 60, attack: 70, movement_speed: 1, cost: 6,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
     name: 'Tank', code: 't', art: 'assets/tank.svg',
-    hp: 12, attack: 8, movement_speed: 3, cost: 9,
+    hp: 120, attack: 80, movement_speed: 3, cost: 9,
   },
 };
 

@@ -31,10 +31,10 @@
       font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
       color: #9aa4ad; text-align: center;
     }
-    /* Overlapping cascade: strongest unit on top, each one below tucked half-under the one above. */
-    #tileList .tl-figs { display: flex; flex-direction: column; align-items: center; padding-top: 2px; }
+    /* Overlapping cascade: strongest unit on top, each one to the right tucked half-under the one on its left. */
+    #tileList .tl-figs { display: flex; flex-direction: row; justify-content: center; flex-wrap: wrap; padding-top: 2px; }
     .tunit { position: relative; display: flex; flex-direction: column; align-items: center; }
-    .tunit:not(:first-child) { margin-top: -26px; }
+    .tunit:not(:first-child) { margin-left: -18px; }
     .thp { font-size: .72rem; font-weight: 700; line-height: 1; margin-top: 1px; }
     .tfig {
       width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center;

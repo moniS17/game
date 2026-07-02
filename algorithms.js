@@ -177,6 +177,22 @@ window.Algorithms = (function () {
     return cities;
   }
 
+  // --- 5. VILLAGES: single neutral tiles scattered on plains ---------------
+  // Placed LAST so lakes/rivers/forests/cities are byte-for-byte unchanged for a
+  // given seed; villages only paint onto leftover plains (never over a city).
+  function generateVillages(t, rng, count, rows, cols) {
+    let placed = 0, attempts = 0;
+    const cap = count * 200 + 500;
+    while (placed < count && attempts < cap) {
+      attempts++;
+      const r = randInt(rng, 0, rows - 1);
+      const c = randInt(rng, 0, cols - 1);
+      if (t[r][c] !== 'plains') continue; // avoid water, forest, city
+      t[r][c] = 'village';
+      placed++;
+    }
+  }
+
   // --- top-level: build a full map from a seed + dimensions -----------------
   function generateMap(seed, rows, cols) {
     rows = clampDim(rows == null ? GRID : rows);
@@ -189,12 +205,13 @@ window.Algorithms = (function () {
     generateRivers(t, rng, lakes, Math.max(1, Math.round(randInt(rng, 3, 5) * scale)), rows, cols, inB);
     generateForests(t, rng, Math.max(2, Math.round(randInt(rng, 18, 28) * scale)), rows, cols);
     const cities = placeCities(t, rng, rows, cols);
+    generateVillages(t, rng, Math.max(1, Math.round(randInt(rng, 14, 20) * scale)), rows, cols);
     return { terrain: t, cities };
   }
 
   return {
     GRID, MIN, MAX, clampDim, makeRng, generateMap,
     CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide,
-    generateLakes, generateRivers, carveRiver, generateForests, placeCities,
+    generateLakes, generateRivers, carveRiver, generateForests, placeCities, generateVillages,
   };
 })();

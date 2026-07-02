@@ -19,7 +19,7 @@ window.Render = (function () {
   // Preload SVG art so it can be drawn when zoomed in.
   const images = {};
   function preload() {
-    const sources = { plains: 'assets/grass.svg', city: 'assets/city.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
+    const sources = { plains: 'assets/grass.svg', city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
     for (const k in PIECES) if (PIECES[k].art) sources[k] = PIECES[k].art;
     for (const k in sources) {
       const img = new Image();

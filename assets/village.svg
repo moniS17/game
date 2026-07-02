@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Village: a small cluster of cottages (defensive stronghold) -->
+  <!-- left cottage -->
+  <rect x="8"  y="34" width="18" height="18" fill="#e8d5b0"/>
+  <path d="M6 34 l11 -11 l11 11 z" fill="#a83b2b"/>
+  <rect x="14" y="40" width="6" height="12" fill="#7a5230"/>
+  <!-- right cottage -->
+  <rect x="36" y="30" width="20" height="22" fill="#f0e2c4"/>
+  <path d="M34 30 l12 -12 l12 12 z" fill="#b5482f"/>
+  <rect x="43" y="38" width="7" height="14" fill="#7a5230"/>
+  <rect x="39" y="34" width="5" height="5" fill="#8ec5d6"/>
+  <!-- ground line / fence -->
+  <g stroke="#6b4a2a" stroke-width="2" stroke-linecap="round">
+    <path d="M4 54 h56"/>
+  </g>
+</svg>
