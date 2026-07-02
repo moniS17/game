@@ -4,11 +4,11 @@
  * Keeping every rule here means balance and mechanics can change without
  * touching state management (game.js), the board (board.js) or rendering.
  *
- * STACKING (templates)
- *   - A board piece is a "template": a stack of same-owner, same-type SUBUNITS
- *     sharing a tile, up to STACK_LIMIT (25 — a 5x5 grid). `unitAt` is a Map
- *     "r,c" -> Subunit[] (the template). A template's HP/ATK scale with count.
- *   - Subunits move and fight as a selected GROUP (1..N chosen from a tile).
+ * STACKING (units built from templates)
+ *   - A board piece is a UNIT built from a template (a 5x5 blueprint of subunits).
+ *     Its HP/ATK are the sum of its subunits (see `parts`). Many units may share
+ *     one template. Up to STACK_LIMIT (25) units of one owner may share a tile.
+ *   - Units move and fight as a selected GROUP (1..N chosen from a tile).
  *
  * MOVEMENT
  *   - Each tile costs its terrain move_cost to enter (board.js / TERRAIN).
@@ -30,7 +30,7 @@
  */
 window.Rules = (function () {
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const STACK_LIMIT = 25; // a template is a 5x5 grid of subunits (max 25)
+  const STACK_LIMIT = 25; // max UNITS that may stack on one tile (a template's 5x5 = 25 subunits is separate)
 
   const COMBAT = {
     river_attack_penalty: 2, // attacking while you or your target stands in water
@@ -91,19 +91,34 @@ window.Rules = (function () {
     return reach;
   }
 
-  // A unit's effective attack = base (units.js) + any in-game upgrade bonus.
-  function unitAttack(u) { return PIECES[u.type].attack + (u.atkBonus || 0); }
+  // A unit is built from a template: its `parts` are per-subunit-type groups
+  // ({type, count, atk, hp, mov}). Effective attack = sum of each part's total
+  // attack (count × per-subunit atk, already including upgrades snapshotted at
+  // build time). Falls back to a legacy single-type unit if `parts` is absent.
+  function unitParts(u) {
+    if (u.parts && u.parts.length) return u.parts;
+    return [{ type: u.type, count: 1, atk: PIECES[u.type].attack + (u.atkBonus || 0),
+      hp: u.maxHp || PIECES[u.type].hp, mov: PIECES[u.type].movement_speed }];
+  }
+  function unitAttack(u) {
+    let s = 0;
+    for (const p of unitParts(u)) s += p.count * p.atk;
+    return s;
+  }
 
-  // Terrain combat modifier: how a unit type's ATK scales when it fights an enemy
-  // standing on `terrainType` (units.js / TERRAIN_COMBAT). 1 when unlisted.
+  // Terrain combat modifier: how a subunit type's ATK scales when it fights an
+  // enemy standing on `terrainType` (units.js / TERRAIN_COMBAT). 1 when unlisted.
   function terrainAtkMult(type, terrainType) {
     const row = (typeof TERRAIN_COMBAT !== 'undefined') && TERRAIN_COMBAT[type];
     return (row && row[terrainType]) || 1;
   }
 
-  // A unit's attack against a target on `terrainType` (base ATK × terrain buff).
+  // A unit's attack against a target on `terrainType`: each part scaled by how
+  // its subunit type fights that terrain, then summed.
   function unitAttackOn(u, terrainType) {
-    return unitAttack(u) * terrainAtkMult(u.type, terrainType);
+    let s = 0;
+    for (const p of unitParts(u)) s += p.count * p.atk * terrainAtkMult(p.type, terrainType);
+    return s;
   }
 
   function sumAttack(group) {

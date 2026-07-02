@@ -47,14 +47,14 @@
 </head>
 <body>
   <header>
-    <h1>⬆️ Unit Upgrades</h1>
+    <h1>⬆️ Subunit Upgrades</h1>
     <div class="gold">💰 <span id="gold">0</span> gold</div>
   </header>
   <div class="who" id="who"></div>
 
   <div class="grid" id="grid"></div>
-  <div class="note">Upgrades cost gold, boost your existing and future units of that type, and last only for
-    <b>this game</b> — a new map starts everyone back at base stats. You can only upgrade your own units.</div>
+  <div class="note">Upgrades cost gold, boost that <b>subunit</b> wherever it appears in your units and
+    templates, and last only for <b>this game</b> — a new map starts everyone back at base stats.</div>
 
   <div class="bar">
     <a href="index.html">⬅ Return to battle</a>
@@ -83,7 +83,9 @@
     const steps = (type, stat) => (save.upgrades[me][type] && save.upgrades[me][type][stat]) || 0;
     const bonus = (type, stat) => steps(type, stat) * UPGRADES[stat].gain;
     const cost  = (type, stat) => UPGRADES[stat].baseCost * Math.pow(2, steps(type, stat));
-    const ownedOf = (type) => save.units.filter((u) => u.owner === me && u.type === type).length;
+    // Units are composites; count those that include this subunit in their parts.
+    const partsOf = (u) => u.parts || [];
+    const ownedOf = (type) => save.units.filter((u) => u.owner === me && partsOf(u).some((p) => p.type === type)).length;
 
     function apply(type, stat) {
       const c = cost(type, stat);
@@ -93,17 +95,26 @@
       save.upgrades[me][type][stat] = steps(type, stat) + 1;
       const gain = UPGRADES[stat].gain;
 
-      // Apply immediately to the player's existing units of this type.
+      // Apply immediately to the relevant parts of the player's existing units.
       for (const u of save.units) {
-        if (u.owner !== me || u.type !== type) continue;
-        if (stat === 'atk') u.atkBonus = (u.atkBonus || 0) + gain;
-        else if (stat === 'mov') {
-          u.movBonus = (u.movBonus || 0) + gain;
-          if (!u.acted) u.movesLeft = (u.movesLeft || 0) + gain; // usable this turn
-        } else if (stat === 'hp') {
-          u.hpBonus = (u.hpBonus || 0) + gain;
-          u.maxHp = (u.maxHp || 0) + gain;
-          u.hp = (u.hp || 0) + gain;
+        if (u.owner !== me) continue;
+        let touched = false;
+        for (const p of partsOf(u)) {
+          if (p.type !== type) continue;
+          touched = true;
+          if (stat === 'atk') p.atk = (p.atk || 0) + gain;
+          else if (stat === 'hp') p.hp = (p.hp || 0) + gain;
+          else if (stat === 'mov') p.mov = (p.mov || 0) + gain;
+        }
+        if (!touched) continue;
+        if (stat === 'hp') {
+          const cnt = partsOf(u).filter((p) => p.type === type).reduce((a, p) => a + p.count, 0);
+          u.maxHp = (u.maxHp || 0) + gain * cnt;
+          u.hp = (u.hp || 0) + gain * cnt;
+        } else if (stat === 'mov') {
+          const newMov = Math.min(...partsOf(u).map((p) => p.mov));
+          if (!u.acted && newMov > (u.mov || 0)) u.movesLeft = (u.movesLeft || 0) + (newMov - u.mov);
+          u.mov = newMov;
         }
       }
       SaveState.save(save);

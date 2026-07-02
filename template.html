@@ -6,72 +6,102 @@
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
-  <title>Battlegrid — Templates</title>
+  <title>Battlegrid — Template Designer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh; background: #1b1f23; color: #e6e6e6; padding: 24px;
     }
-    header { display: flex; align-items: center; justify-content: space-between; max-width: 960px; margin: 0 auto 6px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     h1 { font-size: 1.4rem; }
-    h2 { font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; max-width: 960px; margin: 22px auto 10px; }
-    .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
-    .who { font-size: .85rem; color: #9aa4ad; max-width: 960px; margin: 0 auto 6px; }
-    .grid { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-    .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-    .card .top { display: flex; align-items: center; gap: 12px; align-self: stretch; }
-    .card img, .card .icon {
-      width: 40px; height: 40px; background: #1b1f23; border-radius: 8px; display: flex;
-      align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem;
+    .who { font-size: .85rem; color: #9aa4ad; margin-bottom: 16px; }
+    h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; margin: 18px 0 8px; }
+
+    /* Library chips */
+    .lib { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      padding: .5rem .8rem; border-radius: 8px; border: 1px solid #3a3f45; background: #2b3138;
+      color: #e6e6e6; font-weight: 600; font-size: .85rem; cursor: pointer; display: flex; gap: .5rem; align-items: center;
     }
-    .card h3 { font-size: 1rem; }
-    .card .sub { font-size: .75rem; color: #9aa4ad; }
-    /* 5x5 template grid */
-    .tmpl { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; width: 150px; }
+    .chip.active { border-color: #3a5bd9; background: #31405f; }
+    .chip.new { background: #2e7d46; border-color: #2e7d46; }
+
+    .editor { background: #23282e; border-radius: 12px; padding: 16px; margin-top: 6px; }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+    .nameRow { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .nameRow input {
+      flex: 1; padding: .55rem .7rem; font-size: 1rem; color: #e6e6e6; background: #0f1216;
+      border: 1px solid #3a3f45; border-radius: 6px;
+    }
+    .nameRow input:focus { outline: none; border-color: #3a5bd9; }
+    .del { padding: .55rem .8rem; border: none; border-radius: 6px; background: #7a3b3b; color: #fff; font-weight: 600; cursor: pointer; }
+    .del:hover { background: #6a3333; }
+
+    /* 5x5 grid */
+    .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; width: 230px; flex: 0 0 auto; }
     .cell {
-      aspect-ratio: 1 / 1; border-radius: 5px; background: #1b1f23; border: 1px solid #3a3f45;
-      display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700;
-      color: rgba(255,255,255,0.92);
+      aspect-ratio: 1/1; border-radius: 6px; background: #1b1f23; border: 1px solid #3a3f45;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem;
+      color: #fff; cursor: pointer; user-select: none;
     }
-    .count { font-size: .85rem; }
-    .count b { color: #fff; }
-    .stepper { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-    .stepper button {
-      min-width: 40px; height: 32px; border: none; border-radius: 6px; background: #3a5bd9;
-      color: #fff; font-size: .9rem; font-weight: 700; cursor: pointer; line-height: 1; padding: 0 8px;
+    .cell img { width: 74%; height: 74%; }
+
+    .side { flex: 1; min-width: 220px; }
+    /* palette */
+    .palette { display: flex; flex-wrap: wrap; gap: 8px; }
+    .brush {
+      display: flex; flex-direction: column; align-items: center; gap: 3px; padding: .5rem;
+      border-radius: 8px; border: 2px solid transparent; background: #2b3138; cursor: pointer; min-width: 62px;
     }
-    .stepper button:hover:not(:disabled) { background: #2f49b0; }
-    .stepper button.rm { background: #7a3b3b; } .stepper button.rm:hover:not(:disabled) { background: #6a3333; }
-    .stepper button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
-    .empty { max-width: 960px; margin: 0 auto; color: #7e8893; font-size: .85rem; }
-    .queue { max-width: 960px; margin: 16px auto 0; font-size: .85rem; color: #9aa4ad; }
-    .queue b { color: #7cb342; }
-    .bar { max-width: 960px; margin: 22px auto 0; display: flex; gap: 12px; }
+    .brush.sel { border-color: #f5c542; }
+    .brush.locked { opacity: .45; cursor: not-allowed; }
+    .brush .ic { width: 30px; height: 30px; border-radius: 6px; background: #1b1f23; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .brush .ic img { width: 76%; height: 76%; }
+    .brush small { font-size: .68rem; color: #c5ccd3; }
+    .brush b { font-size: .72rem; }
+    .stats { margin-top: 14px; font-size: .9rem; line-height: 1.7; }
+    .stats b { color: #fff; }
+    .stats .k { color: #9aa4ad; }
+    .hint { font-size: .75rem; color: #7e8893; margin-top: 8px; }
+    .hint a { color: #8ea2ff; }
+
+    .bar { margin: 22px 0 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
-    .bar a.battle { background: #3a5bd9; } .bar a.tech { background: #6a4bd9; }
+    .bar a.battle { background: #3a5bd9; } .bar a.buy { background: #2e7d46; } .bar a.tech { background: #6a4bd9; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>▦ Templates</h1>
-    <div class="gold">💰 <span id="gold">0</span> gold</div>
-  </header>
-  <div class="who" id="who"></div>
+  <div class="wrap">
+    <header><h1>▦ Template Designer</h1></header>
+    <div class="who" id="who"></div>
 
-  <h2>Build a template (5 × 5 = 25 subunits)</h2>
-  <div class="grid" id="build"></div>
-  <div id="noTypes" class="empty" style="display:none">Only Infantry is unlocked. Visit the
-    <a href="tech.html" style="color:#8ea2ff">Tech tree</a> to research more types.</div>
-  <div class="queue" id="queue"></div>
+    <h2>Your templates</h2>
+    <div class="lib" id="lib"></div>
 
-  <h2>Your templates on the board</h2>
-  <div class="grid" id="onboard"></div>
-  <div id="noBoard" class="empty" style="display:none">No templates deployed yet.</div>
+    <div class="editor" id="editor">
+      <div class="nameRow">
+        <input id="nameInput" type="text" maxlength="24" placeholder="Template name" />
+        <button class="del" id="delBtn">Delete</button>
+      </div>
+      <div class="row">
+        <div class="grid5" id="grid"></div>
+        <div class="side">
+          <h2 style="margin-top:0">Subunits (click to paint)</h2>
+          <div class="palette" id="palette"></div>
+          <div class="stats" id="stats"></div>
+          <div class="hint">Locked subunits are researched in the <a href="tech.html">Tech tree</a>.
+            A template holds up to 25 subunits (5×5).</div>
+        </div>
+      </div>
+    </div>
 
-  <div class="bar">
-    <a class="battle" href="index.html">⬅ Return to battle</a>
-    <a class="tech" href="tech.html">🔬 Tech tree</a>
+    <div class="bar">
+      <a class="battle" href="index.html">⬅ Battle</a>
+      <a class="buy" href="buy.html">🛒 Buy units</a>
+      <a class="tech" href="tech.html">🔬 Tech tree</a>
+    </div>
   </div>
 
   <script src="units.js"></script>
@@ -80,135 +110,126 @@
     const save = SaveState.load();
     if (!save) { window.location.href = "menu.html"; }
 
-    const me = save.turn;                        // the player whose turn it is builds
-    const CAP = 25;                              // 5x5 template capacity
-    save.pendingSpawns = save.pendingSpawns || [];
+    const me = save.turn;
+    const CAP = 25;
     save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
-    save.unlocked[me] = save.unlocked[me] || {};
-    save.unlocked[me].infantry = true;
+    save.unlocked[me] = save.unlocked[me] || {}; save.unlocked[me].infantry = true;
+    save.upgrades = save.upgrades || [{}, {}];
+    save.templates = save.templates || [[], []];
+    if (!save.templates[me] || !save.templates[me].length) {
+      const cells = new Array(CAP).fill(null);
+      for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+      save.templates[me] = [{ id: 't1', name: 'Infantry', cells }];
+    }
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — spend gold to fill a template with subunits, then deploy it on the board.";
+      PLAYERS[me].name + " — design reusable blueprints; buy units built from them on the Buy page.";
 
-    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
-    const unlockedTypes = () => Object.keys(PIECES).filter(isUnlocked);
-    // Subunits of `type` queued for this player (one build = one template, capped at CAP).
-    const queuedOf = (type) => save.pendingSpawns.filter((s) => s.owner === me && s.type === type).length;
-
-    function add(type, n) {
-      const cost = PIECES[type].cost;
-      let added = 0;
-      while (added < n && queuedOf(type) < CAP && save.economy[me] >= cost) {
-        save.economy[me] -= cost;
-        save.pendingSpawns.push({ type, owner: me });
-        added++;
-      }
-      if (added) { SaveState.save(save); render(); }
-    }
-    function remove(type, n) {
-      let removed = 0;
-      for (let i = save.pendingSpawns.length - 1; i >= 0 && removed < n; i--) {
-        const s = save.pendingSpawns[i];
-        if (s.owner === me && s.type === type) {
-          save.economy[me] += PIECES[type].cost; // refund
-          save.pendingSpawns.splice(i, 1);
-          removed++;
-        }
-      }
-      if (removed) { SaveState.save(save); render(); }
+    const isUnlocked = (t) => t === "infantry" || !!save.unlocked[me][t];
+    const steps = (t, s) => (save.upgrades[me] && save.upgrades[me][t] && save.upgrades[me][t][s]) || 0;
+    const eff = (t) => ({
+      atk: PIECES[t].attack + steps(t, "atk") * UPGRADES.atk.gain,
+      hp: PIECES[t].hp + steps(t, "hp") * UPGRADES.hp.gain,
+      mov: PIECES[t].movement_speed + steps(t, "mov") * UPGRADES.mov.gain,
+    });
+    function statsOf(cells) {
+      let cost = 0, hp = 0, atk = 0, mov = Infinity, n = 0;
+      for (const t of cells) { if (!t) continue; n++; const e = eff(t); cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov); }
+      return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n };
     }
 
-    // A 5x5 grid where the first `filled` cells carry the type's code/colour.
-    function gridHtml(type, filled) {
-      const code = PIECES[type].code;
-      const color = PLAYERS[me].color;
-      let cells = "";
-      for (let i = 0; i < CAP; i++) {
-        cells += i < filled
-          ? `<div class="cell" style="background:${color}">${code}</div>`
-          : `<div class="cell"></div>`;
-      }
-      return `<div class="tmpl">${cells}</div>`;
+    let selId = save.templates[me][0].id;   // selected template
+    let brush = "infantry";                 // active subunit ("" = eraser)
+
+    const cur = () => save.templates[me].find((t) => t.id === selId) || save.templates[me][0];
+    const commit = () => SaveState.save(save);
+
+    function iconHtml(t) {
+      return PIECES[t].art ? `<img src="${PIECES[t].art}" alt="">` : PIECES[t].code;
     }
 
-    function renderBuild() {
-      const wrap = document.getElementById("build");
-      wrap.innerHTML = "";
-      const types = unlockedTypes();
-      document.getElementById("noTypes").style.display = types.length <= 1 ? "" : "none";
-      for (const k of types) {
-        const d = PIECES[k];
-        const n = queuedOf(k);
-        const card = document.createElement("div");
-        card.className = "card";
-        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
-        const cantAdd = n >= CAP || save.economy[me] < d.cost;
-        card.innerHTML =
-          `<div class="top">${visual}<div><h3>${d.name}</h3>` +
-            `<div class="sub">$${d.cost}/subunit · ${d.hp} HP · ${d.attack} ATK each</div></div></div>` +
-          gridHtml(k, n) +
-          `<div class="count">Queued: <b>${n}</b> / ${CAP}</div>` +
-          `<div class="stepper">` +
-            `<button class="rm" data-t="${k}" data-n="5" ${n === 0 ? "disabled" : ""}>−5</button>` +
-            `<button class="rm" data-t="${k}" data-n="1" ${n === 0 ? "disabled" : ""}>−1</button>` +
-            `<button data-t="${k}" data-n="1" ${cantAdd ? "disabled" : ""}>+1</button>` +
-            `<button data-t="${k}" data-n="5" ${cantAdd ? "disabled" : ""}>+5</button>` +
-          `</div>`;
-        wrap.appendChild(card);
+    function renderLib() {
+      const lib = document.getElementById("lib");
+      lib.innerHTML = "";
+      for (const t of save.templates[me]) {
+        const chip = document.createElement("div");
+        chip.className = "chip" + (t.id === selId ? " active" : "");
+        chip.innerHTML = `${t.name} <span style="color:#9aa4ad">$${statsOf(t.cells).cost}</span>`;
+        chip.addEventListener("click", () => { selId = t.id; render(); });
+        lib.appendChild(chip);
       }
-      wrap.querySelectorAll("button[data-t]").forEach((b) => {
-        const t = b.dataset.t, n = +b.dataset.n;
-        b.addEventListener("click", () => b.classList.contains("rm") ? remove(t, n) : add(t, n));
+      const add = document.createElement("div");
+      add.className = "chip new";
+      add.textContent = "+ New";
+      add.addEventListener("click", () => {
+        const id = "t" + Date.now().toString(36);
+        save.templates[me].push({ id, name: "Template " + (save.templates[me].length + 1), cells: new Array(CAP).fill(null) });
+        selId = id; commit(); render();
       });
+      lib.appendChild(add);
     }
 
-    function renderQueue() {
-      const el = document.getElementById("queue");
-      const mine = save.pendingSpawns.filter((s) => s.owner === me);
-      if (!mine.length) { el.textContent = ""; return; }
-      const counts = {};
-      for (const s of mine) counts[s.type] = (counts[s.type] || 0) + 1;
-      const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
-      el.innerHTML = "Ready to deploy: <b>" + names.join(", ") +
-        "</b> — return to battle and tap a tile in your zone to drop each template.";
-    }
-
-    function renderOnboard() {
-      const wrap = document.getElementById("onboard");
-      wrap.innerHTML = "";
-      // Group this player's units by tile — each tile is one template.
-      const tiles = {};
-      for (const u of save.units) {
-        if (u.owner !== me) continue;
-        const k = u.r + "," + u.c;
-        (tiles[k] = tiles[k] || []).push(u);
-      }
-      const keys = Object.keys(tiles);
-      document.getElementById("noBoard").style.display = keys.length ? "none" : "";
-      for (const k of keys) {
-        const stack = tiles[k];
-        const type = stack[0].type;
-        const d = PIECES[type];
-        const [r, c] = k.split(",");
-        const totHp = stack.reduce((a, u) => a + u.hp, 0);
-        const card = document.createElement("div");
-        card.className = "card";
-        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
-        card.innerHTML =
-          `<div class="top">${visual}<div><h3>${d.name}</h3>` +
-            `<div class="sub">tile r${r}, c${c} · ${totHp} HP total</div></div></div>` +
-          gridHtml(type, Math.min(stack.length, CAP)) +
-          `<div class="count">Subunits: <b>${stack.length}</b> / ${CAP}</div>`;
-        wrap.appendChild(card);
+    function renderGrid() {
+      const grid = document.getElementById("grid");
+      const cells = cur().cells;
+      grid.innerHTML = "";
+      for (let i = 0; i < CAP; i++) {
+        const t = cells[i];
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        if (t) { cell.style.background = PLAYERS[me].color; cell.innerHTML = iconHtml(t); }
+        cell.addEventListener("click", () => {
+          cells[i] = (brush && isUnlocked(brush)) ? brush : null;
+          commit(); renderGrid(); renderStats(); renderLib();
+        });
+        grid.appendChild(cell);
       }
     }
 
-    function render() {
-      document.getElementById("gold").textContent = save.economy[me];
-      renderBuild();
-      renderQueue();
-      renderOnboard();
+    function renderPalette() {
+      const pal = document.getElementById("palette");
+      pal.innerHTML = "";
+      // eraser
+      const er = document.createElement("div");
+      er.className = "brush" + (brush === "" ? " sel" : "");
+      er.innerHTML = `<div class="ic">⌫</div><b>Erase</b>`;
+      er.addEventListener("click", () => { brush = ""; renderPalette(); });
+      pal.appendChild(er);
+      for (const t in PIECES) {
+        const locked = !isUnlocked(t);
+        const b = document.createElement("div");
+        b.className = "brush" + (brush === t ? " sel" : "") + (locked ? " locked" : "");
+        const e = eff(t);
+        b.innerHTML = `<div class="ic">${iconHtml(t)}</div><b>${PIECES[t].name}</b>` +
+          `<small>$${PIECES[t].cost} · ${e.hp}hp · ${e.atk}atk</small>`;
+        if (!locked) b.addEventListener("click", () => { brush = t; renderPalette(); });
+        pal.appendChild(b);
+      }
     }
+
+    function renderStats() {
+      const s = statsOf(cur().cells);
+      document.getElementById("stats").innerHTML =
+        `<span class="k">Subunits</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>$${s.cost}</b><br>` +
+        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
+    }
+
+    function renderName() {
+      const input = document.getElementById("nameInput");
+      input.value = cur().name;
+    }
+
+    function render() { renderLib(); renderName(); renderGrid(); renderPalette(); renderStats(); }
+
+    document.getElementById("nameInput").addEventListener("input", (e) => {
+      cur().name = e.target.value || "Template"; commit(); renderLib();
+    });
+    document.getElementById("delBtn").addEventListener("click", () => {
+      const arr = save.templates[me];
+      if (arr.length <= 1) { alert("Keep at least one template."); return; }
+      const i = arr.findIndex((t) => t.id === selId);
+      arr.splice(i, 1); selId = arr[0].id; commit(); render();
+    });
 
     render();
   </script>

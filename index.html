@@ -165,27 +165,28 @@
     function stackAtTile(t) { return (Game.unitAt.get(t.r + ',' + t.c)) || []; }
 
     function stackSummaryHtml(stack, owner) {
+      // Group units by their template name (each board piece is a unit).
       const counts = {};
-      for (const u of stack) counts[u.type] = (counts[u.type] || 0) + 1;
-      const lines = Object.keys(counts).map((t) =>
-        `<div class="stat-row"><span>${PIECES[t].name}</span><span>×${counts[t]}</span></div>`).join('');
+      for (const u of stack) { const n = u.name || PIECES[u.type].name; counts[n] = (counts[n] || 0) + 1; }
+      const lines = Object.keys(counts).map((n) =>
+        `<div class="stat-row"><span>${n}</span><span>×${counts[n]}</span></div>`).join('');
       const totHp = stack.reduce((a, u) => a + u.hp, 0);
       const totAtk = stack.reduce((a, u) => a + Rules.unitAttack(u), 0);
-      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} ${PIECES[stack[0].type].name} template</b></span><span>${stack.length}/25</span></div>` +
+      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} — ${stack.length} unit${stack.length > 1 ? 's' : ''}</b></span><span>${stack.length}/${Rules.STACK_LIMIT}</span></div>` +
         lines +
         `<div class="stat-row"><span>Total HP / ATK</span><span>${totHp} / ${totAtk}</span></div>` +
         (owner === Game.turn
-          ? `<p class="hint" style="margin-top:6px">Whole template selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
-          : `<p class="hint" style="margin-top:6px">Enemy template.</p>`);
+          ? `<p class="hint" style="margin-top:6px">Whole stack selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
+          : `<p class="hint" style="margin-top:6px">Enemy units.</p>`);
     }
 
     function stackChecklistHtml(stack) {
       const selIds = new Set(Game.selUnits.map((u) => u.id));
       const rows = stack.map((u) => {
-        const d = PIECES[u.type];
+        const label = u.name || PIECES[u.type].name;
         const checked = selIds.has(u.id) ? 'checked' : '';
         return `<label class="stat-row" style="cursor:pointer">` +
-          `<span><input type="checkbox" data-uid="${u.id}" ${checked} style="width:auto; margin-right:6px;"> ${d.name}</span>` +
+          `<span><input type="checkbox" data-uid="${u.id}" ${checked} style="width:auto; margin-right:6px;"> ${label}</span>` +
           `<span>${u.hp}/${u.maxHp} hp${u.acted ? ' ·acted' : ''}</span></label>`;
       }).join('');
       return `<div class="stat-row"><span><b>Pick units</b></span><span>${Game.selUnits.length}/${stack.length}</span></div>` +

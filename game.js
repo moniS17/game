@@ -34,7 +34,7 @@ const Game = {
   mode: 'pvp',          // 'pvp' | 'pve' (pve: player 1 is the AI)
   terrain: [],
   cities: [],           // [{r, c, owner}]
-  units: [],            // {id, type, owner, r, c, hp, maxHp, movesLeft, acted}
+  units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
   economy: [0, 0],
   turn: 0,
@@ -43,9 +43,10 @@ const Game = {
   selUnits: [],         // units chosen from selTile (whole stack or a subset)
   selectAll: true,      // "select whole stack" toggle
   reachable: new Map(), // "r,c" -> remaining moves for the selected group
-  toPlace: [],          // [{type, owner}] bought subunits awaiting deployment
-  upgrades: [{}, {}],   // per-player, per-type upgrade steps: {infantry:{atk,hp,mov}}
-  unlocked: [{ infantry: true }, { infantry: true }], // tech tree: types each player may field
+  toPlace: [],          // [{templateId, owner}] bought units awaiting deployment
+  upgrades: [{}, {}],   // per-player, per-subunit-type upgrade steps: {infantry:{atk,hp,mov}}
+  unlocked: [{ infantry: true }, { infantry: true }], // tech tree: subunits each player has researched
+  templates: [[], []],  // per-player library of blueprints: {id, name, cells:[type|null ×25]}
   creative: false,      // creative mode: enables the in-game "+gold" cheat button
   winner: null,
 };
@@ -89,6 +90,83 @@ function unlockType(owner, type) {
   Game.unlocked[owner][type] = true;
   persist();
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Templates — reusable 5x5 blueprints of subunits. A UNIT is built from one.
+// A template is { id, name, cells:[subunitType|null ×25] }. Its cost/HP/ATK/MOV
+// are the aggregate of its subunits (subunit stats from units.js PIECES, plus
+// the owner's per-type upgrades snapshotted at build time).
+// ---------------------------------------------------------------------------
+const TEMPLATE_CELLS = 25; // 5x5
+
+// Count subunits per type in a template's cells -> {type: count}.
+function templateComp(tmpl) {
+  const comp = {};
+  for (const t of (tmpl.cells || [])) if (t) comp[t] = (comp[t] || 0) + 1;
+  return comp;
+}
+// Total subunits placed in a template.
+function templateSize(tmpl) {
+  let n = 0; for (const t of (tmpl.cells || [])) if (t) n++; return n;
+}
+// Per-type effective subunit stats for `owner` (base + upgrades).
+function subunitEff(owner, type) {
+  const d = PIECES[type];
+  return {
+    atk: d.attack + upgradeSteps(owner, type, 'atk') * UPGRADE.atk.gain,
+    hp:  d.hp + upgradeSteps(owner, type, 'hp') * UPGRADE.hp.gain,
+    mov: d.movement_speed + upgradeSteps(owner, type, 'mov') * UPGRADE.mov.gain,
+  };
+}
+// Gold cost of one unit built from `tmpl` = sum of its subunits' base costs.
+function templateCost(owner, tmpl) {
+  let c = 0;
+  for (const t of (tmpl.cells || [])) if (t) c += PIECES[t].cost;
+  return c;
+}
+// Aggregate stats of a unit built from `tmpl` by `owner`.
+function templateStats(owner, tmpl) {
+  const comp = templateComp(tmpl);
+  let maxHp = 0, atk = 0, mov = Infinity;
+  const parts = [];
+  for (const type in comp) {
+    const e = subunitEff(owner, type), count = comp[type];
+    parts.push({ type, count, atk: e.atk, hp: e.hp, mov: e.mov });
+    maxHp += count * e.hp;
+    atk += count * e.atk;
+    mov = Math.min(mov, e.mov);
+  }
+  if (!isFinite(mov)) mov = 0;
+  // Primary subunit (drawn on the board): most numerous, ties broken by cost.
+  let primary = null, best = -1;
+  for (const type in comp) {
+    const score = comp[type] * 100 + PIECES[type].cost;
+    if (score > best) { best = score; primary = type; }
+  }
+  return { parts, maxHp, atk, mov, primary, cost: templateCost(owner, tmpl), size: templateSize(tmpl) };
+}
+// Build a board unit from a template. Returns null for an empty template.
+function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
+  const s = templateStats(owner, tmpl);
+  if (!s.size) return null;
+  const o = opts || {};
+  return {
+    id: nextId++, owner, r, c,
+    templateId: tmpl.id, name: tmpl.name, type: s.primary, parts: s.parts,
+    hp: s.maxHp, maxHp: s.maxHp, mov: s.mov,
+    movesLeft: o.movesLeft != null ? o.movesLeft : s.mov,
+    acted: !!o.acted,
+  };
+}
+// A player's default starting template library: one "Infantry" template (4 bodies).
+function defaultTemplates() {
+  const cells = new Array(TEMPLATE_CELLS).fill(null);
+  for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+  return [{ id: 't1', name: 'Infantry', cells }];
+}
+function findTemplate(owner, id) {
+  return (Game.templates[owner] || []).find((t) => t.id === id) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,43 +214,61 @@ function serialize() {
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     units: Game.units.map((u) => ({
-      id: u.id, type: u.type, owner: u.owner, r: u.r, c: u.c,
-      hp: u.hp, maxHp: u.maxHp, movesLeft: u.movesLeft, acted: u.acted,
-      atkBonus: u.atkBonus || 0, movBonus: u.movBonus || 0, hpBonus: u.hpBonus || 0,
+      id: u.id, owner: u.owner, r: u.r, c: u.c,
+      templateId: u.templateId, name: u.name, type: u.type,
+      parts: (u.parts || []).map((p) => ({ type: p.type, count: p.count, atk: p.atk, hp: p.hp, mov: p.mov })),
+      hp: u.hp, maxHp: u.maxHp, mov: u.mov, movesLeft: u.movesLeft, acted: u.acted,
     })),
     toPlace: Game.toPlace.slice(),
     upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
     unlocked: [ { ...Game.unlocked[0] }, { ...Game.unlocked[1] } ],
+    templates: [ (Game.templates[0] || []).map(cloneTemplate), (Game.templates[1] || []).map(cloneTemplate) ],
     pendingSpawns: [], // always flushed into toPlace once applied
   };
+}
+function cloneTemplate(t) { return { id: t.id, name: t.name, cells: (t.cells || []).slice() }; }
+
+// Normalize a saved unit into the composite shape. New saves already have
+// `parts`; a legacy single-type unit is turned into a 1-subunit unit.
+function migrateUnit(u) {
+  if (u.parts && u.parts.length) {
+    return { id: u.id, owner: u.owner, r: u.r, c: u.c, templateId: u.templateId,
+      name: u.name || (PIECES[u.type] ? PIECES[u.type].name : 'Unit'), type: u.type,
+      parts: u.parts.map((p) => ({ ...p })),
+      hp: u.hp, maxHp: u.maxHp, mov: u.mov != null ? u.mov : u.movesLeft, movesLeft: u.movesLeft, acted: !!u.acted };
+  }
+  const d = PIECES[u.type] || PIECES.infantry;
+  const atk = d.attack + (u.atkBonus || 0);
+  const mov = d.movement_speed + (u.movBonus || 0);
+  const hp = u.maxHp || d.hp;
+  return { id: u.id, owner: u.owner, r: u.r, c: u.c, templateId: null,
+    name: d.name, type: u.type in PIECES ? u.type : 'infantry',
+    parts: [{ type: u.type in PIECES ? u.type : 'infantry', count: 1, atk, hp, mov }],
+    hp: u.hp != null ? u.hp : hp, maxHp: hp, mov, movesLeft: u.movesLeft || 0, acted: !!u.acted };
 }
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
 function buildInitialState(mode, seed, rows, cols, creative) {
   const { terrain, cities } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
-  const units = buildInitialArmies(terrain);
+  const templates = [defaultTemplates(), defaultTemplates()];
+  const units = buildInitialArmies(terrain, templates);
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, turn: 0, round: 1,
     creative: !!creative,
     economy: [ECONOMY.start, ECONOMY.start],
     cities, units, toPlace: [], upgrades: [{}, {}],
-    unlocked: [{ infantry: true }, { infantry: true }], pendingSpawns: [],
+    unlocked: [{ infantry: true }, { infantry: true }],
+    templates, pendingSpawns: [],
   };
 }
 
-// Seed each player's starting force: ONE infantry template holding 4 infantry
-// subunits, placed at the center of that player's deployment zone (nudged off
-// water). Everything else must be researched (tech tree) and built (templates).
-function buildInitialArmies(terrain) {
+// Seed each player's starting force: ONE unit built from their default Infantry
+// template (4 infantry subunits), placed at the center of that player's
+// deployment zone (nudged off water). Everything else must be researched (tech
+// tree), designed (templates) and bought (buy page).
+function buildInitialArmies(terrain, templates) {
   const units = [];
-  let id = 1;
-  const put = (type, owner, r, c) => {
-    const def = PIECES[type];
-    units.push({ id: id++, type, owner, r, c, hp: def.hp, maxHp: def.hp,
-      movesLeft: def.movement_speed, acted: false,
-      atkBonus: 0, movBonus: 0, hpBonus: 0 });
-  };
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
   // Nearest dry tile to (r,c), scanning outward along the column.
   const dryNear = (r, c) => {
@@ -189,13 +285,12 @@ function buildInitialArmies(terrain) {
   // Center-most column of each player's spawn zone (Blue left, Red right).
   const cLeft = Math.floor((zone - 1) / 2);
   const cRight = cols - 1 - Math.floor((zone - 1) / 2);
-  const SUBUNITS = 4; // starting infantry template size
+  const spots = [dryNear(midRow, cLeft), dryNear(midRow, cRight)];
 
-  const spot0 = dryNear(midRow, cLeft);
-  const spot1 = dryNear(midRow, cRight);
-  for (let i = 0; i < SUBUNITS; i++) {
-    put('infantry', 0, spot0.r, spot0.c);
-    put('infantry', 1, spot1.r, spot1.c);
+  for (let owner = 0; owner < 2; owner++) {
+    const tmpl = templates[owner][0]; // the default Infantry template
+    const u = makeUnitFromTemplate(owner, tmpl, spots[owner].r, spots[owner].c, { acted: false });
+    if (u) units.push(u);
   }
   return units;
 }
@@ -211,11 +306,16 @@ function loadIntoGame(st) {
   Game.round = st.round || 1;
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
-  Game.units = (st.units || []).map((u) => ({ atkBonus: 0, movBonus: 0, hpBonus: 0, ...u }));
+  Game.units = (st.units || []).map(migrateUnit);
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
   Game.unlocked = [
     { infantry: true, ...(st.unlocked && st.unlocked[0]) },
     { infantry: true, ...(st.unlocked && st.unlocked[1]) },
+  ];
+  // Template libraries (default to the starting Infantry template if missing).
+  Game.templates = [
+    (st.templates && st.templates[0] && st.templates[0].length) ? st.templates[0].map(cloneTemplate) : defaultTemplates(),
+    (st.templates && st.templates[1] && st.templates[1].length) ? st.templates[1].map(cloneTemplate) : defaultTemplates(),
   ];
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
@@ -224,8 +324,9 @@ function loadIntoGame(st) {
   checkWinner();
 
   // Units bought in the shop arrive as "to place"; the player deploys them.
-  Game.toPlace = (st.toPlace || []).slice();
-  for (const sp of st.pendingSpawns || []) Game.toPlace.push({ type: sp.type, owner: sp.owner });
+  // Entries are {templateId, owner}; legacy {type} entries are dropped.
+  Game.toPlace = (st.toPlace || []).filter((s) => s && s.templateId);
+  for (const sp of st.pendingSpawns || []) if (sp && sp.templateId) Game.toPlace.push({ templateId: sp.templateId, owner: sp.owner });
   persist(); // flush pendingSpawns into toPlace
 }
 
@@ -243,9 +344,9 @@ function captureIfCity(r, c, owner) {
   }
 }
 
-// Deploy pending subunits onto a tile in the current player's zone. A tile is a
-// single-type template, so all subunits placed on it must share the type of any
-// already there (capped at Rules.STACK_LIMIT = 25).
+// Deploy pending UNITS (each built from a template) onto a tile in the current
+// player's zone. Multiple units may stack on a tile up to Rules.STACK_LIMIT.
+// A queued unit is skipped if its template contains a still-locked subunit.
 function placeAt(r, c) {
   const owner = Game.turn;
   if (!inZone(owner, c)) { UI.log('Deploy inside your own deployment zone.'); return; }
@@ -253,30 +354,27 @@ function placeAt(r, c) {
   const stack = stackAt(r, c);
   if (stack.length && stack[0].owner !== owner) { UI.log('Tile is held by the enemy.'); return; }
   let room = Rules.STACK_LIMIT - stack.length;
-  if (room <= 0) { UI.log('That template is full (25).'); return; }
-  const tileType = stack.length ? stack[0].type : null; // one type per template
+  if (room <= 0) { UI.log(`That tile is full (${Rules.STACK_LIMIT} units).`); return; }
 
-  let placed = 0;
+  let placed = 0, blockedLocked = false;
   for (let i = 0; i < Game.toPlace.length && room > 0; ) {
     const sp = Game.toPlace[i];
     if (sp.owner !== owner) { i++; continue; }
-    if (!isUnlocked(owner, sp.type)) { i++; continue; }     // not researched yet
-    if (tileType && sp.type !== tileType) { i++; continue; } // wrong template type
+    const tmpl = findTemplate(owner, sp.templateId);
+    if (!tmpl || !templateSize(tmpl)) { Game.toPlace.splice(i, 1); continue; } // stale/empty
+    // Every subunit in the template must be unlocked to deploy it.
+    if (Object.keys(templateComp(tmpl)).some((t) => !isUnlocked(owner, t))) { blockedLocked = true; i++; continue; }
     Game.toPlace.splice(i, 1);
-    const def = PIECES[sp.type];
-    const b = upgradeBonuses(owner, sp.type);
-    const maxHp = def.hp + b.hpBonus;
-    const u = { id: nextId++, type: sp.type, owner, r, c,
-      hp: maxHp, maxHp, movesLeft: 0, acted: true, // arrive; act next turn
-      atkBonus: b.atkBonus, movBonus: b.movBonus, hpBonus: b.hpBonus };
+    const u = makeUnitFromTemplate(owner, tmpl, r, c, { acted: true, movesLeft: 0 }); // arrive; act next turn
+    if (!u) continue;
     Game.units.push(u);
     addToStack(u);
     room--; placed++;
   }
-  if (!placed && tileType) {
-    UI.log('That tile holds a different template — deploy on an empty tile or a matching one.');
+  if (!placed && blockedLocked) {
+    UI.log('That template needs a subunit you have not researched yet.');
   } else {
-    UI.log(`Deployed ${placed} subunit(s) at r${r}, c${c}.` +
+    UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +
       (pendingForTurn() ? ` ${pendingForTurn()} left to place.` : ''));
   }
   persist();
@@ -401,7 +499,7 @@ function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities,
 function startTurn(player) {
   Game.turn = player;
   for (const u of Game.units) {
-    if (u.owner === player) { u.movesLeft = PIECES[u.type].movement_speed + (u.movBonus || 0); u.acted = false; }
+    if (u.owner === player) { u.movesLeft = u.mov || 0; u.acted = false; }
   }
   clearSelection();
 }
@@ -455,29 +553,40 @@ function aiThreatRow(me) {
   return best == null ? Math.floor(ROWS() / 2) : best;
 }
 
-// Greedily spend the AI's gold on its UNLOCKED types. Returns an array of
-// purchased unit types. Cycles through affordable types so the army is a mix.
+// Build a synthetic (single-type) template from a comp map, for AI/ad-hoc units.
+function compTemplate(name, comp) {
+  const cells = new Array(TEMPLATE_CELLS).fill(null);
+  let i = 0;
+  for (const type in comp) for (let k = 0; k < comp[type] && i < TEMPLATE_CELLS; k++) cells[i++] = type;
+  return { id: 'adhoc', name, cells };
+}
+
+// Greedily spend the AI's gold on UNLOCKED subunits, packaged into UNITS. Each
+// unit is a small single-type template (up to 4 subunits); types are cycled for
+// variety. Returns unit specs [{type, size}]. Mirrors the buy page's cost model.
 function aiBuyUnits(me) {
   const roster = Object.keys(PIECES)
     .filter((t) => isUnlocked(me, t))
     .sort((a, b) => PIECES[a].cost - PIECES[b].cost);
   if (!roster.length) return [];
   const cheapest = PIECES[roster[0]].cost;
-  const bought = [];
+  const units = [];
   let budget = Game.economy[me];
   // Guard the loop so a runaway can never spin (budget strictly decreases).
-  while (budget >= cheapest && bought.length < 200) {
+  while (budget >= cheapest && units.length < 100) {
     const affordable = roster.filter((t) => PIECES[t].cost <= budget);
-    // Rotate the pick by how many we've bought — deterministic variety.
-    const pick = affordable[bought.length % affordable.length];
-    budget -= PIECES[pick].cost;
-    bought.push(pick);
+    const type = affordable[units.length % affordable.length];
+    const cost = PIECES[type].cost;
+    const size = Math.max(1, Math.min(4, Math.floor(budget / cost / 3) || 1));
+    let n = 0;
+    while (n < size && budget >= cost) { budget -= cost; n++; }
+    units.push({ type, size: n });
   }
   Game.economy[me] = budget;
-  return bought;
+  return units;
 }
 
-// The AI researches the cheapest still-locked type it can comfortably afford,
+// The AI researches the cheapest still-locked subunit it can comfortably afford,
 // so over time it fields more than just infantry. Keeps a reserve for units.
 function aiResearchTech(me) {
   if (typeof TECH === 'undefined') return;
@@ -490,10 +599,10 @@ function aiResearchTech(me) {
   }
 }
 
-// Deploy `bought` units into `me`'s zone, filling tiles closest to (threatRow,
-// front column) first and spilling outward. Mirrors placeAt's unit construction.
-function aiDeployUnits(me, bought) {
-  if (!bought.length) return 0;
+// Deploy AI unit specs into `me`'s zone, one unit per tile-slot, filling tiles
+// closest to (threatRow, front column) first and spilling outward.
+function aiDeployUnits(me, specs) {
+  if (!specs.length) return 0;
   const cols = COLS(), rows = ROWS(), zone = ZONE();
   const frontCol = me === 1 ? cols - zone : zone - 1; // zone edge facing the enemy
   const targetRow = aiThreatRow(me);
@@ -512,44 +621,31 @@ function aiDeployUnits(me, bought) {
   }
   cands.sort((a, b) => a.d - b.d);
 
-  // Deploy grouped by type so each tile stays a single-type template. For each
-  // subunit, drop it on the nearest candidate tile that is empty or already
-  // holds its type and still has room (< STACK_LIMIT).
-  const order = bought.slice().sort();
   let placed = 0;
-  for (const type of order) {
-    let dest = null;
-    for (const cand of cands) {
-      const s = stackAt(cand.r, cand.c);
-      if (s.length >= Rules.STACK_LIMIT) continue;
-      if (s.length && s[0].type !== type) continue; // different template
-      dest = cand; break;
-    }
-    if (!dest) break; // zone full for this type — refund the rest
-    const { r, c } = dest;
-    const def = PIECES[type];
-    const b = upgradeBonuses(me, type);
-    const maxHp = def.hp + b.hpBonus;
-    const u = { id: nextId++, type, owner: me, r, c,
-      hp: maxHp, maxHp, movesLeft: 0, acted: true, // arrive now, fight next turn
-      atkBonus: b.atkBonus, movBonus: b.movBonus, hpBonus: b.hpBonus };
+  for (const spec of specs) {
+    if (!spec.size) continue;
+    const dest = cands.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
+    if (!dest) break; // zone full — refund the rest
+    const tmpl = compTemplate(PIECES[spec.type].name, { [spec.type]: spec.size });
+    const u = makeUnitFromTemplate(me, tmpl, dest.r, dest.c, { acted: true, movesLeft: 0 });
+    if (!u) continue;
     Game.units.push(u);
     addToStack(u);
     placed++;
   }
   // Refund any units that couldn't fit (zone saturated).
-  for (let i = placed; i < order.length; i++) Game.economy[me] += PIECES[order[i]].cost;
+  for (let i = placed; i < specs.length; i++) Game.economy[me] += PIECES[specs[i].type].cost * specs[i].size;
   return placed;
 }
 
 function aiSpendAndReinforce(me) {
   if (Game.economy[me] < 1) return;
-  aiResearchTech(me); // occasionally unlock a new type before spending on units
-  const bought = aiBuyUnits(me);
-  const placed = aiDeployUnits(me, bought);
+  aiResearchTech(me); // occasionally unlock a new subunit before spending
+  const specs = aiBuyUnits(me);
+  const placed = aiDeployUnits(me, specs);
   if (placed) {
     const counts = {};
-    for (let i = 0; i < placed; i++) counts[bought[i]] = (counts[bought[i]] || 0) + 1;
+    for (let i = 0; i < placed; i++) counts[specs[i].type] = (counts[specs[i].type] || 0) + specs[i].size;
     const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
     UI.log(`${PLAYERS[me].name} reinforced with ${names.join(', ')}.`);
   }
@@ -743,6 +839,8 @@ window.setSelectAll = setSelectAll;
 window.toggleUnitInSelection = toggleUnitInSelection;
 window.isUnlocked = isUnlocked;
 window.unlockType = unlockType;
+window.templateStats = templateStats;
+window.templateCost = templateCost;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;

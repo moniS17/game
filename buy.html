@@ -17,13 +17,12 @@
     h1 { font-size: 1.4rem; }
     .gold { font-size: 1.1rem; font-weight: 700; color: #f5c542; }
     .who { font-size: .85rem; color: #9aa4ad; }
-    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .grid { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
     .card { background: #2b3138; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
     .card .top { display: flex; align-items: center; gap: 12px; }
-    .card img, .card .icon {
-      width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
-      align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
-    }
+    /* mini template preview (5x5) */
+    .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; width: 60px; flex: 0 0 auto; }
+    .mini i { aspect-ratio: 1/1; border-radius: 2px; background: #14171b; }
     .card h3 { font-size: 1rem; }
     .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
     .stats b { color: #fff; }
@@ -42,6 +41,8 @@
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; background: #3a5bd9; }
     .queue { max-width: 900px; margin: 18px auto 0; font-size: .85rem; color: #9aa4ad; }
     .queue b { color: #7cb342; }
+    .empty { max-width: 900px; margin: 0 auto; color: #7e8893; font-size: .9rem; }
+    .empty a { color: #8ea2ff; }
   </style>
 </head>
 <body>
@@ -54,11 +55,14 @@
   </header>
 
   <div class="grid" id="grid"></div>
+  <div id="noTemplates" class="empty" style="display:none">
+    No buildable templates yet — design one in the <a href="template.html">Template designer</a>.
+  </div>
   <div class="queue" id="queue"></div>
 
   <div class="bar">
     <a href="index.html">⬅ Return to battle</a>
-    <a href="template.html" style="background:#2e7d46">▦ Templates</a>
+    <a href="template.html" style="background:#6a4bd9">▦ Templates</a>
     <a href="tech.html" style="background:#6a4bd9">🔬 Tech tree</a>
   </div>
 
@@ -71,93 +75,116 @@
     const buyer = save.turn;                 // the player whose turn it is shops
     save.pendingSpawns = save.pendingSpawns || [];
     save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
-    save.unlocked[buyer] = save.unlocked[buyer] || {};
-    save.unlocked[buyer].infantry = true;
-    const isUnlocked = (type) => type === "infantry" || !!save.unlocked[buyer][type];
-    const shopTypes = Object.keys(PIECES).filter(isUnlocked);
+    save.unlocked[buyer] = save.unlocked[buyer] || {}; save.unlocked[buyer].infantry = true;
+    save.upgrades = save.upgrades || [{}, {}];
+    save.templates = save.templates || [[], []];
+    save.templates[buyer] = save.templates[buyer] || [];
+
+    const isUnlocked = (t) => t === "infantry" || !!save.unlocked[buyer][t];
+    const steps = (t, s) => (save.upgrades[buyer] && save.upgrades[buyer][t] && save.upgrades[buyer][t][s]) || 0;
+    const eff = (t) => ({
+      atk: PIECES[t].attack + steps(t, "atk") * UPGRADES.atk.gain,
+      hp: PIECES[t].hp + steps(t, "hp") * UPGRADES.hp.gain,
+      mov: PIECES[t].movement_speed + steps(t, "mov") * UPGRADES.mov.gain,
+    });
+    // Aggregate a template's cost / stats, and whether every subunit is unlocked.
+    function statsOf(tmpl) {
+      let cost = 0, hp = 0, atk = 0, mov = Infinity, n = 0, ok = true;
+      for (const t of (tmpl.cells || [])) {
+        if (!t) continue; n++; const e = eff(t);
+        cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov);
+        if (!isUnlocked(t)) ok = false;
+      }
+      return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n, ok };
+    }
+    const templateById = (id) => save.templates[buyer].find((t) => t.id === id);
 
     document.getElementById("who").textContent =
-      PLAYERS[buyer].name + "'s turn — subunits arrive to deploy at your home edge.";
+      PLAYERS[buyer].name + "'s turn — buy units built from your templates; deploy at your home edge.";
 
     const goldEl = document.getElementById("gold");
     const queueEl = document.getElementById("queue");
-    const qty = {};                          // per-type quantity selected in the stepper
-    for (const k of shopTypes) qty[k] = 1;
+    const grid = document.getElementById("grid");
+    const qty = {};
+    for (const t of save.templates[buyer]) qty[t.id] = 1;
 
     function refresh() {
       goldEl.textContent = save.economy[buyer];
       const gold = save.economy[buyer];
       document.querySelectorAll(".card").forEach((card) => {
-        const type = card.dataset.type;
-        const cost = PIECES[type].cost;
-        card.querySelector(".qty").textContent = qty[type];
-        const total = cost * qty[type];
+        const tmpl = templateById(card.dataset.id);
+        const s = statsOf(tmpl);
+        card.querySelector(".qty").textContent = qty[tmpl.id];
+        const total = s.cost * qty[tmpl.id];
         const btn = card.querySelector("button.buy");
-        btn.textContent = `Buy ×${qty[type]} ($${total})`;
-        btn.disabled = total > gold;
+        const buyable = s.n > 0 && s.ok;
+        btn.textContent = !s.n ? "Empty template" : !s.ok ? "Needs research" : `Buy ×${qty[tmpl.id]} ($${total})`;
+        btn.disabled = !buyable || total > gold;
       });
-      // queue summary, grouped by type ("Infantry ×5, Tank ×2")
-      if (save.pendingSpawns.length) {
+      // queue summary grouped by template
+      const mine = save.pendingSpawns.filter((s) => s.owner === buyer);
+      if (mine.length) {
         const counts = {};
-        for (const s of save.pendingSpawns) counts[s.type] = (counts[s.type] || 0) + 1;
-        const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
+        for (const s of mine) counts[s.templateId] = (counts[s.templateId] || 0) + 1;
+        const names = Object.keys(counts).map((id) => `${(templateById(id) || {}).name || "?"} ×${counts[id]}`);
         queueEl.innerHTML = "Queued for deployment: <b>" + names.join(", ") + "</b> — deploy them on the board.";
       } else {
         queueEl.textContent = "";
       }
     }
 
-    function step(type, delta) {
-      qty[type] = Math.max(1, qty[type] + delta);
+    function step(id, delta) { qty[id] = Math.max(1, qty[id] + delta); refresh(); }
+    function buy(id) {
+      const tmpl = templateById(id); if (!tmpl) return;
+      const s = statsOf(tmpl); if (!s.n || !s.ok) return;
+      const n = qty[id], total = s.cost * n;
+      if (save.economy[buyer] < total) return;
+      save.economy[buyer] -= total;
+      for (let i = 0; i < n; i++) save.pendingSpawns.push({ templateId: id, owner: buyer });
+      SaveState.save(save);
       refresh();
     }
 
-    function buy(type) {
-      const n = qty[type];
-      const cost = PIECES[type].cost * n;
-      if (save.economy[buyer] < cost) return;
-      save.economy[buyer] -= cost;
-      for (let i = 0; i < n; i++) save.pendingSpawns.push({ type, owner: buyer });
-      SaveState.save(save);                 // the game page applies these on load
+    function miniHtml(tmpl) {
+      let s = "";
+      for (let i = 0; i < 25; i++) {
+        const t = (tmpl.cells || [])[i];
+        s += t ? `<i style="background:${PLAYERS[buyer].color}"></i>` : `<i></i>`;
+      }
+      return `<div class="mini">${s}</div>`;
+    }
+
+    function build() {
+      const list = save.templates[buyer];
+      document.getElementById("noTemplates").style.display = list.length ? "none" : "";
+      for (const tmpl of list) {
+        const s = statsOf(tmpl);
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.id = tmpl.id;
+        card.innerHTML =
+          `<div class="top">${miniHtml(tmpl)}<div><h3>${tmpl.name}</h3>` +
+            `<div class="stats"><span class="cost">$${s.cost}</span> each · ${s.n}/25 subunits</div></div></div>` +
+          `<div class="stats">❤️ HP <b>${s.hp}</b> &nbsp; ⚔️ ATK <b>${s.atk}</b> &nbsp; 👟 MOV <b>${s.mov}</b></div>` +
+          `<div class="stepper">` +
+            `<button class="dec10" type="button">−10</button>` +
+            `<button class="dec" type="button">−1</button>` +
+            `<span class="qty">1</span>` +
+            `<button class="inc" type="button">+1</button>` +
+            `<button class="inc10" type="button">+10</button>` +
+          `</div>` +
+          `<button class="buy" type="button">Buy</button>`;
+        grid.appendChild(card);
+        card.querySelector(".dec10").addEventListener("click", () => step(tmpl.id, -10));
+        card.querySelector(".dec").addEventListener("click", () => step(tmpl.id, -1));
+        card.querySelector(".inc").addEventListener("click", () => step(tmpl.id, +1));
+        card.querySelector(".inc10").addEventListener("click", () => step(tmpl.id, +10));
+        card.querySelector("button.buy").addEventListener("click", () => buy(tmpl.id));
+      }
       refresh();
     }
 
-    const grid = document.getElementById("grid");
-    for (const k of shopTypes) {
-      const d = PIECES[k];
-      const card = document.createElement("div");
-      card.className = "card";
-      card.dataset.type = k;
-      const visual = d.art
-        ? `<img src="${d.art}" alt="${d.name}">`
-        : `<div class="icon">${d.code}</div>`;
-      card.innerHTML =
-        `<div class="top">${visual}<h3>${d.name}</h3></div>` +
-        `<div class="stats">` +
-          `❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>` +
-          `👟 MOV <b>${d.movement_speed}</b> &nbsp; <span class="cost">$${d.cost}</span> each` +
-        `</div>` +
-        `<div class="stepper">` +
-          `<button class="dec10" type="button">−10</button>` +
-          `<button class="dec3" type="button">−3</button>` +
-          `<button class="dec" type="button">−1</button>` +
-          `<span class="qty">1</span>` +
-          `<button class="inc" type="button">+1</button>` +
-          `<button class="inc3" type="button">+3</button>` +
-          `<button class="inc10" type="button">+10</button>` +
-        `</div>` +
-        `<button class="buy" type="button">Buy ×1 ($${d.cost})</button>`;
-      grid.appendChild(card);
-      card.querySelector(".dec10").addEventListener("click", () => step(k, -10));
-      card.querySelector(".dec3").addEventListener("click", () => step(k, -3));
-      card.querySelector(".dec").addEventListener("click", () => step(k, -1));
-      card.querySelector(".inc").addEventListener("click", () => step(k, +1));
-      card.querySelector(".inc3").addEventListener("click", () => step(k, +3));
-      card.querySelector(".inc10").addEventListener("click", () => step(k, +10));
-      card.querySelector("button.buy").addEventListener("click", () => buy(k));
-    }
-
-    refresh();
+    build();
   </script>
 </body>
 </html>

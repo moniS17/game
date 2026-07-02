@@ -47,9 +47,9 @@
   <div class="who" id="who"></div>
 
   <div class="grid" id="grid"></div>
-  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a type once with gold to
-    build it into templates and buy its subunits for the rest of <b>this game</b> — a new map resets the tree.
-    Each player has their own tech tree.</div>
+  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a subunit once with gold to
+    place it into your <a href="template.html" style="color:#8ea2ff">templates</a> for the rest of
+    <b>this game</b> — a new map resets the tree. Each player has their own tech tree.</div>
 
   <div class="bar">
     <a class="battle" href="index.html">⬅ Return to battle</a>
@@ -68,7 +68,7 @@
     save.unlocked[me].infantry = true;          // always available
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — spend gold to research new unit types for this game.";
+      PLAYERS[me].name + " — spend gold to research new subunits for this game.";
 
     const goldEl = document.getElementById("gold");
     const grid = document.getElementById("grid");
