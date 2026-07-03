@@ -52,13 +52,16 @@ const Game = {
   templates: [[], []],  // per-player library of blueprints: {id, name, cells:[type|null ×25]}
   creative: false,      // creative mode: enables the in-game "+gold" cheat button
   aiPlayer: 1,          // pve: which side (0/1) the AI controls; null in pvp
+  // Elimination is not instant: a side must be wiped out (no units, or no owned
+  // cities) for LOSE_TURNS consecutive turn hand-offs before it loses, giving it
+  // a window to reinforce. These count consecutive turns spent fully eliminated.
+  noUnitTurns: [0, 0],
+  noCityTurns: [0, 0],
   winner: null,
 };
 let nextId = 1;
-// True only while the AI is mid-turn: suppresses declaring the AI eliminated
-// before it has had a chance to reinforce (a failed AI attack must not hand the
-// human a premature win — the AI reinforces at the end of its turn).
-let aiTurnActive = false;
+// Consecutive eliminated turns a side must endure before it loses (see checkWinner).
+const LOSE_TURNS = 3;
 
 // Upgrade tuning lives in units.js (window.UPGRADES) so the shop/upgrade pages
 // share one source of truth. Steps are stored per-player in the save.
@@ -222,6 +225,8 @@ function serialize() {
     aiPlayer: Game.aiPlayer,
     difficulty: Game.difficulty,
     incomeMult: (Game.incomeMult || [1, 1]).slice(),
+    noUnitTurns: (Game.noUnitTurns || [0, 0]).slice(),
+    noCityTurns: (Game.noCityTurns || [0, 0]).slice(),
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
@@ -282,6 +287,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
+    noUnitTurns: [0, 0], noCityTurns: [0, 0],
     economy: [ECONOMY.start, ECONOMY.start],
     cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
@@ -331,6 +337,10 @@ function loadIntoGame(st) {
   Game.difficulty = (st.difficulty === 'easy' || st.difficulty === 'hard') ? st.difficulty : 'normal';
   Game.incomeMult = (Array.isArray(st.incomeMult) && st.incomeMult.length === 2)
     ? st.incomeMult.slice() : [1, 1];
+  Game.noUnitTurns = (Array.isArray(st.noUnitTurns) && st.noUnitTurns.length === 2)
+    ? st.noUnitTurns.slice() : [0, 0];
+  Game.noCityTurns = (Array.isArray(st.noCityTurns) && st.noCityTurns.length === 2)
+    ? st.noCityTurns.slice() : [0, 0];
   // Restore board size (old saves predate this and default to 100x100).
   Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
   Game.turn = st.turn || 0;
@@ -510,15 +520,30 @@ function doAttack(attackers, tr, tc) {
   checkWinner();
 }
 
+// Sample the board once per turn hand-off and advance each side's elimination
+// streaks: a side with zero units (or zero owned cities) has its counter bumped,
+// otherwise it resets. Call exactly once per turn transition (see advanceTo).
+function updateEliminationStreaks() {
+  const units = [0, 0], cities = [0, 0];
+  for (const u of Game.units) units[u.owner]++;
+  for (const ci of Game.cities) if (ci.owner === 0 || ci.owner === 1) cities[ci.owner]++;
+  for (let p = 0; p < 2; p++) {
+    Game.noUnitTurns[p] = units[p] === 0 ? Game.noUnitTurns[p] + 1 : 0;
+    Game.noCityTurns[p] = cities[p] === 0 ? Game.noCityTurns[p] + 1 : 0;
+  }
+}
+
+// A side loses only after being fully eliminated — no units, or no owned cities —
+// for LOSE_TURNS consecutive turns (streaks maintained by updateEliminationStreaks).
+// This lets a wiped-out side reinforce before the loss locks in.
 function checkWinner() {
-  const alive = [0, 0];
-  for (const u of Game.units) alive[u.owner]++;
-  const ai = Game.aiPlayer;
-  // A side with no units on the board loses — EXCEPT the AI mid-turn: it may
-  // hit zero units while attacking, then reinforce before its turn ends, so we
-  // don't lock in the human's win until runAiTurn finishes (see aiTurnActive).
-  if (alive[0] === 0 && alive[1] > 0) { if (!(aiTurnActive && ai === 0)) Game.winner = 1; }
-  else if (alive[1] === 0 && alive[0] > 0) { if (!(aiTurnActive && ai === 1)) Game.winner = 0; }
+  if (Game.winner !== null) return;
+  for (let p = 0; p < 2; p++) {
+    if (Game.noUnitTurns[p] >= LOSE_TURNS || Game.noCityTurns[p] >= LOSE_TURNS) {
+      Game.winner = 1 - p;
+      return;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -625,6 +650,11 @@ function startTurn(player) {
 // Hand the turn to `player`, paying their income first. Drives the AI in PvE.
 function advanceTo(player) {
   if (Game.winner !== null) return;
+  // One turn has just completed: update elimination streaks and settle any loss
+  // before the next side plays (a side wiped out for LOSE_TURNS straight turns).
+  updateEliminationStreaks();
+  checkWinner();
+  if (Game.winner !== null) { persist(); UI.refresh(); Render.render(); return; }
   if (player === 0) Game.round++; // returning to Blue completes a round
   grantIncome(player);
   startTurn(player);
@@ -771,7 +801,6 @@ function aiSpendAndReinforce(me) {
 
 function runAiTurn() {
   const me = Game.aiPlayer;
-  aiTurnActive = true; // defer any "AI eliminated" verdict until after reinforcing
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
@@ -803,8 +832,6 @@ function runAiTurn() {
     }
   }
   if (Game.winner === null) aiSpendAndReinforce(me); // buy + deploy reinforcements
-  aiTurnActive = false;
-  checkWinner(); // now the AI has had its full turn: settle the result honestly
   Game.reachable = new Map();
   persist();
   UI.refresh();
