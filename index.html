@@ -72,6 +72,11 @@
     button:hover { background: #2f49b0; }
     button.shop { background: #2e7d46; } button.shop:hover { background: #266b3b; }
     button.ghost { background: #444c55; } button.ghost:hover { background: #525c66; }
+    /* header row: a panel title with a control (e.g. button) tucked to its right */
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .panel-head h2 { margin: 0; }
+    button.small { width: auto; margin: 0; padding: 5px 9px; font-size: .72rem; white-space: nowrap; }
+    button.small:disabled { background: #333a41; color: #6b727a; cursor: not-allowed; }
 
     .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; }
     .muted { color: #9aa4ad; }
@@ -99,6 +104,18 @@
 
   <aside id="sidebar">
     <div class="panel">
+      <div class="panel-head">
+        <h2>Selection</h2>
+        <button id="nextMovBtn" class="ghost small" title="Jump to the next of your units that can still move">👟 Next MOV</button>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:.82rem; margin-bottom:8px; cursor:pointer;">
+        <input type="checkbox" id="selectAllChk" checked style="width:auto; margin:0;" />
+        Select whole stack
+      </label>
+      <div id="selInfo" class="muted">Click a tile to select its units.</div>
+    </div>
+
+    <div class="panel">
       <h2>Turn</h2>
       <div>Now playing: <span id="turnBadge">—</span> &nbsp; <span class="muted">Round <span id="roundNum">1</span></span></div>
 
@@ -124,15 +141,6 @@
     <div class="panel" id="placePanel" style="display:none; border:1px solid #b8a23a;">
       <h2>Deploy units</h2>
       <div id="placeInfo"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Selection</h2>
-      <label style="display:flex; align-items:center; gap:8px; font-size:.82rem; margin-bottom:8px; cursor:pointer;">
-        <input type="checkbox" id="selectAllChk" checked style="width:auto; margin:0;" />
-        Select whole stack
-      </label>
-      <div id="selInfo" class="muted">Click a tile to select its units.</div>
     </div>
 
     <div class="panel">
@@ -286,6 +294,15 @@
           sel.textContent = 'Click a tile to select its units.';
         }
 
+        // "Next MOV" button: enabled only when the current player still has a
+        // unit with movement left (and the game is live).
+        const nextMovBtn = document.getElementById('nextMovBtn');
+        if (nextMovBtn) {
+          const anyMoves = Game.winner === null &&
+            Game.units.some((u) => u.owner === Game.turn && u.movesLeft > 0);
+          nextMovBtn.disabled = !anyMoves;
+        }
+
         renderTileList();
       },
       log(msg) {
@@ -317,6 +334,7 @@
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
     document.getElementById('creativeBtn').addEventListener('click', () => window.creativeGrant());
     document.getElementById('selectAllChk').addEventListener('change', (e) => window.setSelectAll(e.target.checked));
+    document.getElementById('nextMovBtn').addEventListener('click', () => window.selectNextWithMoves && window.selectNextWithMoves());
 
     // Combat-log pop-up: OK closes it; the checkbox preference is remembered.
     document.getElementById('logModalOk').addEventListener('click', () => {

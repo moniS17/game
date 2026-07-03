@@ -106,8 +106,9 @@ window.Rules = (function () {
     return s;
   }
 
-  // Terrain combat modifier: how a subunit type's ATK scales when it fights an
-  // enemy standing on `terrainType` (units.js / TERRAIN_COMBAT). 1 when unlisted.
+  // Terrain combat modifier: how a subunit type's ATK scales when it fights
+  // FROM `terrainType` (the tile it stands on) — units.js / TERRAIN_COMBAT.
+  // 1 when unlisted.
   function terrainAtkMult(type, terrainType) {
     const row = (typeof TERRAIN_COMBAT !== 'undefined') && TERRAIN_COMBAT[type];
     return (row && row[terrainType]) || 1;
@@ -120,16 +121,17 @@ window.Rules = (function () {
     return (row && row[foeType]) || 1;
   }
 
-  // A unit's attack against a target on `terrainType`: each part scaled by how
-  // its subunit type fights that terrain, then summed.
+  // A unit's attack while standing on `terrainType`: each part scaled by how
+  // its subunit type fights from that terrain, then summed.
   function unitAttackOn(u, terrainType) {
     let s = 0;
     for (const p of unitParts(u)) s += p.count * p.atk * terrainAtkMult(p.type, terrainType);
     return s;
   }
 
-  // A unit's attack against a `foeType` stack on `terrainType`: each part scaled
-  // by BOTH its terrain modifier and its unit-vs-unit matchup, then summed.
+  // A unit's attack while standing on `terrainType` against a `foeType` stack:
+  // each part scaled by BOTH its terrain modifier and its unit-vs-unit matchup,
+  // then summed.
   function unitAttackOnFoe(u, terrainType, foeType) {
     let s = 0;
     for (const p of unitParts(u)) {
@@ -144,15 +146,15 @@ window.Rules = (function () {
     return s;
   }
 
-  // Sum of a group's attack against enemies standing on `terrainType`.
+  // Sum of a group's attack while standing on `terrainType`.
   function sumAttackOn(group, terrainType) {
     let s = 0;
     for (const u of group) s += unitAttackOn(u, terrainType);
     return s;
   }
 
-  // Sum of a group's attack against a `foeType` stack on `terrainType` (terrain
-  // + unit-vs-unit matchup both applied per subunit part).
+  // Sum of a group's attack while standing on `terrainType` against a `foeType`
+  // stack (terrain + unit-vs-unit matchup both applied per subunit part).
   function sumAttackOnFoe(group, terrainType, foeType) {
     let s = 0;
     for (const u of group) s += unitAttackOnFoe(u, terrainType, foeType);
@@ -170,15 +172,17 @@ window.Rules = (function () {
       Board.isWater(terrain, dTile.r, dTile.c);
     const river = acrossRiver ? COMBAT.river_attack_penalty : 0;
 
-    // Each side's ATK is scaled per-unit by how it fights the OTHER tile's
-    // terrain AND how its subunits match up against the OTHER stack's front unit
-    // type, then reduced by an attack_penalty for the tile the SIDE stands on
-    // (e.g. a village debuffs its occupants' outgoing damage).
+    // Each side's ATK is scaled per-unit by how it fights FROM the tile it
+    // stands on (its OWN terrain — e.g. a unit in water fights weakly) AND how
+    // its subunits match up against the OTHER stack's front unit type, then
+    // reduced by an attack_penalty for its own tile (e.g. a village debuffs its
+    // occupants' outgoing damage). Incoming damage is then reduced by the
+    // TARGET tile's defense.
     const aType = attackers[0].type, dType = defenders[0].type;
     const aPen = TERRAIN[aTerr].attack_penalty || 0;
     const dPen = TERRAIN[dTerr].attack_penalty || 0;
-    let dmgToDef = sumAttackOnFoe(attackers, dTerr, dType) - aPen - TERRAIN[dTerr].defense - river;
-    let dmgToAtk = sumAttackOnFoe(defenders, aTerr, aType) - dPen - TERRAIN[aTerr].defense - river;
+    let dmgToDef = sumAttackOnFoe(attackers, aTerr, dType) - aPen - TERRAIN[dTerr].defense - river;
+    let dmgToAtk = sumAttackOnFoe(defenders, dTerr, aType) - dPen - TERRAIN[aTerr].defense - river;
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
@@ -194,13 +198,17 @@ window.Rules = (function () {
   }
 
   // Gold per round for `player`: flat base + city_income per owned city +
-  // half that (rounded) per owned village. `villages` may be omitted.
-  function income(cities, villages, player) {
+  // half that (rounded) per owned village. `villages` may be omitted. `eco` is
+  // the player's economy-upgrade levels ({passive, city, village}); each level
+  // adds +1 gold to that stream (see units.js / ECO_UPGRADES).
+  function income(cities, villages, player, eco) {
+    eco = eco || {};
     let cityOwned = 0, villageOwned = 0;
     for (const ci of (cities || [])) if (ci.owner === player) cityOwned++;
     for (const v of (villages || [])) if (v.owner === player) villageOwned++;
-    const villageInc = Math.round(ECONOMY.city_income * 0.5);
-    return ECONOMY.base_income + ECONOMY.city_income * cityOwned + villageInc * villageOwned;
+    const perCity = ECONOMY.city_income + (eco.city || 0);
+    const perVillage = Math.round(ECONOMY.city_income * 0.5) + (eco.village || 0);
+    return ECONOMY.base_income + (eco.passive || 0) + perCity * cityOwned + perVillage * villageOwned;
   }
 
   return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult };

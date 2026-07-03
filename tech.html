@@ -48,6 +48,13 @@
     .ups button:disabled .lvl { color: #6b727a; }
     .ups .cost { color: #f5c542; font-weight: 700; }
     .hint { font-size: .72rem; color: #7e8893; }
+    .econ { max-width: 900px; margin: 0 auto 18px; }
+    .econ .card { background: #2b3138; }
+    .econ h3 { font-size: 1rem; }
+    .econ .ups button { background: #2e7d46; }
+    .econ .ups button:hover:not(:disabled) { background: #256b3b; }
+    .econ .ups button:disabled { background: #3a3f45; color: #6b727a; }
+    .sec { max-width: 900px; margin: 0 auto 8px; font-size: .8rem; font-weight: 700; color: #9aa4ad; text-transform: uppercase; letter-spacing: .05em; }
     .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
     .bar a.battle { background: #3a5bd9; } .bar a.tmpl { background: #2e7d46; }
@@ -61,6 +68,10 @@
   </header>
   <div class="who" id="who"></div>
 
+  <div class="sec">💰 Economy</div>
+  <div class="econ" id="econ"></div>
+
+  <div class="sec">🔬 Subunits</div>
   <div class="grid" id="grid"></div>
   <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a subunit once to place it in your
     <a href="template.html" style="color:#8ea2ff">templates</a>; then <b>click an unlocked subunit</b> to buy
@@ -82,12 +93,15 @@
     save.unlocked[me] = save.unlocked[me] || {}; save.unlocked[me].infantry = true;
     save.upgrades = save.upgrades || [{}, {}];
     save.upgrades[me] = save.upgrades[me] || {};
+    save.ecoUpgrades = save.ecoUpgrades || [{}, {}];
+    save.ecoUpgrades[me] = save.ecoUpgrades[me] || {};
 
     document.getElementById("who").textContent =
       PLAYERS[me].name + " — research subunits and click one to upgrade it.";
 
     const goldEl = document.getElementById("gold");
     const grid = document.getElementById("grid");
+    const econEl = document.getElementById("econ");
 
     const isUnlocked = (type) => type === "infantry" || !!save.unlocked[me][type];
     const steps = (type, stat) => (save.upgrades[me][type] && save.upgrades[me][type][stat]) || 0;
@@ -95,6 +109,45 @@
     const upCost = (type, stat) => UPGRADES[stat].baseCost * Math.pow(2, steps(type, stat));
     const partsOf = (u) => u.parts || [];
     const ownedOf = (type) => save.units.filter((u) => u.owner === me && partsOf(u).some((p) => p.type === type)).length;
+
+    // Economy upgrades: per-player levels, cost doubles per step (like subunit
+    // upgrades). Each level adds +1 gold to that income stream.
+    const ecoSteps = (key) => (save.ecoUpgrades[me][key]) || 0;
+    const ecoCost = (key) => ECO_UPGRADES[key].baseCost * Math.pow(2, ecoSteps(key));
+    const ecoValue = (key) => {
+      const lvl = ecoSteps(key);
+      if (key === "passive") return ECONOMY.base_income + lvl;
+      if (key === "city") return ECONOMY.city_income + lvl;
+      return Math.round(ECONOMY.city_income * 0.5) + lvl;   // village
+    };
+    const ecoUnit = { passive: "gold/round", city: "gold/city", village: "gold/village" };
+
+    function ecoUpgrade(key) {
+      const c = ecoCost(key);
+      if (save.economy[me] < c) return;
+      save.economy[me] -= c;
+      save.ecoUpgrades[me][key] = ecoSteps(key) + 1;
+      SaveState.save(save);
+      render();
+    }
+
+    function renderEcon() {
+      const btn = (key) => {
+        const d = ECO_UPGRADES[key];
+        const c = ecoCost(key), dis = save.economy[me] < c ? "disabled" : "";
+        return `<button data-eco="${key}" ${dis}>` +
+          `<span>${d.label} +${d.gain} ${d.desc} ` +
+          `<span class="lvl">Lv.${ecoSteps(key)} · now ${ecoValue(key)} ${ecoUnit[key]}</span></span>` +
+          `<span class="cost">$${c}</span></button>`;
+      };
+      econEl.innerHTML =
+        `<div class="card"><div class="top"><div class="icon">💰</div>` +
+        `<div><h3>Income</h3><div class="owned">Boost your gold income — this game only</div></div></div>` +
+        `<div class="ups">${["passive", "city", "village"].map(btn).join("")}` +
+        `<div class="hint">Passive pays flat every round; City / Village pay per tile you own. Each level = +1 gold.</div></div></div>`;
+      econEl.querySelectorAll("button[data-eco]").forEach((b) =>
+        b.addEventListener("click", (e) => { e.stopPropagation(); ecoUpgrade(b.dataset.eco); }));
+    }
 
     let openType = null;                        // which unlocked subunit is expanded
 
@@ -158,6 +211,7 @@
 
     function render() {
       goldEl.textContent = save.economy[me];
+      renderEcon();
       grid.innerHTML = "";
       // Infantry first, then by unlock cost.
       const types = Object.keys(PIECES).sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));

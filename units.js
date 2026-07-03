@@ -44,17 +44,18 @@ window.PIECES = {
   },
 };
 
-// Terrain combat modifiers — how well each unit type FIGHTS an enemy standing on
-// a given terrain. The multiplier scales that unit's ATK when it attacks a target
-// on that tile, and symmetrically when it counterattacks a unit on that tile.
+// Terrain combat modifiers — how well each unit type FIGHTS while standing ON a
+// given terrain. The multiplier scales that unit's ATK from the tile it occupies,
+// both when it attacks and when it counterattacks (e.g. a unit IN water fights
+// weakly, regardless of where its target stands).
 // 1 = no change, <1 = debuff, >1 = bonus; any terrain not listed defaults to 1.
 //
 // Design intent:
-//   tank      — overruns open ground but bogs down fighting through a village.
-//   cavalry   — mounted units bog down assaulting cities and water.
-//   cannon    — siege gun batters villages; struggles firing through forest/water.
-//   motorized — wheeled troops lose bite in forest and across water.
-//   infantry  — foot soldiers hold cities and forest; weak fighting over water.
+//   tank      — overruns open ground but bogs down fighting from a village.
+//   cavalry   — mounted units bog down fighting from cities and water.
+//   cannon    — siege gun batters from villages; struggles firing from forest/water.
+//   motorized — wheeled troops lose bite in forest and while in water.
+//   infantry  — foot soldiers hold cities and forest; weak fighting from water.
 window.TERRAIN_COMBAT = {
   tank:      { plains: 1.5, city: 0.8, village: 0.8, forest: 0.75, water: 0.5 },
   cavalry:   { city: 0.6, water: 0.5, forest: 0.7 },
@@ -111,6 +112,16 @@ window.UPGRADES = {
   atk: { label: 'Attack',   gain: 1, baseCost: 17 },
   hp:  { label: 'Health',   gain: 2, baseCost: 17 },
   mov: { label: 'Movement', gain: 1, baseCost: 17 },
+};
+
+// Economy upgrades — raise a player's gold income for THIS game only (per-player,
+// stored in the save as ecoUpgrades). Each level adds +1 gold; cost DOUBLES per
+// step (baseCost * 2^stepsBought), like UPGRADES. Passive (flat, every round) is
+// the dearest, then per-owned-city, then per-owned-village (cheapest).
+window.ECO_UPGRADES = {
+  passive: { label: 'Passive income', desc: 'gold every round',    gain: 1, baseCost: 30 },
+  city:    { label: 'City income',    desc: 'per owned city',      gain: 1, baseCost: 20 },
+  village: { label: 'Village income', desc: 'per owned village',   gain: 1, baseCost: 12 },
 };
 
 // Tech tree — gold cost to UNLOCK each unit type for the current game (see

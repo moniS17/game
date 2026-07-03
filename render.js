@@ -68,6 +68,15 @@ window.Render = (function () {
     return false;
   }
 
+  // Center the viewport on tile (r, c) at the current zoom, clamped to the board.
+  function centerOn(r, c) {
+    if (!canvas.width || !canvas.height) return;
+    cam.x = (c + 0.5) * cam.cell - canvas.width / 2;
+    cam.y = (r + 0.5) * cam.cell - canvas.height / 2;
+    clamp();
+    render();
+  }
+
   function cellFromPoint(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -212,5 +221,5 @@ window.Render = (function () {
   }
 
   preload();
-  return { canvas, cam, render, resize, clamp, autoZoom, cellFromPoint, MIN_CELL, MAX_CELL };
+  return { canvas, cam, render, resize, clamp, autoZoom, centerOn, cellFromPoint, MIN_CELL, MAX_CELL };
 })();

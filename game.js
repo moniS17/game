@@ -229,6 +229,7 @@ function serialize() {
     })),
     toPlace: Game.toPlace.slice(),
     upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
+    ecoUpgrades: [ { ...Game.ecoUpgrades[0] }, { ...Game.ecoUpgrades[1] } ],
     unlocked: [ { ...Game.unlocked[0] }, { ...Game.unlocked[1] } ],
     templates: [ (Game.templates[0] || []).map(cloneTemplate), (Game.templates[1] || []).map(cloneTemplate) ],
     pendingSpawns: [], // always flushed into toPlace once applied
@@ -269,6 +270,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     economy: [ECONOMY.start, ECONOMY.start],
     cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
+    ecoUpgrades: [{}, {}],
     templates, pendingSpawns: [],
   };
 }
@@ -320,6 +322,7 @@ function loadIntoGame(st) {
   Game.villages = (st.villages || []).map((v) => ({ ...v }));
   Game.units = (st.units || []).map(migrateUnit);
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
+  Game.ecoUpgrades = [ { ...(st.ecoUpgrades && st.ecoUpgrades[0]) }, { ...(st.ecoUpgrades && st.ecoUpgrades[1]) } ];
   Game.unlocked = [
     { infantry: true, ...(st.unlocked && st.unlocked[0]) },
     { infantry: true, ...(st.unlocked && st.unlocked[1]) },
@@ -464,6 +467,7 @@ function doAttack(attackers, tr, tc) {
   if (!acting.length) { UI.log('Those units have already attacked.'); return; }
 
   const { dmgToDef, dmgToAtk } = Rules.resolveCombat(Game.terrain, acting, defenders);
+  const aTerr = Game.terrain[acting[0].r][acting[0].c];  // attackers' own tile (before casualties)
   const defKilled = applyDamage(defenders, dmgToDef);  // acting array preserved
   const atkKilled = applyDamage(acting, dmgToAtk);     // shifts dead off `acting`
 
@@ -472,16 +476,15 @@ function doAttack(attackers, tr, tc) {
 
   const foe = 1 - Game.turn;
 
-  // Note any terrain buff/debuff the target tile imposed on the attackers.
-  const dTerr = Game.terrain[tr][tc];
+  // Note any terrain buff/debuff the attackers' own tile imposed on them.
   const mods = [], seen = new Set();
   for (const u of acting) {
     if (seen.has(u.type)) continue;
     seen.add(u.type);
-    const m = Rules.terrainAtkMult(u.type, dTerr);
+    const m = Rules.terrainAtkMult(u.type, aTerr);
     if (m !== 1) mods.push(`${PIECES[u.type].name} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
   }
-  const terrainNote = mods.length ? ` [${TERRAIN[dTerr].name}: ${mods.join(', ')}]` : '';
+  const terrainNote = mods.length ? ` [${TERRAIN[aTerr].name}: ${mods.join(', ')}]` : '';
 
   UI.log(`${PLAYERS[Game.turn].name} (${acting.length + atkKilled}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back). ` +
@@ -534,6 +537,29 @@ function toggleUnitInSelection(id) {
   UI.refresh(); Render.render();
 }
 
+// Cycle the selection to the next friendly TILE that still holds a unit with
+// movement left, centering the camera on it. Wraps around; stays put (with a
+// note) when nobody can move.
+function selectNextWithMoves() {
+  if (Game.winner !== null) return;
+  const movers = Game.units.filter((u) => u.owner === Game.turn && u.movesLeft > 0);
+  if (!movers.length) { UI.log('No units with movement remaining.'); UI.refresh(); return; }
+  // Unique tiles in a stable reading order (top-to-bottom, left-to-right).
+  const seen = new Set(), tiles = [];
+  for (const u of movers) {
+    const k = key(u.r, u.c);
+    if (seen.has(k)) continue;
+    seen.add(k); tiles.push({ r: u.r, c: u.c });
+  }
+  tiles.sort((a, b) => (a.r - b.r) || (a.c - b.c));
+  // Advance past the currently selected tile (if it is one of them).
+  const cur = Game.selTile ? tiles.findIndex((t) => t.r === Game.selTile.r && t.c === Game.selTile.c) : -1;
+  const next = tiles[(cur + 1) % tiles.length];
+  selectTile(next.r, next.c);
+  if (window.Render && Render.centerOn) Render.centerOn(next.r, next.c);
+  UI.refresh(); Render.render();
+}
+
 // Move a group to (r,c). Group speed = slowest member; each loses the same
 // number of points; stacks merge at the destination.
 function moveGroup(group, r, c) {
@@ -555,7 +581,7 @@ function moveGroup(group, r, c) {
 // ---------------------------------------------------------------------------
 // Turns & economy
 // ---------------------------------------------------------------------------
-function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities, Game.villages, player); }
+function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities, Game.villages, player, Game.ecoUpgrades && Game.ecoUpgrades[player]); }
 
 function startTurn(player) {
   Game.turn = player;
@@ -917,6 +943,7 @@ window.inPlacement = inPlacement;
 window.pendingForTurn = pendingForTurn;
 window.setSelectAll = setSelectAll;
 window.toggleUnitInSelection = toggleUnitInSelection;
+window.selectNextWithMoves = selectNextWithMoves;
 window.isUnlocked = isUnlocked;
 window.unlockType = unlockType;
 window.templateStats = templateStats;

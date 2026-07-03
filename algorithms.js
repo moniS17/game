@@ -210,23 +210,33 @@ window.Algorithms = (function () {
     return cities;
   }
 
-  // --- 5. VILLAGES: single neutral tiles scattered on plains ---------------
+  // --- 5. VILLAGES: clustered around cities --------------------------------
   // Placed LAST so lakes/rivers/forests/cities are byte-for-byte unchanged for a
-  // given seed; villages only paint onto leftover plains (never over a city).
-  // Returns the placed positions so they can be tracked as capturable, income-
-  // generating sites (each village pays 50% of a city).
-  function generateVillages(t, rng, count, rows, cols) {
+  // given seed. Each city (owned OR neutral) seeds a RANDOM 0–6 villages onto the
+  // (up to) 8 tiles surrounding it — only leftover plains qualify, so villages
+  // never overwrite water, forest, or another city/village. The requested count
+  // is a target; fewer land if the ring is crowded. Returns the placed positions
+  // as capturable, income-generating sites (each village pays 50% of a city).
+  const RING8 = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+  function generateVillages(t, rng, cities, rows, cols, inB) {
     const villages = [];
-    let placed = 0, attempts = 0;
-    const cap = count * 200 + 500;
-    while (placed < count && attempts < cap) {
-      attempts++;
-      const r = randInt(rng, 0, rows - 1);
-      const c = randInt(rng, 0, cols - 1);
-      if (t[r][c] !== 'plains') continue; // avoid water, forest, city
-      t[r][c] = 'village';
-      villages.push({ r, c, owner: null });
-      placed++;
+    for (const city of cities) {
+      const want = randInt(rng, 0, 6);            // 0..6 per city
+      if (!want) continue;
+      // Fisher–Yates shuffle the 8 neighbours so which sides get villages varies.
+      const ring = RING8.map(([dr, dc]) => [city.r + dr, city.c + dc]);
+      for (let i = ring.length - 1; i > 0; i--) {
+        const j = randInt(rng, 0, i);
+        const tmp = ring[i]; ring[i] = ring[j]; ring[j] = tmp;
+      }
+      let placed = 0;
+      for (const [r, c] of ring) {
+        if (placed >= want) break;
+        if (!inB(r, c) || t[r][c] !== 'plains') continue; // skip water/forest/city/edge
+        t[r][c] = 'village';
+        villages.push({ r, c, owner: null });    // neutral until captured
+        placed++;
+      }
     }
     return villages;
   }
@@ -245,7 +255,8 @@ window.Algorithms = (function () {
     const { cities, occupied } = placeCities(t, rng, rows, cols);
     const neutral = placeNeutralCities(t, rng, rows, cols, occupied);
     for (const nc of neutral) cities.push(nc);
-    const villages = generateVillages(t, rng, Math.max(1, Math.round(randInt(rng, 14, 20) * scale)), rows, cols);
+    // Villages cluster around every city (0–6 each) — see generateVillages.
+    const villages = generateVillages(t, rng, cities, rows, cols, inB);
     return { terrain: t, cities, villages };
   }
 
