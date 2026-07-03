@@ -9,38 +9,45 @@
  * subunits (see rules.js STACK_LIMIT = 25, a 5x5 grid). A template's strength
  * scales with how many subunits it holds: total HP / ATK = sum over its subunits.
  *
+ * SCALE: hp, attack, cost and every GOLD amount are kept as WHOLE numbers scaled
+ * ×10 (not floats), so percentage modifiers — terrain/matchup combat multipliers
+ * and the PvE difficulty income buffs — round to meaningful whole values instead
+ * of vanishing (e.g. +10% of 20 gold = +2, where +10% of 2 would round to 0).
+ * Movement is NOT scaled: it carries no percentage modifiers and shares the
+ * terrain move-cost scale in board.js.
+ *
  * Stats:
- *   hp              - hit points of ONE subunit; the subunit dies at 0
- *   attack          - base damage ONE subunit deals (modified by rules.js)
+ *   hp              - hit points of ONE subunit (×10); the subunit dies at 0
+ *   attack          - base damage ONE subunit deals (×10; modified by rules.js)
  *   movement_speed  - movement points per turn (terrain costs defined in board.js)
- *   cost            - gold to buy one subunit from the shop
+ *   cost            - gold to buy one subunit from the shop (×10)
  *   code            - single character drawn on the board
  *   art             - SVG icon (legend / shop / zoomed board), or null
  */
 window.PIECES = {
   infantry: {
     name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
-    hp: 1, attack: 1, movement_speed: 3, cost: 1,
+    hp: 10, attack: 10, movement_speed: 3, cost: 10,
   },
   motorized: {
     // Truck-borne infantry: quick, ranged-value attacker.
     name: 'Motorized', code: 'm', art: 'assets/truck.svg',
-    hp: 2, attack: 2, movement_speed: 6, cost: 2,
+    hp: 20, attack: 20, movement_speed: 6, cost: 50,
   },
   cavalry: {
     // Formerly the chess "knight": fast and hard-hitting.
     name: 'Cavalry', code: 'c', art: 'assets/cavalry.svg',
-    hp: 1, attack: 2, movement_speed: 4, cost: 1,
+    hp: 10, attack: 20, movement_speed: 4, cost: 30,
   },
   cannon: {
     // Siege gun: heavy hitter, slow.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
-    hp: 2, attack: 1, movement_speed: 3, cost: 2,
+    hp: 20, attack: 10, movement_speed: 3, cost: 40,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
     name: 'Tank', code: 't', art: 'assets/tank.svg',
-    hp: 3, attack: 3, movement_speed: 6, cost: 3,
+    hp: 30, attack: 30, movement_speed: 6, cost: 100,
   },
 };
 
@@ -85,11 +92,11 @@ window.PLAYERS = [  { name: 'Blue', side: 'left',  color: '#1e88e5' },
   { name: 'Red',  side: 'right', color: '#e53935' },
 ];
 
-// Economy tuning (applied by rules.js).
+// Economy tuning (applied by rules.js). Gold amounts are scaled ×10 (see PIECES).
 window.ECONOMY = {
-  start: 10,         // gold each player begins with
-  base_income: 1,    // gold per round regardless of cities
-  city_income: 2,    // extra gold per round for each owned city
+  start: 100,        // gold each player begins with
+  base_income: 10,   // gold per round regardless of cities
+  city_income: 20,   // extra gold per round for each owned city
 };
 
 // HP regeneration (applied by game.js). A unit that did NOT move during its turn
@@ -107,21 +114,22 @@ window.REGEN = {
 // In-game subunit upgrades (see tech.html + game.js). Bought with gold and
 // stored in the save, so they only ever apply to the CURRENT game. Each step
 // adds `gain` to the stat; cost DOUBLES per step: baseCost * 2^stepsBought
-// (so 17, 34, 68, 136, ...).
+// (so 170, 340, 680, ...). Gold and combat stats are ×10-scaled (see PIECES);
+// movement is not, so its gain stays 1.
 window.UPGRADES = {
-  atk: { label: 'Attack',   gain: 1, baseCost: 17 },
-  hp:  { label: 'Health',   gain: 2, baseCost: 17 },
-  mov: { label: 'Movement', gain: 1, baseCost: 17 },
+  atk: { label: 'Attack',   gain: 10, baseCost: 170 },
+  hp:  { label: 'Health',   gain: 20, baseCost: 170 },
+  mov: { label: 'Movement', gain: 1,  baseCost: 170 },
 };
 
 // Economy upgrades — raise a player's gold income for THIS game only (per-player,
-// stored in the save as ecoUpgrades). Each level adds +1 gold; cost DOUBLES per
-// step (baseCost * 2^stepsBought), like UPGRADES. Passive (flat, every round) is
-// the dearest, then per-owned-city, then per-owned-village (cheapest).
+// stored in the save as ecoUpgrades). Each level adds `gain` gold; cost DOUBLES
+// per step (baseCost * 2^stepsBought), like UPGRADES. Passive (flat, every round)
+// is the dearest, then per-owned-city, then per-owned-village (cheapest).
 window.ECO_UPGRADES = {
-  passive: { label: 'Passive income', desc: 'gold every round',    gain: 1, baseCost: 30 },
-  city:    { label: 'City income',    desc: 'per owned city',      gain: 1, baseCost: 20 },
-  village: { label: 'Village income', desc: 'per owned village',   gain: 1, baseCost: 12 },
+  passive: { label: 'Passive income', desc: 'gold every round',    gain: 10, baseCost: 300 },
+  city:    { label: 'City income',    desc: 'per owned city',      gain: 10, baseCost: 200 },
+  village: { label: 'Village income', desc: 'per owned village',   gain: 10, baseCost: 120 },
 };
 
 // Tech tree — gold cost to UNLOCK each unit type for the current game (see
@@ -130,8 +138,13 @@ window.ECO_UPGRADES = {
 // into a template, or upgraded. Unlocks are per-player and per-game (in the save).
 window.TECH = {
   infantry:  0,
-  motorized: 6,
-  cavalry:   3,
-  cannon:    5,
-  tank:      10,
+  motorized: 60,
+  cavalry:   30,
+  cannon:    50,
+  tank:      100,
 };
+
+// Gold icon markup — a drawn coin standing in for a "$" everywhere gold is shown.
+// Sized in `em` so it scales with the surrounding text.
+window.GOLD_ICON = '<img src="assets/gold.svg" alt="gold" class="gold-coin" ' +
+  'style="width:1em;height:1em;vertical-align:-0.15em;">';

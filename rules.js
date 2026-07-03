@@ -203,15 +203,17 @@ window.Rules = (function () {
   // Gold per round for `player`: flat base + city_income per owned city +
   // half that (rounded) per owned village. `villages` may be omitted. `eco` is
   // the player's economy-upgrade levels ({passive, city, village}); each level
-  // adds +1 gold to that stream (see units.js / ECO_UPGRADES).
+  // adds ECO_UPGRADES[stream].gain gold to that stream (see units.js).
   function income(cities, villages, player, eco) {
     eco = eco || {};
+    const ecoGain = (typeof ECO_UPGRADES !== 'undefined' && ECO_UPGRADES) || {};
+    const g = (k) => (ecoGain[k] && ecoGain[k].gain) || 1;
     let cityOwned = 0, villageOwned = 0;
     for (const ci of (cities || [])) if (ci.owner === player) cityOwned++;
     for (const v of (villages || [])) if (v.owner === player) villageOwned++;
-    const perCity = ECONOMY.city_income + (eco.city || 0);
-    const perVillage = Math.round(ECONOMY.city_income * 0.5) + (eco.village || 0);
-    return ECONOMY.base_income + (eco.passive || 0) + perCity * cityOwned + perVillage * villageOwned;
+    const perCity = ECONOMY.city_income + (eco.city || 0) * g('city');
+    const perVillage = Math.round(ECONOMY.city_income * 0.5) + (eco.village || 0) * g('village');
+    return ECONOMY.base_income + (eco.passive || 0) * g('passive') + perCity * cityOwned + perVillage * villageOwned;
   }
 
   return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult };

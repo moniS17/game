@@ -125,7 +125,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML =
         `<td><span class="name">${visual}${d.name} (${d.code})</span></td>` +
-        `<td>${d.hp}</td><td>${d.attack}</td><td>${d.movement_speed}</td><td>$${d.cost}</td>` +
+        `<td>${d.hp}</td><td>${d.attack}</td><td>${d.movement_speed}</td><td>${GOLD_ICON}${d.cost}</td>` +
         `<td style="text-align:left; color:#c5ccd3">${roles[k] || ""}</td>`;
       ut.appendChild(tr);
     }
@@ -192,7 +192,7 @@
     document.getElementById("econRules").innerHTML =
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and <b>one unit built from the Infantry template (4 infantry)</b>.</li>` +
       `<li><b>Tech tree</b>: only the <b>Infantry</b> subunit is unlocked at the start. Research other subunits with gold ` +
-        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} $${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
+        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
       `<li><b>Templates</b>: design reusable 5×5 blueprints of subunits; a unit's <b>cost = the sum of its subunits' costs</b>.</li>` +
       `<li><b>Buy</b>: pick a template and buy units built from it; deploy them in your zone.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +

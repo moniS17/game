@@ -51,7 +51,7 @@
       <h1>🛒 Unit Shop</h1>
       <div class="who" id="who"></div>
     </div>
-    <div class="gold">💰 <span id="gold">0</span> gold</div>
+    <div class="gold"><img src="assets/gold.svg" alt="gold" style="width:1.15em;height:1.15em;vertical-align:-0.2em"> <span id="gold">0</span> gold</div>
   </header>
 
   <div class="grid" id="grid"></div>
@@ -118,7 +118,7 @@
         const total = s.cost * qty[tmpl.id];
         const btn = card.querySelector("button.buy");
         const buyable = s.n > 0 && s.ok;
-        btn.textContent = !s.n ? "Empty template" : !s.ok ? "Needs research" : `Buy ×${qty[tmpl.id]} ($${total})`;
+        btn.innerHTML = !s.n ? "Empty template" : !s.ok ? "Needs research" : `Buy ×${qty[tmpl.id]} (${GOLD_ICON}${total})`;
         btn.disabled = !buyable || total > gold;
       });
       // queue summary grouped by template
@@ -164,7 +164,7 @@
         card.dataset.id = tmpl.id;
         card.innerHTML =
           `<div class="top">${miniHtml(tmpl)}<div><h3>${tmpl.name}</h3>` +
-            `<div class="stats"><span class="cost">$${s.cost}</span> each · ${s.n}/25 subunits</div></div></div>` +
+            `<div class="stats"><span class="cost">${GOLD_ICON}${s.cost}</span> each · ${s.n}/25 subunits</div></div></div>` +
           `<div class="stats">❤️ HP <b>${s.hp}</b> &nbsp; ⚔️ ATK <b>${s.atk}</b> &nbsp; 👟 MOV <b>${s.mov}</b></div>` +
           `<div class="stepper">` +
             `<button class="dec10" type="button">−10</button>` +

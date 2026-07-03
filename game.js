@@ -38,6 +38,8 @@ const Game = {
   units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
   economy: [0, 0],
+  incomeMult: [1, 1],   // per-player income multiplier from PvE difficulty (see buildInitialState)
+  difficulty: 'normal', // pve: 'easy' | 'normal' | 'hard'
   turn: 0,
   round: 1,
   selTile: null,        // {r, c} currently inspected, or null
@@ -218,6 +220,8 @@ function serialize() {
     round: Game.round,
     creative: Game.creative,
     aiPlayer: Game.aiPlayer,
+    difficulty: Game.difficulty,
+    incomeMult: (Game.incomeMult || [1, 1]).slice(),
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
@@ -258,15 +262,26 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer) {
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty) {
   const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const templates = [defaultTemplates(), defaultTemplates()];
   const units = buildInitialArmies(terrain, templates);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
+  // PvE difficulty tunes gold income: easy gives the human +10%, hard gives the
+  // AI +17%, normal leaves both at 1×. Percentages land on whole gold thanks to
+  // the ×10-scaled economy (see units.js).
+  const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
+  const incomeMult = [1, 1];
+  if (ai !== null) {
+    const human = ai === 0 ? 1 : 0;
+    if (diff === 'easy') incomeMult[human] = 1.10;
+    else if (diff === 'hard') incomeMult[ai] = 1.17;
+  }
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
+    difficulty: diff, incomeMult,
     economy: [ECONOMY.start, ECONOMY.start],
     cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
@@ -313,6 +328,9 @@ function loadIntoGame(st) {
   Game.mode = st.mode || 'pvp';
   Game.aiPlayer = (st.aiPlayer === 0 || st.aiPlayer === 1) ? st.aiPlayer : (Game.mode === 'pve' ? 1 : null);
   Game.creative = !!st.creative;
+  Game.difficulty = (st.difficulty === 'easy' || st.difficulty === 'hard') ? st.difficulty : 'normal';
+  Game.incomeMult = (Array.isArray(st.incomeMult) && st.incomeMult.length === 2)
+    ? st.incomeMult.slice() : [1, 1];
   // Restore board size (old saves predate this and default to 100x100).
   Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
   Game.turn = st.turn || 0;
@@ -581,7 +599,11 @@ function moveGroup(group, r, c) {
 // ---------------------------------------------------------------------------
 // Turns & economy
 // ---------------------------------------------------------------------------
-function grantIncome(player) { Game.economy[player] += Rules.income(Game.cities, Game.villages, player, Game.ecoUpgrades && Game.ecoUpgrades[player]); }
+function grantIncome(player) {
+  const base = Rules.income(Game.cities, Game.villages, player, Game.ecoUpgrades && Game.ecoUpgrades[player]);
+  const mult = (Game.incomeMult && Game.incomeMult[player]) || 1;
+  Game.economy[player] += Math.round(base * mult);
+}
 
 function startTurn(player) {
   Game.turn = player;
@@ -918,7 +940,7 @@ function boot() {
     // In PvE the human picks a side; the AI takes the other. `human` defaults to
     // Blue (0), so the AI defaults to Red (1) — the classic setup.
     const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
-    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer);
+    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty);
     SaveState.save(st);
   } else {
     st = SaveState.load();

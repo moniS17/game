@@ -31,6 +31,13 @@
     .back { background: #444c55; } .back:hover { background: #525c66; }
     .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
 
+    /* PvE difficulty picker */
+    .diff h2 { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .6rem; }
+    .diff .easy   { background: #2e8b57; } .diff .easy:hover   { background: #276b44; }
+    .diff .normal { background: #4a7a9c; } .diff .normal:hover { background: #3d6885; }
+    .diff .hard   { background: #b8412f; } .diff .hard:hover   { background: #9e3526; }
+    .diff button small { font-weight: 500; opacity: .85; font-size: .72rem; }
+
     /* Board-size setup */
     .size { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
     .size h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
@@ -109,9 +116,19 @@
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
-    <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
-    <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
-    <button class="back" id="backBtn">← Back to menu</button>
+    <div id="modeBtns">
+      <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
+      <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
+      <button class="back" id="backBtn">← Back to menu</button>
+    </div>
+
+    <div class="diff" id="diffPanel" style="display:none;">
+      <h2>Choose difficulty</h2>
+      <button class="pve easy"   data-d="easy"><span>🟢 Easy<br><small>You earn +10% gold</small></span></button>
+      <button class="pve normal" data-d="normal"><span>🟡 Normal<br><small>No bonuses — a fair fight</small></span></button>
+      <button class="pve hard"   data-d="hard"><span>🔴 Hard<br><small>The AI earns +17% gold</small></span></button>
+      <button class="back" id="diffBackBtn">← Change opponent</button>
+    </div>
 
     <div class="hint" id="rangeHint">A fresh map is generated at the chosen size.</div>
   </div>
@@ -153,19 +170,40 @@
     const humanSide = wireSeg('sideSeg');  // which side the human plays (PvE only)
 
     // Start a new game: validate size, hand off to index.html which generates the map.
-    function start(mode) {
+    // `difficulty` (easy|normal|hard) only applies to PvE and tunes gold income.
+    function start(mode, difficulty) {
       const cols = readDim(widthInput), rows = readDim(heightInput);
       if (cols == null || rows == null) {
         errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
-        return;
+        return false;
       }
       SaveState.setIntent({ action: 'new', mode, rows, cols,
         start: firstMove(), human: humanSide(),
+        difficulty: difficulty || 'normal',
         creative: document.getElementById('creativeChk').checked });
       window.location.href = 'index.html';
+      return true;
     }
     document.getElementById('pvpBtn').addEventListener('click', () => start('pvp'));
-    document.getElementById('pveBtn').addEventListener('click', () => start('pve'));
+    // PvE: first validate the size, then reveal the difficulty picker.
+    const modeBtns = document.getElementById('modeBtns');
+    const diffPanel = document.getElementById('diffPanel');
+    document.getElementById('pveBtn').addEventListener('click', () => {
+      if (readDim(widthInput) == null || readDim(heightInput) == null) {
+        errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
+        return;
+      }
+      errEl.textContent = '';
+      modeBtns.style.display = 'none';
+      diffPanel.style.display = '';
+    });
+    document.getElementById('diffBackBtn').addEventListener('click', () => {
+      diffPanel.style.display = 'none';
+      modeBtns.style.display = '';
+    });
+    for (const b of diffPanel.querySelectorAll('button[data-d]')) {
+      b.addEventListener('click', () => start('pve', b.dataset.d));
+    }
     document.getElementById('backBtn').addEventListener('click', () => {
       window.location.href = 'menu.html';
     });
