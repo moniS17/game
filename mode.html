@@ -50,11 +50,19 @@
     .dims span { color: #6b727a; font-weight: 700; }
     .dims label { font-size: .62rem; color: #6b727a; display: block; margin-bottom: .25rem; text-transform: uppercase; letter-spacing: .05em; }
     .field { display: flex; flex-direction: column; align-items: center; }
+    /* Default + step (-10 / +10) buttons sit on one centered row. */
+    .size-actions { display: flex; align-items: stretch; justify-content: center; gap: .5rem; margin-top: .8rem; }
     .default {
-      width: auto; margin: .8rem auto 0; padding: .45rem .9rem; font-size: .78rem; font-weight: 600;
+      width: auto; margin: 0; padding: .45rem .9rem; font-size: .78rem; font-weight: 600;
       background: #2b3138; color: #cfd6dd;
     }
     .default:hover { background: #363d45; transform: none; }
+    /* -10 / +10 adjust BOTH width and height at once. */
+    .step {
+      width: auto; margin: 0; padding: .45rem .8rem; font-size: .78rem; font-weight: 700;
+      background: #f5c542; color: #1b2026;
+    }
+    .step:hover { background: #ffd75e; transform: none; }
     #sizeErr { color: #ff7a76; font-size: .7rem; min-height: .9rem; margin-top: .5rem; }
     .creative {
       display: flex; align-items: center; justify-content: center; gap: .5rem;
@@ -94,7 +102,11 @@
           <input id="heightInput" type="number" inputmode="numeric" min="10" max="1717" step="1" value="100" />
         </div>
       </div>
-      <button type="button" class="default" id="defaultBtn">↺ Default 100 × 100</button>
+      <div class="size-actions">
+        <button type="button" class="step" id="minus10Btn">−10</button>
+        <button type="button" class="default" id="defaultBtn">↺ Default 100 × 100</button>
+        <button type="button" class="step" id="plus10Btn">+10</button>
+      </div>
       <div id="sizeErr"></div>
     </div>
 
@@ -155,6 +167,18 @@
       heightInput.value = String(Algorithms.GRID);
       errEl.textContent = '';
     });
+
+    // Adjust BOTH width and height by `delta`, clamped to [MIN, MAX]. A blank or
+    // invalid field is treated as the default before stepping.
+    function stepBoth(delta) {
+      for (const el of [widthInput, heightInput]) {
+        const cur = Number.isFinite(Number(el.value)) && el.value !== '' ? Math.floor(Number(el.value)) : Algorithms.GRID;
+        el.value = String(Math.min(MAX, Math.max(MIN, cur + delta)));
+      }
+      errEl.textContent = '';
+    }
+    document.getElementById('minus10Btn').addEventListener('click', () => stepBoth(-10));
+    document.getElementById('plus10Btn').addEventListener('click', () => stepBoth(10));
 
     // Segmented Blue/Red pickers: track the selected value, highlight the choice.
     function wireSeg(id) {
