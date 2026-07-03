@@ -234,5 +234,5 @@ window.Rules = (function () {
     return ECONOMY.base_income + (eco.passive || 0) * g('passive') + perCity * cityOwned + perVillage * villageOwned;
   }
 
-  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult };
+  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult, surroundedBy };
 })();

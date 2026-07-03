@@ -627,7 +627,51 @@ function checkWinner() {
 }
 
 // ---------------------------------------------------------------------------
-// Selection & movement (rules live in rules.js)
+// Unit refit — swap a deployed unit to a different template (in supply zone)
+// ---------------------------------------------------------------------------
+function canRefitUnit(u) {
+  if (u.owner !== Game.turn || Game.winner !== null) return false;
+  if (inPlacement()) return false;
+  const enemy = 1 - u.owner;
+  if (Rules.surroundedBy(Game.territory, u.r, u.c, enemy)) return false;
+  const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
+  return nearOwnedSite(u.r, u.c, Game.cities, u.owner, range.city) ||
+         nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village);
+}
+
+function unitCostFromParts(u) {
+  let cost = 0;
+  for (const p of (u.parts || [])) cost += (PIECES[p.type].cost || 0) * p.count;
+  return cost;
+}
+
+function refitUnitsTo(tmplId) {
+  const tmpl = findTemplate(Game.turn, tmplId);
+  if (!tmpl || !templateSize(tmpl)) return 0;
+  if (Object.keys(templateComp(tmpl)).some((t) => !isUnlocked(Game.turn, t))) return 0;
+  const eligible = Game.selUnits.filter((u) => canRefitUnit(u) && u.templateId !== tmplId);
+  if (!eligible.length) return 0;
+  const newCost = templateCost(Game.turn, tmpl);
+  let totalDiff = 0;
+  for (const u of eligible) totalDiff += newCost - unitCostFromParts(u);
+  if (totalDiff > 0 && Game.economy[Game.turn] < totalDiff) return 0;
+  const s = templateStats(Game.turn, tmpl);
+  Game.economy[Game.turn] -= totalDiff;
+  for (const u of eligible) {
+    const hpRatio = u.hp / u.maxHp;
+    u.templateId = tmpl.id;
+    u.name = tmpl.name;
+    u.type = s.primary;
+    u.parts = s.parts.map((p) => ({ ...p }));
+    u.maxHp = s.maxHp;
+    u.hp = Math.max(1, Math.round(s.maxHp * hpRatio));
+    u.mov = s.mov;
+    u.movesLeft = Math.min(u.movesLeft, s.mov);
+  }
+  UI.log(`${PLAYERS[Game.turn].name} refit ${eligible.length} unit(s) to ${tmpl.name} (${totalDiff >= 0 ? '+' : ''}${totalDiff} gold).`);
+  persist();
+  return eligible.length;
+}
 // ---------------------------------------------------------------------------
 function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); }
 
@@ -1081,6 +1125,11 @@ window.isUnlocked = isUnlocked;
 window.unlockType = unlockType;
 window.templateStats = templateStats;
 window.templateCost = templateCost;
+window.templateComp = templateComp;
+window.templateSize = templateSize;
+window.canRefitUnit = canRefitUnit;
+window.unitCostFromParts = unitCostFromParts;
+window.refitUnitsTo = refitUnitsTo;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;
