@@ -119,7 +119,7 @@ window.Render = (function () {
         // colour (deployment zones start claimed; movement paints more — game.js).
         const owner = territory && territory[r] ? territory[r][c] : null;
         if (owner === 0 || owner === 1) {
-          ctx.globalAlpha = 0.30; ctx.fillStyle = PLAYERS[owner].color;
+          ctx.globalAlpha = 0.45; ctx.fillStyle = PLAYERS[owner].color;
           ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1;
         }
 

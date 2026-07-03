@@ -191,16 +191,15 @@ window.Rules = (function () {
     // stands on (its OWN terrain — e.g. a unit in water fights weakly) AND how
     // its subunits match up against the OTHER stack's front unit type. The total
     // is then cut by its own tile's attack_penalty (e.g. a village debuffs its
-    // occupants' outgoing damage) and the river penalty, and finally reduced by
-    // the TARGET tile's defense. All terrain modifiers are fractions (0..1),
-    // applied multiplicatively.
+    // occupants' outgoing damage) and the river penalty. The DEFENDER's tile
+    // defense then reduces damage dealt to them — but the attacker does NOT
+    // benefit from their own tile's defense (initiating combat forfeits cover).
     const aType = attackers[0].type, dType = defenders[0].type;
     const aPen = 1 - (TERRAIN[aTerr].attack_penalty || 0);
     const dPen = 1 - (TERRAIN[dTerr].attack_penalty || 0);
-    const aDef = 1 - (TERRAIN[aTerr].defense || 0);
     const dDef = 1 - (TERRAIN[dTerr].defense || 0);
     let dmgToDef = sumAttackOnFoe(attackers, aTerr, dType) * aPen * riverMult * dDef;
-    let dmgToAtk = sumAttackOnFoe(defenders, dTerr, aType) * dPen * riverMult * aDef;
+    let dmgToAtk = sumAttackOnFoe(defenders, dTerr, aType) * dPen * riverMult;
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
