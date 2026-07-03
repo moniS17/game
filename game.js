@@ -37,6 +37,8 @@ const Game = {
   villages: [],         // [{r, c, owner}]  capturable; each pays 50% of a city
   units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
+  territory: [],        // ROWS×COLS grid of 0 | 1 | null — which player owns each tile's colour
+
   economy: [0, 0],
   incomeMult: [1, 1],   // per-player income multiplier from PvE difficulty (see buildInitialState)
   difficulty: 'normal', // pve: 'easy' | 'normal' | 'hard'
@@ -206,6 +208,74 @@ function rebuildUnitAt() {
 // Placement-zone test for a column (Blue left 17, Red right 17).
 function inZone(owner, c) { return owner === 0 ? c < ZONE() : c >= COLS() - ZONE(); }
 
+// ---------------------------------------------------------------------------
+// Territory — a per-tile ownership grid (0 | 1 | null) painted in each player's
+// colour. Each side's deployment zone starts claimed; moving units paint their
+// path and destination, and deploying claims the drop tile. Combat uses it for
+// the "surrounded by enemy colour" double-damage rule (rules.js).
+// ---------------------------------------------------------------------------
+function buildInitialTerritory(rows, cols) {
+  const zone = Board.zone();
+  const grid = [];
+  for (let r = 0; r < rows; r++) {
+    const row = new Array(cols).fill(null);
+    for (let c = 0; c < cols; c++) {
+      if (c < zone) row[c] = 0;
+      else if (c >= cols - zone) row[c] = 1;
+    }
+    grid.push(row);
+  }
+  return grid;
+}
+function claimTile(r, c, owner) {
+  if (!inBounds(r, c)) return;
+  if (!Game.territory[r]) Game.territory[r] = new Array(COLS()).fill(null);
+  Game.territory[r][c] = owner;
+}
+// Compact save form: one string per row, chars '0' | '1' | '.' (neutral).
+function serializeTerritory() {
+  return (Game.territory || []).map((row) =>
+    row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join(''));
+}
+function deserializeTerritory(rows, cols, data) {
+  if (!Array.isArray(data) || data.length !== rows) return buildInitialTerritory(rows, cols);
+  const grid = [];
+  for (let r = 0; r < rows; r++) {
+    const s = data[r] || '';
+    const row = new Array(cols).fill(null);
+    for (let c = 0; c < cols; c++) row[c] = s[c] === '0' ? 0 : s[c] === '1' ? 1 : null;
+    grid.push(row);
+  }
+  return grid;
+}
+// Paint every tile on the optimal path start->dest (inclusive) for `owner`,
+// reconstructed by walking back through the reachable-budget map used for the
+// move (`Game.reachable`). Robust: if a predecessor can't be resolved it stops
+// early, but the destination is always claimed by moveGroup.
+function claimPath(owner, sr, sc, dr, dc, startBudget) {
+  const reach = Game.reachable;
+  const k = (r, c) => r + ',' + c;
+  let cr = dr, cc = dc, guard = 0;
+  claimTile(cr, cc, owner);
+  while (!(cr === sr && cc === sc) && guard++ < 100000) {
+    const cur = reach.has(k(cr, cc)) ? reach.get(k(cr, cc)) : startBudget;
+    const cost = TERRAIN[Game.terrain[cr][cc]].move_cost;
+    let prev = null;
+    for (const [ddr, ddc] of Rules.DIRS) {
+      const pr = cr + ddr, pc = cc + ddc;
+      if (!inBounds(pr, pc)) continue;
+      if (!Rules.canStep(Game.terrain, pr, pc, cr, cc)) continue;
+      const isStart = pr === sr && pc === sc;
+      const pv = isStart ? startBudget : (reach.has(k(pr, pc)) ? reach.get(k(pr, pc)) : null);
+      if (pv == null) continue;
+      if (pv - cost === cur) { prev = [pr, pc]; if (isStart) break; }
+    }
+    if (!prev) break;
+    cr = prev[0]; cc = prev[1];
+    claimTile(cr, cc, owner);
+  }
+}
+
 // How many units the player-to-move still has to deploy.
 function pendingForTurn() { return Game.toPlace.filter((s) => s.owner === Game.turn).length; }
 function inPlacement() { return pendingForTurn() > 0; }
@@ -230,6 +300,7 @@ function serialize() {
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
+    territory: serializeTerritory(),
     units: Game.units.map((u) => ({
       id: u.id, owner: u.owner, r: u.r, c: u.c,
       templateId: u.templateId, name: u.name, type: u.type,
@@ -289,6 +360,8 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     difficulty: diff, incomeMult,
     noUnitTurns: [0, 0], noCityTurns: [0, 0],
     economy: [ECONOMY.start, ECONOMY.start],
+    territory: buildInitialTerritory(Board.ROWS, Board.COLS)
+      .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
     cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
     ecoUpgrades: [{}, {}],
@@ -343,6 +416,8 @@ function loadIntoGame(st) {
     ? st.noCityTurns.slice() : [0, 0];
   // Restore board size (old saves predate this and default to 100x100).
   Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
+  // Territory grid (old saves predate this: rebuild from the deployment zones).
+  Game.territory = deserializeTerritory(Board.ROWS, Board.COLS, st.territory);
   Game.turn = st.turn || 0;
   Game.round = st.round || 1;
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
@@ -460,7 +535,7 @@ function placeAt(r, c) {
   if (!placed && blockedLocked) {
     UI.log('That template needs a subunit you have not researched yet.');
   } else {
-    if (placed) captureIfCity(r, c, owner); // deploying onto a neutral/enemy site captures it
+    if (placed) { captureIfCity(r, c, owner); claimTile(r, c, owner); } // deploying claims the tile
     UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +
       (pendingForTurn() ? ` ${pendingForTurn()} left to place.` : ''));
   }
@@ -494,7 +569,8 @@ function doAttack(attackers, tr, tc) {
   const acting = attackers.filter((u) => !u.acted && u.owner === Game.turn);
   if (!acting.length) { UI.log('Those units have already attacked.'); return; }
 
-  const { dmgToDef, dmgToAtk } = Rules.resolveCombat(Game.terrain, acting, defenders);
+  const { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded } =
+    Rules.resolveCombat(Game.terrain, acting, defenders, Game.territory);
   const aTerr = Game.terrain[acting[0].r][acting[0].c];  // attackers' own tile (before casualties)
   const defKilled = applyDamage(defenders, dmgToDef);  // acting array preserved
   const atkKilled = applyDamage(acting, dmgToAtk);     // shifts dead off `acting`
@@ -513,10 +589,14 @@ function doAttack(attackers, tr, tc) {
     if (m !== 1) mods.push(`${PIECES[u.type].name} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
   }
   const terrainNote = mods.length ? ` [${TERRAIN[aTerr].name}: ${mods.join(', ')}]` : '';
+  // Surrounded-territory double-damage notes.
+  let surrNote = '';
+  if (defSurrounded) surrNote += ` [${PLAYERS[foe].name} surrounded: ×2 taken]`;
+  if (atkSurrounded) surrNote += ` [${PLAYERS[Game.turn].name} surrounded: ×2 taken]`;
 
   UI.log(`${PLAYERS[Game.turn].name} (${acting.length + atkKilled}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back). ` +
-    `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}`);
+    `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}${surrNote}`);
   checkWinner();
 }
 
@@ -608,8 +688,12 @@ function selectNextWithMoves() {
 function moveGroup(group, r, c) {
   const left = Game.reachable.get(key(r, c));
   if (left === undefined) return false;
-  const spent = Math.min(...group.map((u) => u.movesLeft)) - left;
+  const startBudget = Math.min(...group.map((u) => u.movesLeft));
+  const spent = startBudget - left;
   const owner = group[0].owner;
+  const sr = group[0].r, sc = group[0].c;
+  // Paint the traversed path (and destination) into the mover's territory.
+  claimPath(owner, sr, sc, r, c, startBudget);
   for (const u of group) {
     removeFromStack(u);
     u.r = r; u.c = c;

@@ -12,7 +12,7 @@ window.Render = (function () {
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
 
-  const cam = { x: 0, y: 0, cell: 12 }; // x,y = world px at canvas top-left (base tile ~30% larger)
+  const cam = { x: 0, y: 0, cell: 14 }; // x,y = world px at canvas top-left (base tile size)
   const MIN_CELL = 5, MAX_CELL = 48;
   const PAD_TILES = 3; // gray scroll padding around the board (~3 tiles each side)
 
@@ -101,15 +101,12 @@ window.Render = (function () {
     const ZONE = Board.zone();
     const placing = window.inPlacement && window.inPlacement();
 
+    const territory = G.territory; // 2D grid of 0 | 1 | null (owning player per tile)
     for (let r = r0; r < r1; r++) {
       for (let c = c0; c < c1; c++) {
         const x = c * cell - cam.x, y = r * cell - cam.y;
         const tkey = G.terrain[r][c];
         const terr = TERRAIN[tkey];
-
-        // Faint deployment-zone tint (ZONE columns each side).
-        if (c < ZONE) { ctx.globalAlpha = 0.10; ctx.fillStyle = PLAYERS[0].color; ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1; }
-        else if (c >= COLS - ZONE) { ctx.globalAlpha = 0.10; ctx.fillStyle = PLAYERS[1].color; ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1; }
 
         ctx.fillStyle = terr.color;
         ctx.fillRect(x, y, cell, cell);
@@ -117,6 +114,15 @@ window.Render = (function () {
         if (detailed && images[tkey] && images[tkey].complete) {
           ctx.drawImage(images[tkey], x, y, cell, cell);
         }
+
+        // Territory tint: tiles claimed by a player are washed in that player's
+        // colour (deployment zones start claimed; movement paints more — game.js).
+        const owner = territory && territory[r] ? territory[r][c] : null;
+        if (owner === 0 || owner === 1) {
+          ctx.globalAlpha = 0.30; ctx.fillStyle = PLAYERS[owner].color;
+          ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1;
+        }
+
         if (cell >= 14) { ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.strokeRect(x, y, cell, cell); }
       }
     }

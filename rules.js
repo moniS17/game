@@ -22,7 +22,8 @@
  * COMBAT (mutual, stack-vs-stack, adjacent only)
  *   - Count both sides first. Each side deals the SUM of its members' attack,
  *     reduced by the OTHER tile's terrain defense and a river penalty.
- *   - The side outnumbered >= 2:1 takes DOUBLE damage ("no matter quality").
+ *   - A stack whose FOUR orthogonal neighbours are all the enemy's territory
+ *     colour is surrounded and takes DOUBLE damage from that enemy.
  *   - Damage is dealt 1-by-1 down each stack (see game.js applyDamage).
  *
  * ECONOMY
@@ -161,10 +162,24 @@ window.Rules = (function () {
     return s;
   }
 
+  // Is the tile (r,c) hemmed in on all FOUR orthogonal sides by `byOwner`'s
+  // territory colour? Board-edge tiles (a missing neighbour) are never counted
+  // as surrounded.
+  function surroundedBy(territory, r, c, byOwner) {
+    if (!territory) return false;
+    for (const [dr, dc] of DIRS) {
+      const nr = r + dr, nc = c + dc;
+      if (!Board.inBounds(nr, nc)) return false;
+      if (!territory[nr] || territory[nr][nc] !== byOwner) return false;
+    }
+    return true;
+  }
+
   // Mutual stack-vs-stack damage. Returns total damage each side deals to the
   // other (to be applied 1-by-1 by the caller). attackers/defenders are arrays;
-  // they sit on adjacent tiles.
-  function resolveCombat(terrain, attackers, defenders) {
+  // they sit on adjacent tiles. `territory` (optional) is the per-tile owner grid
+  // used for the "surrounded by enemy colour → double damage" rule.
+  function resolveCombat(terrain, attackers, defenders, territory) {
     const aTile = attackers[0], dTile = defenders[0];
     const aTerr = terrain[aTile.r][aTile.c], dTerr = terrain[dTile.r][dTile.c];
     const acrossRiver =
@@ -189,11 +204,15 @@ window.Rules = (function () {
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
-    // The side outnumbered >= 2:1 takes double damage (counts only).
-    if (attackers.length >= 2 * defenders.length) dmgToDef *= 2;
-    if (defenders.length >= 2 * attackers.length) dmgToAtk *= 2;
+    // Surrounded penalty: a stack whose four orthogonal neighbours are all the
+    // ENEMY's territory colour takes double damage from that enemy.
+    const aOwner = aTile.owner, dOwner = dTile.owner;
+    const defSurrounded = surroundedBy(territory, dTile.r, dTile.c, aOwner);
+    const atkSurrounded = surroundedBy(territory, aTile.r, aTile.c, dOwner);
+    if (defSurrounded) dmgToDef *= 2;
+    if (atkSurrounded) dmgToAtk *= 2;
 
-    return { dmgToDef, dmgToAtk };
+    return { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded };
   }
 
   function isAdjacent(a, b) {
