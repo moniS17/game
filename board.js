@@ -8,15 +8,15 @@
  *
  *   move_cost - movement points to ENTER the tile (see rules.js for the
  *               extra water-crossing rules)
- *   defense   - subtracted from incoming attack damage on this tile
- *   attack_penalty - subtracted from the damage units on this tile DEAL
+ *   defense   - fraction (0..1) of incoming attack damage this tile absorbs
+ *   attack_penalty - fraction (0..1) cut from the damage units on this tile DEAL
  *               (a village debuffs attackers, its defense buffs defenders)
  */
 window.TERRAIN = {
   plains:  { name: 'Plains',  code: '.', color: '#7cb342', move_cost: 1, defense: 0 },
-  city:    { name: 'City',    code: 'C', color: '#9e9e9e', move_cost: 1, defense: 2 },
-  village: { name: 'Village', code: 'V', color: '#caa16a', move_cost: 1, defense: 3, attack_penalty: 2 },
-  forest:  { name: 'Forest',  code: 'F', color: '#2e7d32', move_cost: 1, defense: 1 },
+  city:    { name: 'City',    code: 'C', color: '#9e9e9e', move_cost: 1, defense: 0 },
+  village: { name: 'Village', code: 'V', color: '#caa16a', move_cost: 1, defense: 0.3, attack_penalty: 0.2 },
+  forest:  { name: 'Forest',  code: 'F', color: '#2e7d32', move_cost: 1, defense: 0.15 },
   water:   { name: 'Water',   code: 'W', color: '#1976d2', move_cost: 2, defense: 0 },
 };
 

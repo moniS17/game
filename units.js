@@ -20,27 +20,27 @@
 window.PIECES = {
   infantry: {
     name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
-    hp: 30, attack: 20, movement_speed: 3, cost: 1,
+    hp: 1, attack: 1, movement_speed: 3, cost: 1,
   },
   motorized: {
     // Truck-borne infantry: quick, ranged-value attacker.
     name: 'Motorized', code: 'm', art: 'assets/truck.svg',
-    hp: 30, attack: 30, movement_speed: 6, cost: 2,
+    hp: 2, attack: 2, movement_speed: 6, cost: 2,
   },
   cavalry: {
     // Formerly the chess "knight": fast and hard-hitting.
     name: 'Cavalry', code: 'c', art: 'assets/cavalry.svg',
-    hp: 50, attack: 40, movement_speed: 4, cost: 3,
+    hp: 1, attack: 2, movement_speed: 4, cost: 1,
   },
   cannon: {
     // Siege gun: heavy hitter, slow.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
-    hp: 60, attack: 70, movement_speed: 3, cost: 6,
+    hp: 2, attack: 1, movement_speed: 3, cost: 2,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
     name: 'Tank', code: 't', art: 'assets/tank.svg',
-    hp: 120, attack: 80, movement_speed: 6, cost: 9,
+    hp: 3, attack: 3, movement_speed: 6, cost: 3,
   },
 };
 
@@ -130,8 +130,8 @@ window.ECO_UPGRADES = {
 // into a template, or upgraded. Unlocks are per-player and per-game (in the save).
 window.TECH = {
   infantry:  0,
-  motorized: 12,
-  cavalry:   18,
-  cannon:    24,
-  tank:      40,
+  motorized: 6,
+  cavalry:   3,
+  cannon:    5,
+  tank:      10,
 };

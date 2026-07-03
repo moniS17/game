@@ -33,7 +33,7 @@ window.Rules = (function () {
   const STACK_LIMIT = 17; // max UNITS that may stack on one tile (a template's 5x5 = 25 subunits is separate)
 
   const COMBAT = {
-    river_attack_penalty: 2, // attacking while you or your target stands in water
+    river_attack_penalty: 0.2, // fraction cut from ATK when you or your target stands in water
   };
 
   // Can a unit step from (r,c) to the orthogonally-adjacent (nr,nc)?
@@ -170,19 +170,22 @@ window.Rules = (function () {
     const acrossRiver =
       Board.isWater(terrain, aTile.r, aTile.c) ||
       Board.isWater(terrain, dTile.r, dTile.c);
-    const river = acrossRiver ? COMBAT.river_attack_penalty : 0;
+    const riverMult = acrossRiver ? (1 - COMBAT.river_attack_penalty) : 1;
 
     // Each side's ATK is scaled per-unit by how it fights FROM the tile it
     // stands on (its OWN terrain — e.g. a unit in water fights weakly) AND how
-    // its subunits match up against the OTHER stack's front unit type, then
-    // reduced by an attack_penalty for its own tile (e.g. a village debuffs its
-    // occupants' outgoing damage). Incoming damage is then reduced by the
-    // TARGET tile's defense.
+    // its subunits match up against the OTHER stack's front unit type. The total
+    // is then cut by its own tile's attack_penalty (e.g. a village debuffs its
+    // occupants' outgoing damage) and the river penalty, and finally reduced by
+    // the TARGET tile's defense. All terrain modifiers are fractions (0..1),
+    // applied multiplicatively.
     const aType = attackers[0].type, dType = defenders[0].type;
-    const aPen = TERRAIN[aTerr].attack_penalty || 0;
-    const dPen = TERRAIN[dTerr].attack_penalty || 0;
-    let dmgToDef = sumAttackOnFoe(attackers, aTerr, dType) - aPen - TERRAIN[dTerr].defense - river;
-    let dmgToAtk = sumAttackOnFoe(defenders, dTerr, aType) - dPen - TERRAIN[aTerr].defense - river;
+    const aPen = 1 - (TERRAIN[aTerr].attack_penalty || 0);
+    const dPen = 1 - (TERRAIN[dTerr].attack_penalty || 0);
+    const aDef = 1 - (TERRAIN[aTerr].defense || 0);
+    const dDef = 1 - (TERRAIN[dTerr].defense || 0);
+    let dmgToDef = sumAttackOnFoe(attackers, aTerr, dType) * aPen * riverMult * dDef;
+    let dmgToAtk = sumAttackOnFoe(defenders, dTerr, aType) * dPen * riverMult * aDef;
     dmgToDef = Math.max(1, Math.round(dmgToDef));
     dmgToAtk = Math.max(1, Math.round(dmgToAtk));
 
