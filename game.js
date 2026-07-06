@@ -672,6 +672,76 @@ function refitUnitsTo(tmplId) {
   persist();
   return eligible.length;
 }
+
+// ---------------------------------------------------------------------------
+// Unit split — break subunits off a deployed unit into new 1-subunit units
+// ---------------------------------------------------------------------------
+function totalSubunits(u) {
+  let n = 0; for (const p of (u.parts || [])) n += p.count; return n;
+}
+
+function canSplitUnit(u) {
+  if (u.owner !== Game.turn || Game.winner !== null) return false;
+  if (inPlacement()) return false;
+  if (totalSubunits(u) < 2) return false;
+  const room = Rules.STACK_LIMIT - stackAt(u.r, u.c).length;
+  return room > 0;
+}
+
+function splitUnit(u, selectedTypes) {
+  if (!canSplitUnit(u)) return 0;
+  if (!selectedTypes.length) return 0;
+  const total = totalSubunits(u);
+  if (selectedTypes.length >= total) return 0;
+  const room = Rules.STACK_LIMIT - stackAt(u.r, u.c).length;
+  const toSplit = selectedTypes.slice(0, room);
+
+  const hpRatio = u.hp / u.maxHp;
+  const owner = u.owner;
+  const created = [];
+
+  const removals = {};
+  for (const t of toSplit) removals[t] = (removals[t] || 0) + 1;
+
+  for (const t of toSplit) {
+    const e = subunitEff(owner, t);
+    const nu = {
+      id: nextId++, owner, r: u.r, c: u.c,
+      templateId: null, name: PIECES[t].name, type: t,
+      parts: [{ type: t, count: 1, atk: e.atk, hp: e.hp, mov: e.mov }],
+      hp: Math.max(1, Math.round(e.hp * hpRatio)),
+      maxHp: e.hp, mov: e.mov,
+      movesLeft: 0, acted: true, moved: false,
+    };
+    Game.units.push(nu);
+    addToStack(nu);
+    created.push(nu);
+  }
+
+  for (const t in removals) {
+    const p = u.parts.find((x) => x.type === t);
+    if (p) p.count -= removals[t];
+  }
+  u.parts = u.parts.filter((p) => p.count > 0);
+
+  let newMaxHp = 0, newMov = Infinity, best = -1, primary = u.type;
+  for (const p of u.parts) {
+    newMaxHp += p.count * p.hp;
+    newMov = Math.min(newMov, p.mov);
+    const score = p.count * 100 + PIECES[p.type].cost;
+    if (score > best) { best = score; primary = p.type; }
+  }
+  u.maxHp = newMaxHp;
+  u.hp = Math.max(1, Math.round(newMaxHp * hpRatio));
+  u.mov = isFinite(newMov) ? newMov : 0;
+  u.movesLeft = Math.min(u.movesLeft, u.mov);
+  u.type = primary;
+
+  UI.log(`${PLAYERS[owner].name} split ${created.length} subunit(s) off ${u.name}.`);
+  persist();
+  return created.length;
+}
+
 // ---------------------------------------------------------------------------
 function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); }
 
@@ -1130,6 +1200,10 @@ window.templateSize = templateSize;
 window.canRefitUnit = canRefitUnit;
 window.unitCostFromParts = unitCostFromParts;
 window.refitUnitsTo = refitUnitsTo;
+window.canSplitUnit = canSplitUnit;
+window.splitUnit = splitUnit;
+window.totalSubunits = totalSubunits;
+window.selectTile = selectTile;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;

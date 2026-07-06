@@ -120,6 +120,13 @@
     .refit-action { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
     .refit-gain { color: #4caf50; font-weight: 600; }
     .refit-spend { color: #ff5a52; font-weight: 600; }
+
+    .utmpl-grid i.split-pick { cursor: pointer; transition: transform .1s, box-shadow .1s; }
+    .utmpl-grid i.split-pick:hover { transform: scale(1.12); box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+    .utmpl-grid i.split-sel { outline: 2px solid #ff5a52; outline-offset: -2px; opacity: .6; }
+    .split-status { text-align: center; margin: 8px 0 4px; font-size: .84rem; color: #9aa4ad; }
+    .split-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .split-btns button { flex: 1; }
   </style>
 </head>
 <body>
@@ -292,7 +299,6 @@
     function showUnitTemplate(u) {
       if (!u) return;
       const color = PLAYERS[u.owner].color;
-      // Flatten the parts composition into up to 25 cells.
       const cells = [];
       for (const p of (u.parts || [])) for (let i = 0; i < p.count; i++) cells.push(p.type);
       let grid = '';
@@ -305,6 +311,7 @@
       let cost = 0;
       for (const p of (u.parts || [])) cost += (PIECES[p.type].cost || 0) * p.count;
       const comp = (u.parts || []).map((p) => `${PIECES[p.type].name} ×${p.count}`).join(' · ');
+      const showSplit = window.canSplitUnit && window.canSplitUnit(u);
       document.getElementById('unitModalTitle').innerHTML =
         `<span style="color:${color}">${PLAYERS[u.owner].name}</span> — ${u.name || PIECES[u.type].name}`;
       document.getElementById('unitModalBody').innerHTML =
@@ -315,8 +322,72 @@
           `<span>👟 MOV <b>${u.mov}</b></span>` +
           `<span>${GOLD_ICON} <b>${cost}</b></span>` +
         `</div>` +
-        `<div class="utmpl-comp">${comp || 'No subunits'}</div>`;
+        `<div class="utmpl-comp">${comp || 'No subunits'}</div>` +
+        (showSplit ? `<button id="splitStartBtn" class="ghost" style="margin-top:8px">✂ Split</button>` : '');
       document.getElementById('unitModal').style.display = 'flex';
+      if (showSplit) {
+        document.getElementById('splitStartBtn').addEventListener('click', () => enterSplitMode(u));
+      }
+    }
+
+    function enterSplitMode(u) {
+      const color = PLAYERS[u.owner].color;
+      const cells = [];
+      for (const p of (u.parts || [])) for (let i = 0; i < p.count; i++) cells.push(p.type);
+      const total = cells.filter(Boolean).length;
+      const room = Rules.STACK_LIMIT - (Game.unitAt.get(u.r + ',' + u.c) || []).length;
+      const maxSel = Math.min(total - 1, room);
+      const selected = new Set();
+
+      function renderSplitGrid() {
+        let grid = '';
+        for (let i = 0; i < 25; i++) {
+          const t = cells[i];
+          if (!t) { grid += `<i></i>`; continue; }
+          const inner = PIECES[t].art ? `<img src="${PIECES[t].art}" alt="${PIECES[t].name}">` : PIECES[t].code;
+          const cls = selected.has(i) ? 'split-pick split-sel' : 'split-pick';
+          grid += `<i class="${cls}" data-ci="${i}" style="background:${color}">${inner}</i>`;
+        }
+        const body = document.getElementById('unitModalBody');
+        body.innerHTML =
+          `<div class="utmpl-grid">${grid}</div>` +
+          `<div class="split-status">${selected.size} / ${maxSel} subunits selected for split</div>` +
+          `<div class="split-btns">` +
+            `<button id="splitConfirmBtn"${selected.size ? '' : ' disabled'}>Confirm split (${selected.size})</button>` +
+            `<button id="splitCancelBtn" class="ghost">Cancel</button>` +
+          `</div>`;
+        body.querySelectorAll('.split-pick').forEach((el) => {
+          el.addEventListener('click', () => {
+            const ci = +el.dataset.ci;
+            if (selected.has(ci)) { selected.delete(ci); }
+            else if (selected.size < maxSel) { selected.add(ci); }
+            renderSplitGrid();
+          });
+        });
+        document.getElementById('splitConfirmBtn').addEventListener('click', () => {
+          if (!selected.size) return;
+          const types = [];
+          for (const ci of selected) types.push(cells[ci]);
+          const count = window.splitUnit(u, types);
+          if (count) {
+            document.getElementById('unitModal').style.display = 'none';
+            document.getElementById('unitModalOk').style.display = '';
+            if (Game.selTile) {
+              window.selectTile(Game.selTile.r, Game.selTile.c);
+            }
+            UI.refresh(); Render.render();
+          }
+        });
+        document.getElementById('splitCancelBtn').addEventListener('click', () => {
+          document.getElementById('unitModalOk').style.display = '';
+          showUnitTemplate(u);
+        });
+      }
+
+      document.getElementById('unitModalTitle').innerHTML =
+        `<span style="color:${color}">Split</span> — ${u.name || PIECES[u.type].name}`;
+      document.getElementById('unitModalOk').style.display = 'none';
+      renderSplitGrid();
     }
 
     const UI = {
@@ -439,9 +510,13 @@
     // Unit-template pop-up: Close, or tap the backdrop, to dismiss.
     document.getElementById('unitModalOk').addEventListener('click', () => {
       document.getElementById('unitModal').style.display = 'none';
+      document.getElementById('unitModalOk').style.display = '';
     });
     document.getElementById('unitModal').addEventListener('click', (e) => {
-      if (e.target.id === 'unitModal') e.currentTarget.style.display = 'none';
+      if (e.target.id === 'unitModal') {
+        e.currentTarget.style.display = 'none';
+        document.getElementById('unitModalOk').style.display = '';
+      }
     });
 
     // Refit modal: show available templates for the selected units.
