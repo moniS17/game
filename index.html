@@ -127,6 +127,14 @@
     .split-status { text-align: center; margin: 8px 0 4px; font-size: .84rem; color: #9aa4ad; }
     .split-btns { display: flex; gap: 8px; margin-top: 8px; }
     .split-btns button { flex: 1; }
+
+    .combine-pair { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+    .combine-unit { padding: 6px 8px; border: 2px solid #3a3f45; border-radius: 6px; cursor: pointer; font-size: .84rem; }
+    .combine-unit:hover { border-color: #7a8290; }
+    .combine-unit.combine-active { border-color: #4caf50; background: rgba(76,175,80,.08); }
+    .combine-preview { text-align: center; font-size: .84rem; color: #9aa4ad; margin: 6px 0; }
+    .combine-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .combine-btns button { flex: 1; }
   </style>
 </head>
 <body>
@@ -143,6 +151,7 @@
         <input type="checkbox" id="selectAllChk" checked style="width:auto; margin:0;" />
         Select whole stack
       </label>
+      <button id="combineBtn" class="ghost small" style="display:none; margin-bottom:8px;">⊕ Combine</button>
       <div id="selInfo" class="muted">Click a tile to select its units.</div>
       <button id="refitBtn" class="ghost" style="display:none; margin-top:8px;">&#9881; Refit</button>
     </div>
@@ -210,6 +219,16 @@
       <p class="hint" style="margin:6px 0 2px;">Swap selected units to another template. Requires supply range, no encirclement.</p>
       <div id="refitModalBody"></div>
       <button id="refitModalClose" class="ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Combine modal: merge subunits from one unit into another. -->
+  <div id="combineModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Combine units</h2>
+      <p class="hint" style="margin:6px 0 2px;">Fill a unit with subunits from another, up to 25 total.</p>
+      <div id="combineModalBody"></div>
+      <button id="combineModalClose" class="ghost">Cancel</button>
     </div>
   </div>
 
@@ -471,6 +490,18 @@
             (Game.templates[Game.turn] || []).length > 0;
           refitBtn.style.display = showRefit ? '' : 'none';
         }
+
+        const combineBtn = document.getElementById('combineBtn');
+        if (combineBtn) {
+          const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
+          const showCombine = Game.winner === null &&
+            !(window.inPlacement && window.inPlacement()) &&
+            !Game.selectAll && stack.length >= 2 &&
+            stack[0].owner === Game.turn &&
+            Game.selUnits.length >= 1 &&
+            stack.some((u) => u.owner === Game.turn && window.totalSubunits(u) < 25);
+          combineBtn.style.display = showCombine ? '' : 'none';
+        }
       },
       log(msg) {
         // Combat log entries are buffered; the enemy's turn is shown as a
@@ -567,6 +598,108 @@
     });
     document.getElementById('refitModal').addEventListener('click', (e) => {
       if (e.target.id === 'refitModal') e.currentTarget.style.display = 'none';
+    });
+
+    // Combine modal: pick a fill unit and a material unit, then merge subunits.
+    function showCombineModal() {
+      const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
+      const mine = stack.filter((u) => u.owner === Game.turn);
+      if (mine.length < 2) return;
+      let fillId = null, matId = null;
+
+      function renderCombineBody() {
+        const body = document.getElementById('combineModalBody');
+        const fillUnit = fillId !== null ? mine.find((u) => u.id === fillId) : null;
+        const matUnit = matId !== null ? mine.find((u) => u.id === matId) : null;
+
+        let html = '<div style="font-size:.84rem; margin:6px 0 4px; color:#b0b8c1;"><b>1.</b> Pick the unit to fill:</div>';
+        html += '<div class="combine-pair">';
+        for (const u of mine) {
+          const label = u.name || PIECES[u.type].name;
+          const sub = window.totalSubunits(u);
+          const active = fillId === u.id ? ' combine-active' : '';
+          const full = sub >= 25 ? ' style="opacity:.5;"' : '';
+          html += `<div class="combine-unit${active}" data-fill="${u.id}"${full}>` +
+            `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub}/25 subunits</div>`;
+        }
+        html += '</div>';
+
+        if (fillUnit) {
+          const others = mine.filter((u) => u.id !== fillId);
+          html += '<div style="font-size:.84rem; margin:6px 0 4px; color:#b0b8c1;"><b>2.</b> Pick the material unit:</div>';
+          html += '<div class="combine-pair">';
+          for (const u of others) {
+            const label = u.name || PIECES[u.type].name;
+            const sub = window.totalSubunits(u);
+            const active = matId === u.id ? ' combine-active' : '';
+            html += `<div class="combine-unit${active}" data-mat="${u.id}">` +
+              `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub} subunits</div>`;
+          }
+          html += '</div>';
+        }
+
+        if (fillUnit && matUnit) {
+          const room = 25 - window.totalSubunits(fillUnit);
+          const available = window.totalSubunits(matUnit);
+          const willTake = Math.min(room, available);
+          const consumed = willTake >= available;
+          html += `<div class="combine-preview">Will transfer <b>${willTake}</b> subunit(s)` +
+            (consumed ? ' — material unit will be consumed' : '') + '</div>';
+          html += '<div class="combine-btns">' +
+            `<button id="combineConfirmBtn">Combine (${willTake})</button>` +
+            '<button id="combineCancelBtn" class="ghost">Cancel</button></div>';
+        }
+
+        body.innerHTML = html;
+
+        body.querySelectorAll('[data-fill]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const id = +el.dataset.fill;
+            const u = mine.find((x) => x.id === id);
+            if (u && window.totalSubunits(u) >= 25) return;
+            fillId = id;
+            if (matId === fillId) matId = null;
+            renderCombineBody();
+          });
+        });
+        body.querySelectorAll('[data-mat]').forEach((el) => {
+          el.addEventListener('click', () => {
+            matId = +el.dataset.mat;
+            renderCombineBody();
+          });
+        });
+        const confirmBtn = document.getElementById('combineConfirmBtn');
+        if (confirmBtn) {
+          confirmBtn.addEventListener('click', () => {
+            const fill = mine.find((u) => u.id === fillId);
+            const mat = mine.find((u) => u.id === matId);
+            if (fill && mat) {
+              const count = window.combineUnits(fill, mat);
+              if (count) {
+                document.getElementById('combineModal').style.display = 'none';
+                if (Game.selTile) window.selectTile(Game.selTile.r, Game.selTile.c);
+                UI.refresh(); Render.render();
+              }
+            }
+          });
+        }
+        const cancelBtn = document.getElementById('combineCancelBtn');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => {
+            document.getElementById('combineModal').style.display = 'none';
+          });
+        }
+      }
+
+      renderCombineBody();
+      document.getElementById('combineModal').style.display = 'flex';
+    }
+    document.getElementById('combineBtn').addEventListener('click', showCombineModal);
+    document.getElementById('combineModalClose').addEventListener('click', () => {
+      document.getElementById('combineModal').style.display = 'none';
+    });
+    document.getElementById('combineModal').addEventListener('click', (e) => {
+      if (e.target.id === 'combineModal') e.currentTarget.style.display = 'none';
     });
     (function () {
       const chk = document.getElementById('logChk');

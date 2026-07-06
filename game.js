@@ -743,6 +743,79 @@ function splitUnit(u, selectedTypes) {
 }
 
 // ---------------------------------------------------------------------------
+// Unit combine — absorb subunits from a donor into a receiver, up to 25 total
+// ---------------------------------------------------------------------------
+function canCombineUnits(fill, material) {
+  if (!fill || !material || fill.id === material.id) return false;
+  if (fill.owner !== Game.turn || material.owner !== Game.turn) return false;
+  if (Game.winner !== null || inPlacement()) return false;
+  if (fill.r !== material.r || fill.c !== material.c) return false;
+  if (totalSubunits(fill) >= TEMPLATE_CELLS) return false;
+  return true;
+}
+
+function combineUnits(fill, material) {
+  if (!canCombineUnits(fill, material)) return 0;
+  const room = TEMPLATE_CELLS - totalSubunits(fill);
+  if (room <= 0) return 0;
+
+  const matHpRatio = material.hp / material.maxHp;
+  let taken = 0, takenMaxHp = 0;
+
+  for (const mp of material.parts) {
+    if (taken >= room) break;
+    const canTake = Math.min(mp.count, room - taken);
+    const existing = fill.parts.find((p) => p.type === mp.type);
+    if (existing) { existing.count += canTake; }
+    else { fill.parts.push({ type: mp.type, count: canTake, atk: mp.atk, hp: mp.hp, mov: mp.mov }); }
+    takenMaxHp += canTake * mp.hp;
+    mp.count -= canTake;
+    taken += canTake;
+  }
+  if (!taken) return 0;
+
+  material.parts = material.parts.filter((p) => p.count > 0);
+
+  // Recompute fill unit stats
+  let newMaxHp = 0, newMov = Infinity, best = -1, primary = fill.type;
+  for (const p of fill.parts) {
+    newMaxHp += p.count * p.hp;
+    newMov = Math.min(newMov, p.mov);
+    const score = p.count * 100 + PIECES[p.type].cost;
+    if (score > best) { best = score; primary = p.type; }
+  }
+  const hpGain = Math.max(1, Math.round(takenMaxHp * matHpRatio));
+  fill.maxHp = newMaxHp;
+  fill.hp = Math.min(fill.hp + hpGain, newMaxHp);
+  fill.mov = isFinite(newMov) ? newMov : 0;
+  fill.movesLeft = Math.min(fill.movesLeft, fill.mov);
+  fill.type = primary;
+
+  // Remove or shrink the material unit
+  if (!material.parts.length) {
+    removeFromStack(material);
+    Game.units = Game.units.filter((x) => x !== material);
+  } else {
+    let mMax = 0, mMov = Infinity, mBest = -1, mPrimary = material.type;
+    for (const p of material.parts) {
+      mMax += p.count * p.hp;
+      mMov = Math.min(mMov, p.mov);
+      const sc = p.count * 100 + PIECES[p.type].cost;
+      if (sc > mBest) { mBest = sc; mPrimary = p.type; }
+    }
+    material.maxHp = mMax;
+    material.hp = Math.max(1, Math.round(mMax * matHpRatio));
+    material.mov = isFinite(mMov) ? mMov : 0;
+    material.movesLeft = Math.min(material.movesLeft, material.mov);
+    material.type = mPrimary;
+  }
+
+  UI.log(`${PLAYERS[fill.owner].name} combined ${taken} subunit(s) from ${material.name || PIECES[material.type].name} into ${fill.name || PIECES[fill.type].name}.`);
+  persist();
+  return taken;
+}
+
+// ---------------------------------------------------------------------------
 function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); }
 
 // Recompute reachable tiles for the units in the current selection that can move.
@@ -1203,6 +1276,8 @@ window.refitUnitsTo = refitUnitsTo;
 window.canSplitUnit = canSplitUnit;
 window.splitUnit = splitUnit;
 window.totalSubunits = totalSubunits;
+window.canCombineUnits = canCombineUnits;
+window.combineUnits = combineUnits;
 window.selectTile = selectTile;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
