@@ -480,8 +480,7 @@ function canBuild(r, c, type) {
   if (Game.economy[Game.turn] < STRUCTURES[type].cost) return false;
   if (Game.terrain[r][c] === 'water') return false;
   if (structureAt(r, c)) return false;
-  const owner = Game.territory[r] ? Game.territory[r][c] : null;
-  return owner === Game.turn;
+  return true;
 }
 function buildStructure(r, c, type) {
   if (!canBuild(r, c, type)) return false;
@@ -875,10 +874,12 @@ function recomputeReachable() {
 // Inspect a tile: select its whole stack (subset can be unchecked in sidebar).
 function selectTile(r, c) {
   const s = stackAt(r, c);
-  if (!s.length) { clearSelection(); return; }
   Game.selTile = { r, c };
   Game.selUnits = s.slice();
-  recomputeReachable();
+  Game.reachable = s.length ? (function () {
+    const g = s.filter((u) => u.owner === Game.turn && u.movesLeft > 0);
+    return g.length ? Rules.reachable(Game.terrain, Game.unitAt, g) : new Map();
+  })() : new Map();
 }
 
 function setSelectAll(v) {

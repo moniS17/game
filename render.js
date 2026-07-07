@@ -103,41 +103,44 @@ window.Render = (function () {
     const placing = window.inPlacement && window.inPlacement();
 
     const territory = G.territory; // 2D grid of 0 | 1 | null (owning player per tile)
+    const gap = cell * 0.17;
+    const half = gap / 2;
+    const inner = cell - gap;
+
     for (let r = r0; r < r1; r++) {
       for (let c = c0; c < c1; c++) {
         const x = c * cell - cam.x, y = r * cell - cam.y;
         const tkey = G.terrain[r][c];
         const terr = TERRAIN[tkey];
+        const owner = territory && territory[r] ? territory[r][c] : null;
 
-        ctx.fillStyle = terr.color;
+        // Gap fill: territory colour (or neutral grey) behind the inset tile
+        if (owner === 0 || owner === 1) {
+          ctx.globalAlpha = 0.7;
+          ctx.fillStyle = PLAYERS[owner].color;
+        } else {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#555a60';
+        }
         ctx.fillRect(x, y, cell, cell);
+        ctx.globalAlpha = 1;
+
+        // Terrain content (inset by gap)
+        const tx = x + half, ty = y + half;
+        ctx.fillStyle = terr.color;
+        ctx.fillRect(tx, ty, inner, inner);
 
         if (detailed && images[tkey] && images[tkey].complete) {
-          const inset = cell * 0.085;
-          ctx.drawImage(images[tkey], x + inset, y + inset, cell * 0.83, cell * 0.83);
-        }
-
-        const owner = territory && territory[r] ? territory[r][c] : null;
-        if (owner === 0 || owner === 1) {
-          ctx.globalAlpha = 0.6;
-          ctx.strokeStyle = PLAYERS[owner].color;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(x, y, cell, cell);
-          ctx.globalAlpha = 1;
-          ctx.lineWidth = 1;
-        } else if (cell >= 14) {
-          ctx.strokeStyle = 'rgba(100,105,112,0.35)';
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(x, y, cell, cell);
-          ctx.lineWidth = 1;
+          const inset = inner * 0.085;
+          ctx.drawImage(images[tkey], tx + inset, ty + inset, inner * 0.83, inner * 0.83);
         }
       }
     }
 
-    // Front-line: thick highlight where opposing players' territories meet.
+    // Front-line: bright line filling the gap between opposing players' territories.
     if (territory) {
       ctx.save();
-      ctx.lineWidth = Math.max(2.5, cell * 0.1);
+      ctx.lineWidth = Math.max(2.5, gap);
       ctx.strokeStyle = '#ffffff';
       ctx.globalAlpha = 0.85;
       for (let r = r0; r < r1; r++) {
@@ -166,7 +169,7 @@ window.Render = (function () {
         for (let c = Math.max(c0, zc0); c < Math.min(c1, zc1); c++) {
           if (G.terrain[r][c] === 'water') continue;
           ctx.fillStyle = 'rgba(255,255,0,0.18)';
-          ctx.fillRect(c * cell - cam.x, r * cell - cam.y, cell, cell);
+          ctx.fillRect(c * cell - cam.x + half, r * cell - cam.y + half, inner, inner);
         }
       }
     }
@@ -175,10 +178,10 @@ window.Render = (function () {
     const sites = G.villages ? G.cities.concat(G.villages) : G.cities;
     for (const ci of sites) {
       if (ci.r < r0 || ci.r >= r1 || ci.c < c0 || ci.c >= c1) continue;
-      const x = ci.c * cell - cam.x, y = ci.r * cell - cam.y;
+      const x = ci.c * cell - cam.x + half, y = ci.r * cell - cam.y + half;
       ctx.strokeStyle = ci.owner == null ? '#9aa4ad' : PLAYERS[ci.owner].color;
-      ctx.lineWidth = Math.max(1.5, cell * 0.12);
-      ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
+      ctx.lineWidth = Math.max(1.5, inner * 0.12);
+      ctx.strokeRect(x + 1, y + 1, inner - 2, inner - 2);
       ctx.lineWidth = 1;
     }
 
@@ -188,9 +191,9 @@ window.Render = (function () {
         if (s.r < r0 || s.r >= r1 || s.c < c0 || s.c >= c1) continue;
         const img = images[s.type];
         if (!img || !img.complete) continue;
-        const sx = s.c * cell - cam.x, sy = s.r * cell - cam.y;
-        const iconSize = Math.max(6, cell * 0.38);
-        const ix = sx + cell - iconSize - 1, iy = sy + 1;
+        const sx = s.c * cell - cam.x + half, sy = s.r * cell - cam.y + half;
+        const iconSize = Math.max(6, inner * 0.38);
+        const ix = sx + inner - iconSize - 1, iy = sy + 1;
         ctx.globalAlpha = 0.7;
         ctx.fillStyle = PLAYERS[s.owner].color;
         ctx.fillRect(ix - 1, iy - 1, iconSize + 2, iconSize + 2);
@@ -204,7 +207,7 @@ window.Render = (function () {
       const [r, c] = k.split(',').map(Number);
       if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
       ctx.fillStyle = 'rgba(255,255,0,0.35)';
-      ctx.fillRect(c * cell - cam.x, r * cell - cam.y, cell, cell);
+      ctx.fillRect(c * cell - cam.x + half, r * cell - cam.y + half, inner, inner);
     }
 
     // one drawing per occupied tile (the stack), top unit + count badge
@@ -212,14 +215,15 @@ window.Render = (function () {
       if (!stack.length) continue;
       const [r, c] = k.split(',').map(Number);
       if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
-      drawStack(G, stack, r, c, cell, detailed);
+      drawStack(G, stack, r, c, cell, detailed, half, inner);
     }
 
     // outline the inspected tile and the chosen units' tile
     if (G.selTile) {
       const u = G.selTile;
+      const sx = u.c * cell - cam.x + half, sy = u.r * cell - cam.y + half;
       ctx.strokeStyle = '#ffeb3b'; ctx.lineWidth = 2;
-      ctx.strokeRect(u.c * cell - cam.x + 1, u.r * cell - cam.y + 1, cell - 2, cell - 2);
+      ctx.strokeRect(sx + 1, sy + 1, inner - 2, inner - 2);
       ctx.lineWidth = 1;
     }
   }
@@ -229,36 +233,35 @@ window.Render = (function () {
   function toSub(n) { return String(n).split('').map((d) => SUBS[+d]).join(''); }
 
   // Draw a tile's stack: the top unit's icon/code, plus a count badge when >1.
-  function drawStack(G, stack, r, c, cell, detailed) {
+  function drawStack(G, stack, r, c, cell, detailed, half, inner) {
     const u = stack[stack.length - 1]; // "top" of the stack is what shows
-    const x = c * cell - cam.x, y = r * cell - cam.y;
+    const x = c * cell - cam.x + half, y = r * cell - cam.y + half;
     const def = PIECES[u.type];
     const color = PLAYERS[u.owner].color;
 
     if (detailed && images[u.type] && images[u.type].complete) {
       ctx.globalAlpha = 0.6; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + inner / 2, y + inner / 2, inner * 0.35, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.7;
-      ctx.drawImage(images[u.type], x + cell * 0.225, y + cell * 0.225, cell * 0.55, cell * 0.55);
+      ctx.drawImage(images[u.type], x + inner * 0.225, y + inner * 0.225, inner * 0.55, inner * 0.55);
       ctx.globalAlpha = 1;
     } else {
       ctx.globalAlpha = 0.65; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + inner / 2, y + inner / 2, inner * 0.3, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
-      if (cell >= 9) {
+      if (inner >= 9) {
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.floor(cell * 0.495)}px monospace`;
+        ctx.font = `bold ${Math.floor(inner * 0.495)}px monospace`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        // letter + subscript count, e.g. "p₃"
         const label = stack.length > 1 ? def.code + toSub(stack.length) : def.code;
-        ctx.fillText(label, x + cell / 2, y + cell / 2 + 0.5);
+        ctx.fillText(label, x + inner / 2, y + inner / 2 + 0.5);
       }
     }
 
     // count badge (always legible, including on detailed icons)
-    if (stack.length > 1 && cell >= 12) {
-      const bs = Math.max(8, cell * 0.42);
-      const bx = x + cell - bs, by = y + cell - bs;
+    if (stack.length > 1 && inner >= 12) {
+      const bs = Math.max(8, inner * 0.42);
+      const bx = x + inner - bs, by = y + inner - bs;
       ctx.fillStyle = 'rgba(0,0,0,0.78)';
       ctx.fillRect(bx, by, bs, bs);
       ctx.fillStyle = '#ffeb3b';
@@ -268,8 +271,8 @@ window.Render = (function () {
     }
 
     // HP bar reflects the top unit
-    if (cell >= 14 && u.hp < u.maxHp) {
-      const bw = cell * 0.8, bx = x + cell * 0.1, by = y + cell * 0.06;
+    if (inner >= 14 && u.hp < u.maxHp) {
+      const bw = inner * 0.8, bx = x + inner * 0.1, by = y + inner * 0.06;
       ctx.fillStyle = '#000'; ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = '#4caf50'; ctx.fillRect(bx, by, bw * (u.hp / u.maxHp), 3);
     }

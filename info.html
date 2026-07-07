@@ -200,7 +200,7 @@
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b>, applied one unit at a time; a unit is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
       `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
       `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
-      `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a unit paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured borders</b> matching the player.</li>` +
+      `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a unit paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured gaps</b> between tiles matching the player.</li>` +
       `<li><b>Front-line</b>: where your territory borders the enemy's, a <b>bold white line</b> marks the confrontation — push it forward by advancing units.</li>` +
       `<li class="debuff">If a stack's <b>four orthogonal neighbours are all the enemy's colour</b> (surrounded), it takes <b>double damage</b> from that enemy in combat.</li>` +
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
@@ -226,7 +226,7 @@
 
     // --- Structures ---
     document.getElementById("structureRules").innerHTML =
-      `<li>Select a tile in your <b>territory</b> (not water, no existing structure) and click <b>Build</b> to place a structure.</li>` +
+      `<li>Select any tile (not water, no existing structure) and click <b>Build</b> to place a structure — whoever builds first owns it.</li>` +
       `<li><span class="name"><img class="swatch" src="assets/fort.svg" alt=""><b>Fort</b></span> — ${GOLD_ICON}${STRUCTURES.fort.cost}. Defenders on this tile take <span class="buff">${Math.round(STRUCTURES.fort.defense * 100)}% less damage</span>. Attackers initiating from a fort forfeit its protection (like terrain defense).</li>` +
       `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>Supply Hub</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}. Extends the <b>supply network</b> for healing and refit (village range: ${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>` +
       `<li>Structures can be <b>captured</b> when an enemy moves onto the tile — they then buff the new owner instead.</li>` +
