@@ -1032,7 +1032,9 @@ function compTemplate(name, comp) {
 
 // Greedily spend the AI's gold on UNLOCKED subunits, packaged into UNITS. Each
 // unit is a small single-type template (up to 4 subunits); types are cycled for
-// variety. Returns unit specs [{type, size}]. Mirrors the buy page's cost model.
+// variety. When the enemy fields tanks and cannon is unlocked, the AI spends
+// roughly half its budget on cannon units to counter them.
+// Returns unit specs [{type, size}]. Mirrors the buy page's cost model.
 function aiBuyUnits(me) {
   const roster = Object.keys(PIECES)
     .filter((t) => isUnlocked(me, t))
@@ -1041,6 +1043,23 @@ function aiBuyUnits(me) {
   const cheapest = PIECES[roster[0]].cost;
   const units = [];
   let budget = Game.economy[me];
+
+  // Counter-tanks: if enemy has tanks and cannon is unlocked, dedicate ~half
+  // budget to cannon units before spending the rest on variety.
+  const enemyTanks = aiEnemyHasTanks(me);
+  if (enemyTanks && isUnlocked(me, 'cannon')) {
+    const cannonCost = PIECES.cannon.cost;
+    const cannonBudget = Math.floor(budget / 2);
+    let spent = 0;
+    while (spent + cannonCost <= cannonBudget && units.length < 100) {
+      const size = Math.max(1, Math.min(4, Math.floor((cannonBudget - spent) / cannonCost / 2) || 1));
+      let n = 0;
+      while (n < size && spent + cannonCost <= cannonBudget) { spent += cannonCost; n++; }
+      units.push({ type: 'cannon', size: n });
+    }
+    budget -= spent;
+  }
+
   // Guard the loop so a runaway can never spin (budget strictly decreases).
   while (budget >= cheapest && units.length < 100) {
     const affordable = roster.filter((t) => PIECES[t].cost <= budget);
@@ -1056,45 +1075,69 @@ function aiBuyUnits(me) {
 }
 
 // The AI researches the cheapest still-locked subunit it can comfortably afford,
-// so over time it fields more than just infantry. Keeps a reserve for units.
+// so over time it fields more than just infantry. Prioritises cannon when enemy
+// has tanks. Keeps a reserve for units.
 function aiResearchTech(me) {
   if (typeof TECH === 'undefined') return;
+  // If enemy has tanks and cannon is still locked, rush cannon research.
+  if (aiEnemyHasTanks(me) && !isUnlocked(me, 'cannon')) {
+    if (Game.economy[me] >= TECH.cannon + PIECES.cannon.cost) { unlockType(me, 'cannon'); return; }
+  }
   const locked = Object.keys(TECH)
     .filter((t) => !isUnlocked(me, t))
     .sort((a, b) => TECH[a] - TECH[b]);
   for (const t of locked) {
-    // Only unlock if it still leaves some gold to actually build the new type.
     if (Game.economy[me] >= TECH[t] + PIECES[t].cost) { unlockType(me, t); break; }
   }
 }
 
+// Row of the nearest enemy tank to `me`'s home edge (for cannon deployment).
+function aiEnemyTankRow(me) {
+  let best = null, bestC = me === 1 ? -1 : COLS();
+  for (const u of Game.units) {
+    if (u.owner === me) continue;
+    if (!(u.parts || []).some((p) => p.type === 'tank' && p.count > 0)) continue;
+    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
+  }
+  return best;
+}
+
 // Deploy AI unit specs into `me`'s zone, one unit per tile-slot, filling tiles
-// closest to (threatRow, front column) first and spilling outward.
+// closest to (threatRow, front column) first and spilling outward. Cannon units
+// are deployed near enemy tanks when possible.
 function aiDeployUnits(me, specs) {
   if (!specs.length) return 0;
   const cols = COLS(), rows = ROWS(), zone = ZONE();
-  const frontCol = me === 1 ? cols - zone : zone - 1; // zone edge facing the enemy
+  const frontCol = me === 1 ? cols - zone : zone - 1;
   const targetRow = aiThreatRow(me);
+  const tankRow = aiEnemyTankRow(me);
 
-  // Candidate tiles in the zone, nearest the threat first (row distance, then
-  // depth back from the front). Skip water and enemy-held tiles.
-  const cands = [];
-  for (let c = 0; c < cols; c++) {
-    if (!inZone(me, c)) continue;
-    for (let r = 0; r < rows; r++) {
-      if (Game.terrain[r][c] === 'water') continue;
-      const s = stackAt(r, c);
-      if (s.length && s[0].owner !== me) continue;
-      cands.push({ r, c, d: Math.abs(r - targetRow) * 2 + Math.abs(c - frontCol) });
+  // Build candidate list for a given target row.
+  function buildCands(tRow) {
+    const cands = [];
+    for (let c = 0; c < cols; c++) {
+      if (!inZone(me, c)) continue;
+      for (let r = 0; r < rows; r++) {
+        if (Game.terrain[r][c] === 'water') continue;
+        const s = stackAt(r, c);
+        if (s.length && s[0].owner !== me) continue;
+        cands.push({ r, c, d: Math.abs(r - tRow) * 2 + Math.abs(c - frontCol) });
+      }
     }
+    cands.sort((a, b) => a.d - b.d);
+    return cands;
   }
-  cands.sort((a, b) => a.d - b.d);
+
+  const defaultCands = buildCands(targetRow);
+  const cannonCands = tankRow != null ? buildCands(tankRow) : defaultCands;
 
   let placed = 0;
   for (const spec of specs) {
     if (!spec.size) continue;
-    const dest = cands.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
-    if (!dest) break; // zone full — refund the rest
+    const pool = spec.type === 'cannon' ? cannonCands : defaultCands;
+    const dest = pool.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT)
+              || defaultCands.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
+    if (!dest) break;
     const tmpl = compTemplate(PIECES[spec.type].name, { [spec.type]: spec.size });
     const u = makeUnitFromTemplate(me, tmpl, dest.r, dest.c, { acted: true, movesLeft: 0 });
     if (!u) continue;
@@ -1120,6 +1163,24 @@ function aiSpendAndReinforce(me) {
   }
 }
 
+// Is (r,c) within supply range for `owner`? (cities, villages, supply hubs)
+function aiInSupplyRange(r, c, owner) {
+  const range = REGEN.heavyRange; // use heavy range (largest) for conservative check
+  const supplyHubs = Game.structures.filter((s) => s.type === 'supply');
+  return nearOwnedSite(r, c, Game.cities, owner, range.city) ||
+         nearOwnedSite(r, c, Game.villages, owner, range.village) ||
+         nearOwnedSite(r, c, supplyHubs, owner, range.village);
+}
+
+// Does the enemy field any tanks? Used to prioritise cannon purchases.
+function aiEnemyHasTanks(me) {
+  for (const u of Game.units) {
+    if (u.owner === me) continue;
+    if ((u.parts || []).some((p) => p.type === 'tank' && p.count > 0)) return true;
+  }
+  return false;
+}
+
 function runAiTurn() {
   const me = Game.aiPlayer;
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
@@ -1130,20 +1191,34 @@ function runAiTurn() {
     let [r, c] = k0.split(',').map(Number);
     let group = stackAt(r, c).filter((u) => u.owner === me);
     if (!group.length) continue;
+
+    // Healing: if the group's average HP is below 50% and currently in supply
+    // range, skip movement this turn so they rest and heal next turn.
+    const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
+    if (avgHpRatio < 0.5 && aiInSupplyRange(r, c, me)) continue;
+
     let enemy = nearestEnemyTile(r, c, me);
     if (!enemy) break;
 
     if (Math.abs(enemy.r - r) + Math.abs(enemy.c - c) !== 1) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+
+      // If damaged (below 70%), prefer a reachable tile that is still in supply
+      // range while also closer to the enemy — retreat toward supply if needed.
+      const wounded = avgHpRatio < 0.7;
       let target = null, bestD = Math.abs(r - enemy.r) + Math.abs(c - enemy.c);
+      let targetSupply = null, bestSD = Infinity;
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
         const d = Math.abs(rr - enemy.r) + Math.abs(cc - enemy.c);
         if (d < bestD) { bestD = d; target = [rr, cc]; }
+        if (wounded && aiInSupplyRange(rr, cc, me) && d < bestSD) { bestSD = d; targetSupply = [rr, cc]; }
       }
-      if (target) {
-        moveGroup(group, target[0], target[1]);
-        r = target[0]; c = target[1];
+      // Wounded units move toward enemy but prefer staying in supply range.
+      const chosen = (wounded && targetSupply) ? targetSupply : target;
+      if (chosen) {
+        moveGroup(group, chosen[0], chosen[1]);
+        r = chosen[0]; c = chosen[1];
         group = stackAt(r, c).filter((u) => u.owner === me);
         enemy = nearestEnemyTile(r, c, me);
       }
@@ -1157,7 +1232,6 @@ function runAiTurn() {
   persist();
   UI.refresh();
   Render.render();
-  // Show what the enemy did this turn as a pop-up (if the Combat log is on).
   if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
   advanceTo(1 - me); // hand control back to the human
 }
