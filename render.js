@@ -21,6 +21,7 @@ window.Render = (function () {
   function preload() {
     const sources = { plains: 'assets/grass.svg', city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
     for (const k in PIECES) if (PIECES[k].art) sources[k] = PIECES[k].art;
+    if (typeof STRUCTURES !== 'undefined') for (const k in STRUCTURES) if (STRUCTURES[k].art) sources[k] = STRUCTURES[k].art;
     for (const k in sources) {
       const img = new Image();
       img.onload = render;
@@ -112,7 +113,8 @@ window.Render = (function () {
         ctx.fillRect(x, y, cell, cell);
 
         if (detailed && images[tkey] && images[tkey].complete) {
-          ctx.drawImage(images[tkey], x, y, cell, cell);
+          const inset = cell * 0.085;
+          ctx.drawImage(images[tkey], x + inset, y + inset, cell * 0.83, cell * 0.83);
         }
 
         const owner = territory && territory[r] ? territory[r][c] : null;
@@ -178,6 +180,23 @@ window.Render = (function () {
       ctx.lineWidth = Math.max(1.5, cell * 0.12);
       ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2);
       ctx.lineWidth = 1;
+    }
+
+    // Built structures (fort / supply hub) — icon in top-right corner
+    if (G.structures && cell >= 10) {
+      for (const s of G.structures) {
+        if (s.r < r0 || s.r >= r1 || s.c < c0 || s.c >= c1) continue;
+        const img = images[s.type];
+        if (!img || !img.complete) continue;
+        const sx = s.c * cell - cam.x, sy = s.r * cell - cam.y;
+        const iconSize = Math.max(6, cell * 0.38);
+        const ix = sx + cell - iconSize - 1, iy = sy + 1;
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = PLAYERS[s.owner].color;
+        ctx.fillRect(ix - 1, iy - 1, iconSize + 2, iconSize + 2);
+        ctx.globalAlpha = 1;
+        ctx.drawImage(img, ix, iy, iconSize, iconSize);
+      }
     }
 
     // reachable highlight for the selected group

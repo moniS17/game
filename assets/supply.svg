@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Supply hub: train station with platform and roof -->
+  <rect x="6" y="44" width="52" height="14" rx="2" fill="#8d6e4a"/>
+  <polygon points="2,38 32,20 62,38" fill="#c49a5c"/>
+  <rect x="4" y="36" width="56" height="6" rx="1" fill="#a07850"/>
+  <rect x="18" y="42" width="8" height="8" fill="#f0d9a8"/>
+  <rect x="38" y="42" width="8" height="8" fill="#f0d9a8"/>
+  <rect x="28" y="42" width="8" height="10" fill="#6b4c2a"/>
+</svg>

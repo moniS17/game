@@ -95,6 +95,11 @@
       <ul id="actionRules"></ul>
     </div>
 
+    <h2>Structures</h2>
+    <div class="panel">
+      <ul id="structureRules"></ul>
+    </div>
+
     <div class="bar">
       <a class="battle" href="index.html">⬅ Return to battle</a>
       <a class="menu" href="menu.html">Main menu</a>
@@ -115,13 +120,13 @@
       `<li>Each player earns gold at the start of every round: <b>${ECONOMY.base_income}</b> base income, no matter what.</li>` +
       `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
       `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
-      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
-      `<li>Standing on a <b>village</b> gives <span class="buff">${Math.round(TERRAIN.village.defense * 100)}% defense when defending</span> (being attacked) but <span class="debuff">−${Math.round(TERRAIN.village.attack_penalty * 100)}% attack</span>. Initiating combat forfeits the defense bonus.</li>`;
+      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>`;
 
     // --- Healing & supply ---
     document.getElementById("healRules").innerHTML =
       `<li><b>Resting heals</b>: a unit that <b>does not move</b> on its turn recovers HP at the start of its next one. Within supply range of an <b>owned city</b> (${REGEN.range.city} tiles) or <b>village</b> (${REGEN.range.village} tile), it regains <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> of max HP.</li>` +
-      `<li><b>Motorized</b> subunits self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>`;
+      `<li><b>Motorized</b> subunits self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>` +
+      `<li>A built <b>Supply Hub</b> also provides supply at village range (${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>`;
 
     // --- Units table ---
     const ut = document.getElementById("unitTable");
@@ -129,7 +134,7 @@
       infantry: "Cheap frontline body; storms cannon, holds cities & forest.",
       motorized: "Truck-borne troops: fast, outmaneuvers cavalry & cannon.",
       cavalry: "Fast flanker, hard hitter.",
-      cannon: "Siege gun: heavy, slow, batters villages; counters tanks.",
+      cannon: "Siege gun: fragile but devastating; hard-counters tanks.",
       tank: "Heavy: high HP + ATK; crushes infantry, priciest.",
     };
     for (const k in PIECES) {
@@ -218,6 +223,14 @@
       `<li><b>Refit</b>: swap a deployed unit to a different template. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new template and the <b>current value of the unit</b> — <span class="debuff">damaged units are worth less</span> (proportional to remaining HP), so refitting a battered unit costs more.</li>` +
       `<li><b>Split</b>: break individual subunits off a deployed unit into separate 1-subunit units on the same tile. The original unit keeps its remaining subunits. Requires at least 2 subunits and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off units inherit the parent's HP ratio and cannot act until the next turn.</li>` +
       `<li><b>Combine</b>: merge subunits from one unit (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs subunits up to the 25-subunit template cap. If the donor is fully absorbed it is removed from the board.</li>`;
+
+    // --- Structures ---
+    document.getElementById("structureRules").innerHTML =
+      `<li>Select a tile in your <b>territory</b> (not water, no existing structure) and click <b>Build</b> to place a structure.</li>` +
+      `<li><span class="name"><img class="swatch" src="assets/fort.svg" alt=""><b>Fort</b></span> — ${GOLD_ICON}${STRUCTURES.fort.cost}. Defenders on this tile take <span class="buff">${Math.round(STRUCTURES.fort.defense * 100)}% less damage</span>. Attackers initiating from a fort forfeit its protection (like terrain defense).</li>` +
+      `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>Supply Hub</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}. Extends the <b>supply network</b> for healing and refit (village range: ${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>` +
+      `<li>Structures can be <b>captured</b> when an enemy moves onto the tile — they then buff the new owner instead.</li>` +
+      `<li>The structure icon appears in the <b>top-right corner</b> of the tile, tinted with the owner's colour.</li>`;
   </script>
 </body>
 </html>

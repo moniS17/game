@@ -154,6 +154,7 @@
       <button id="combineBtn" class="ghost small" style="display:none; margin-bottom:8px;">⊕ Combine</button>
       <div id="selInfo" class="muted">Click a tile to select its units.</div>
       <button id="refitBtn" class="ghost" style="display:none; margin-top:8px;">&#9881; Refit</button>
+      <button id="buildBtn" class="ghost" style="display:none; margin-top:8px;">🏗 Build</button>
     </div>
 
     <div class="panel">
@@ -229,6 +230,16 @@
       <p class="hint" style="margin:6px 0 2px;">Fill a unit with subunits from another, up to 25 total.</p>
       <div id="combineModalBody"></div>
       <button id="combineModalClose" class="ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Build modal: place a fort or supply hub on the selected tile. -->
+  <div id="buildModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Build structure</h2>
+      <p class="hint" style="margin:6px 0 2px;">Place a structure on the selected tile (must be in your territory, not water).</p>
+      <div id="buildModalBody"></div>
+      <button id="buildModalClose" class="ghost">Cancel</button>
     </div>
   </div>
 
@@ -491,6 +502,15 @@
           refitBtn.style.display = showRefit ? '' : 'none';
         }
 
+        const buildBtn = document.getElementById('buildBtn');
+        if (buildBtn) {
+          const showBuild = Game.winner === null &&
+            !(window.inPlacement && window.inPlacement()) &&
+            Game.selTile &&
+            Object.keys(STRUCTURES).some((t) => window.canBuild && window.canBuild(Game.selTile.r, Game.selTile.c, t));
+          buildBtn.style.display = showBuild ? '' : 'none';
+        }
+
         const combineBtn = document.getElementById('combineBtn');
         if (combineBtn) {
           const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
@@ -566,7 +586,10 @@
         const s = templateStats(Game.turn, tmpl);
         const newCost = templateCost(Game.turn, tmpl);
         let totalDiff = 0;
-        for (const u of canRefit) totalDiff += newCost - unitCostFromParts(u);
+        for (const u of canRefit) {
+          const hpRatio = u.hp / u.maxHp;
+          totalDiff += newCost - Math.round(unitCostFromParts(u) * hpRatio);
+        }
         const affordable = totalDiff <= 0 || Game.economy[Game.turn] >= totalDiff;
         const compStr = (s.parts || []).map((p) => `${PIECES[p.type].name} ×${p.count}`).join(', ');
         let costHtml;
@@ -598,6 +621,39 @@
     });
     document.getElementById('refitModal').addEventListener('click', (e) => {
       if (e.target.id === 'refitModal') e.currentTarget.style.display = 'none';
+    });
+
+    // Build modal: place a fort or supply hub on the selected tile.
+    function showBuildModal() {
+      const tile = Game.selTile;
+      if (!tile) return;
+      const body = document.getElementById('buildModalBody');
+      let rows = '';
+      for (const k in STRUCTURES) {
+        const s = STRUCTURES[k];
+        const ok = window.canBuild(tile.r, tile.c, k);
+        const desc = k === 'fort' ? `−${Math.round(s.defense * 100)}% incoming damage to defenders`
+          : 'Extends supply range for healing &amp; refit';
+        rows += `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 0; border-bottom:1px solid #333;">` +
+          `<div><b>${s.name}</b> — ${GOLD_ICON}${s.cost}<br><span class="muted" style="font-size:.8rem;">${desc}</span></div>` +
+          `<button class="small" data-stype="${k}" ${ok ? '' : 'disabled'}>Build</button></div>`;
+      }
+      body.innerHTML = rows;
+      body.querySelectorAll('button[data-stype]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          window.buildStructure(tile.r, tile.c, btn.dataset.stype);
+          document.getElementById('buildModal').style.display = 'none';
+          UI.refresh(); Render.render();
+        });
+      });
+      document.getElementById('buildModal').style.display = 'flex';
+    }
+    document.getElementById('buildBtn').addEventListener('click', showBuildModal);
+    document.getElementById('buildModalClose').addEventListener('click', () => {
+      document.getElementById('buildModal').style.display = 'none';
+    });
+    document.getElementById('buildModal').addEventListener('click', (e) => {
+      if (e.target.id === 'buildModal') e.currentTarget.style.display = 'none';
     });
 
     // Combine modal: pick a fill unit and a material unit, then merge subunits.

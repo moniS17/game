@@ -35,6 +35,7 @@ const Game = {
   terrain: [],
   cities: [],           // [{r, c, owner}]  owner: 0 | 1 | null (neutral)
   villages: [],         // [{r, c, owner}]  capturable; each pays 50% of a city
+  structures: [],       // [{type, r, c, owner}]  fort / supply hub — built by players
   units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
   territory: [],        // ROWS×COLS grid of 0 | 1 | null — which player owns each tile's colour
@@ -300,6 +301,7 @@ function serialize() {
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
+    structures: Game.structures.map((s) => ({ type: s.type, r: s.r, c: s.c, owner: s.owner })),
     territory: serializeTerritory(),
     units: Game.units.map((u) => ({
       id: u.id, owner: u.owner, r: u.r, c: u.c,
@@ -362,7 +364,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     economy: [ECONOMY.start, ECONOMY.start],
     territory: buildInitialTerritory(Board.ROWS, Board.COLS)
       .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
-    cities, villages: villages || [], units, toPlace: [], upgrades: [{}, {}],
+    cities, villages: villages || [], structures: [], units, toPlace: [], upgrades: [{}, {}],
     unlocked: [{ infantry: true }, { infantry: true }],
     ecoUpgrades: [{}, {}],
     templates, pendingSpawns: [],
@@ -423,6 +425,7 @@ function loadIntoGame(st) {
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
   Game.villages = (st.villages || []).map((v) => ({ ...v }));
+  Game.structures = (st.structures || []).map((s) => ({ ...s }));
   Game.units = (st.units || []).map(migrateUnit);
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
   Game.ecoUpgrades = [ { ...(st.ecoUpgrades && st.ecoUpgrades[0]) }, { ...(st.ecoUpgrades && st.ecoUpgrades[1]) } ];
@@ -467,6 +470,35 @@ function captureIfCity(r, c, owner) {
   }
 }
 
+// --- Structures (fort / supply hub) ------------------------------------------
+function structureAt(r, c) {
+  return Game.structures.find((s) => s.r === r && s.c === c) || null;
+}
+function canBuild(r, c, type) {
+  if (Game.winner !== null || inPlacement()) return false;
+  if (!STRUCTURES[type]) return false;
+  if (Game.economy[Game.turn] < STRUCTURES[type].cost) return false;
+  if (Game.terrain[r][c] === 'water') return false;
+  if (structureAt(r, c)) return false;
+  const owner = Game.territory[r] ? Game.territory[r][c] : null;
+  return owner === Game.turn;
+}
+function buildStructure(r, c, type) {
+  if (!canBuild(r, c, type)) return false;
+  Game.economy[Game.turn] -= STRUCTURES[type].cost;
+  Game.structures.push({ type, r, c, owner: Game.turn });
+  UI.log(`${PLAYERS[Game.turn].name} built a ${STRUCTURES[type].name} at r${r}, c${c}.`);
+  persist();
+  return true;
+}
+function captureIfStructure(r, c, owner) {
+  const s = structureAt(r, c);
+  if (s && s.owner !== owner) {
+    s.owner = owner;
+    UI.log(`${PLAYERS[owner].name} captured a ${STRUCTURES[s.type].name} at r${r}, c${c}.`);
+  }
+}
+
 // --- HP regeneration --------------------------------------------------------
 // A unit that did NOT move on its turn recovers HP at the start of its next one.
 // Motorized subunits self-repair anywhere (scaled by their share of the unit);
@@ -497,8 +529,10 @@ function regenAmount(u) {
   const mot = subunitShare(u, 'motorized');
   if (mot > 0) frac += mot * REGEN.motor;
   const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
+  const supplyHubs = Game.structures.filter((s) => s.type === 'supply');
   if (nearOwnedSite(u.r, u.c, Game.cities, u.owner, range.city) ||
-      nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village)) {
+      nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village) ||
+      nearOwnedSite(u.r, u.c, supplyHubs, u.owner, range.village)) {
     frac += REGEN.supply;
   }
   if (frac <= 0) return 0;
@@ -569,8 +603,15 @@ function doAttack(attackers, tr, tc) {
   const acting = attackers.filter((u) => !u.acted && u.owner === Game.turn);
   if (!acting.length) { UI.log('Those units have already attacked.'); return; }
 
-  const { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded } =
+  let { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded } =
     Rules.resolveCombat(Game.terrain, acting, defenders, Game.territory);
+
+  // Fort defense: defender's owned fort reduces incoming damage
+  const defFort = structureAt(tr, tc);
+  if (defFort && defFort.type === 'fort' && defFort.owner === defenders[0].owner) {
+    dmgToDef = Math.max(1, Math.round(dmgToDef * (1 - STRUCTURES.fort.defense)));
+  }
+
   const aTerr = Game.terrain[acting[0].r][acting[0].c];  // attackers' own tile (before casualties)
   const defKilled = applyDamage(defenders, dmgToDef);  // acting array preserved
   const atkKilled = applyDamage(acting, dmgToAtk);     // shifts dead off `acting`
@@ -589,6 +630,8 @@ function doAttack(attackers, tr, tc) {
     if (m !== 1) mods.push(`${PIECES[u.type].name} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
   }
   const terrainNote = mods.length ? ` [${TERRAIN[aTerr].name}: ${mods.join(', ')}]` : '';
+  const fortNote = (defFort && defFort.type === 'fort' && defFort.owner === defenders[0].owner)
+    ? ` [Fort: −${Math.round(STRUCTURES.fort.defense * 100)}% dmg]` : '';
   // Surrounded-territory double-damage notes.
   let surrNote = '';
   if (defSurrounded) surrNote += ` [${PLAYERS[foe].name} surrounded: ×2 taken]`;
@@ -596,7 +639,7 @@ function doAttack(attackers, tr, tc) {
 
   UI.log(`${PLAYERS[Game.turn].name} (${acting.length + atkKilled}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back). ` +
-    `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}${surrNote}`);
+    `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}${fortNote}${surrNote}`);
   checkWinner();
 }
 
@@ -635,8 +678,10 @@ function canRefitUnit(u) {
   const enemy = 1 - u.owner;
   if (Rules.surroundedBy(Game.territory, u.r, u.c, enemy)) return false;
   const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
+  const supplyHubs = Game.structures.filter((s) => s.type === 'supply');
   return nearOwnedSite(u.r, u.c, Game.cities, u.owner, range.city) ||
-         nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village);
+         nearOwnedSite(u.r, u.c, Game.villages, u.owner, range.village) ||
+         nearOwnedSite(u.r, u.c, supplyHubs, u.owner, range.village);
 }
 
 function unitCostFromParts(u) {
@@ -892,6 +937,7 @@ function moveGroup(group, r, c) {
     addToStack(u);
   }
   captureIfCity(r, c, owner);
+  captureIfStructure(r, c, owner);
   return true;
 }
 
@@ -1276,6 +1322,9 @@ window.templateSize = templateSize;
 window.canRefitUnit = canRefitUnit;
 window.unitCostFromParts = unitCostFromParts;
 window.refitUnitsTo = refitUnitsTo;
+window.canBuild = canBuild;
+window.buildStructure = buildStructure;
+window.structureAt = structureAt;
 window.canSplitUnit = canSplitUnit;
 window.splitUnit = splitUnit;
 window.totalSubunits = totalSubunits;

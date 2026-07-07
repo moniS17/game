@@ -42,7 +42,7 @@ window.PIECES = {
   cannon: {
     // Siege gun: heavy hitter, slow.
     name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
-    hp: 20, attack: 10, movement_speed: 3, cost: 40,
+    hp: 10, attack: 30, movement_speed: 3, cost: 40,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
@@ -85,6 +85,7 @@ window.UNIT_COMBAT = {
   tank:      { infantry: 1.2, cavalry: 1.1, cannon: 0.8 },
   infantry:  { motorized: 0.8, cavalry: 0.9, cannon: 1.2 },
   motorized: { cavalry: 1.1, cannon: 1.1 },
+  cannon:    { tank: 1.4 },
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
@@ -148,3 +149,11 @@ window.TECH = {
 // Sized in `em` so it scales with the surrounding text.
 window.GOLD_ICON = '<img src="assets/gold.svg" alt="gold" class="gold-coin" ' +
   'style="width:1em;height:1em;vertical-align:-0.15em;">';
+
+// Buildable structures — placed on tiles by players, captured on enemy movement.
+// Fort: reduces incoming damage to the defender by `defense` fraction.
+// Supply hub: extends the supply network for healing / refit (village-range).
+window.STRUCTURES = {
+  fort:   { name: 'Fort',       cost: 1,  defense: 0.1, art: 'assets/fort.svg' },
+  supply: { name: 'Supply Hub', cost: 10, art: 'assets/supply.svg' },
+};
