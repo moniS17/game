@@ -1271,8 +1271,8 @@ function handleTapAt(r, c) {
     }
   }
 
-  // Otherwise inspect the tapped tile.
-  if (tileStack.length) selectTile(r, c); else clearSelection();
+  // Otherwise inspect the tapped tile (even empty ones, for building).
+  selectTile(r, c);
   UI.refresh(); Render.render();
 }
 

@@ -19,7 +19,7 @@ window.Render = (function () {
   // Preload SVG art so it can be drawn when zoomed in.
   const images = {};
   function preload() {
-    const sources = { plains: 'assets/grass.svg', city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
+    const sources = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
     for (const k in PIECES) if (PIECES[k].art) sources[k] = PIECES[k].art;
     if (typeof STRUCTURES !== 'undefined') for (const k in STRUCTURES) if (STRUCTURES[k].art) sources[k] = STRUCTURES[k].art;
     for (const k in sources) {
@@ -120,7 +120,7 @@ window.Render = (function () {
           ctx.fillStyle = PLAYERS[owner].color;
         } else {
           ctx.globalAlpha = 1;
-          ctx.fillStyle = '#555a60';
+          ctx.fillStyle = '#8a9099';
         }
         ctx.fillRect(x, y, cell, cell);
         ctx.globalAlpha = 1;
@@ -141,7 +141,7 @@ window.Render = (function () {
     if (territory) {
       ctx.save();
       ctx.lineWidth = Math.max(2.5, gap);
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = '#3a3f45';
       ctx.globalAlpha = 0.85;
       for (let r = r0; r < r1; r++) {
         for (let c = c0; c < c1; c++) {

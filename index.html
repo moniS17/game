@@ -237,7 +237,7 @@
   <div id="buildModal" class="modal-overlay" style="display:none">
     <div class="modal-box">
       <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Build structure</h2>
-      <p class="hint" style="margin:6px 0 2px;">Place a structure on the selected tile (must be in your territory, not water).</p>
+      <p class="hint" style="margin:6px 0 2px;">Place a structure on the selected tile (not water, no existing structure).</p>
       <div id="buildModalBody"></div>
       <button id="buildModalClose" class="ghost">Cancel</button>
     </div>
@@ -431,7 +431,7 @@
         // economy sign reflects the player whose turn it is
         const econ = document.getElementById('econ');
         econ.textContent = Game.economy[Game.turn];
-        econ.parentElement.style.color = p.color === '#1e88e5' ? '#5aa9ff' : '#ff7a76';
+        econ.parentElement.style.color = p.color === '#00acc1' ? '#4dd0e1' : '#ff7a76';
 
         // creative-mode cheat button (only when the game is in creative mode)
         document.getElementById('creativeBtn').style.display = Game.creative ? '' : 'none';

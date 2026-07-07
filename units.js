@@ -89,7 +89,7 @@ window.UNIT_COMBAT = {
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
-window.PLAYERS = [  { name: 'Blue', side: 'left',  color: '#1e88e5' },
+window.PLAYERS = [  { name: 'Blue', side: 'left',  color: '#00acc1' },
   { name: 'Red',  side: 'right', color: '#e53935' },
 ];
 
