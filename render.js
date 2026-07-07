@@ -115,24 +115,18 @@ window.Render = (function () {
           ctx.drawImage(images[tkey], x, y, cell, cell);
         }
 
-        // Territory tint: tiles claimed by a player are washed in that player's
-        // colour (deployment zones start claimed; movement paints more — game.js).
         const owner = territory && territory[r] ? territory[r][c] : null;
         if (owner === 0 || owner === 1) {
-          ctx.globalAlpha = 0.45; ctx.fillStyle = PLAYERS[owner].color;
-          ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1;
-        }
-
-        if (cell >= 14) {
-          if (owner === 0 || owner === 1) {
-            ctx.globalAlpha = 0.5;
-            ctx.strokeStyle = PLAYERS[owner].color;
-          } else {
-            ctx.strokeStyle = 'rgba(100,105,112,0.35)';
-          }
-          ctx.lineWidth = 1.3;
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = PLAYERS[owner].color;
+          ctx.lineWidth = 1.5;
           ctx.strokeRect(x, y, cell, cell);
           ctx.globalAlpha = 1;
+          ctx.lineWidth = 1;
+        } else if (cell >= 14) {
+          ctx.strokeStyle = 'rgba(100,105,112,0.35)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x, y, cell, cell);
           ctx.lineWidth = 1;
         }
       }

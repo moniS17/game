@@ -653,7 +653,10 @@ function refitUnitsTo(tmplId) {
   if (!eligible.length) return 0;
   const newCost = templateCost(Game.turn, tmpl);
   let totalDiff = 0;
-  for (const u of eligible) totalDiff += newCost - unitCostFromParts(u);
+  for (const u of eligible) {
+    const hpRatio = u.hp / u.maxHp;
+    totalDiff += newCost - Math.round(unitCostFromParts(u) * hpRatio);
+  }
   if (totalDiff > 0 && Game.economy[Game.turn] < totalDiff) return 0;
   const s = templateStats(Game.turn, tmpl);
   Game.economy[Game.turn] -= totalDiff;
