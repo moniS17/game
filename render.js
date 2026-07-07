@@ -202,12 +202,71 @@ window.Render = (function () {
       }
     }
 
-    // reachable highlight for the selected group
-    for (const k of G.reachable.keys()) {
-      const [r, c] = k.split(',').map(Number);
-      if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
-      ctx.fillStyle = 'rgba(255,255,0,0.35)';
-      ctx.fillRect(c * cell - cam.x + half, r * cell - cam.y + half, inner, inner);
+    // reachable highlight for the selected group (dimmed when a preview path is active)
+    if (G.previewPath) {
+      for (const k of G.reachable.keys()) {
+        const [r, c] = k.split(',').map(Number);
+        if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
+        ctx.fillStyle = 'rgba(255,255,0,0.12)';
+        ctx.fillRect(c * cell - cam.x + half, r * cell - cam.y + half, inner, inner);
+      }
+    } else {
+      for (const k of G.reachable.keys()) {
+        const [r, c] = k.split(',').map(Number);
+        if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
+        ctx.fillStyle = 'rgba(255,255,0,0.35)';
+        ctx.fillRect(c * cell - cam.x + half, r * cell - cam.y + half, inner, inner);
+      }
+    }
+
+    // Path preview: highlight path tiles and draw directional arrows
+    if (G.previewPath && G.previewPath.length > 1) {
+      const path = G.previewPath;
+      // Highlight path tiles in green
+      for (const p of path) {
+        if (p.r < r0 || p.r >= r1 || p.c < c0 || p.c >= c1) continue;
+        ctx.fillStyle = 'rgba(76,175,80,0.45)';
+        ctx.fillRect(p.c * cell - cam.x + half, p.r * cell - cam.y + half, inner, inner);
+      }
+      // Draw arrows between consecutive tiles
+      ctx.save();
+      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = '#fff';
+      ctx.lineWidth = Math.max(2, cell * 0.08);
+      ctx.lineCap = 'round';
+      const mid = inner / 2;
+      const arrowLen = inner * 0.22;
+      for (let i = 0; i < path.length - 1; i++) {
+        const from = path[i], to = path[i + 1];
+        const fx = from.c * cell - cam.x + half + mid;
+        const fy = from.r * cell - cam.y + half + mid;
+        const tx = to.c * cell - cam.x + half + mid;
+        const ty = to.r * cell - cam.y + half + mid;
+        // Line segment
+        ctx.beginPath();
+        ctx.moveTo(fx, fy);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+        // Arrowhead at destination
+        const dx = tx - fx, dy = ty - fy;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(tx - ux * arrowLen - uy * arrowLen * 0.5, ty - uy * arrowLen + ux * arrowLen * 0.5);
+        ctx.lineTo(tx - ux * arrowLen + uy * arrowLen * 0.5, ty - uy * arrowLen - ux * arrowLen * 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Mark destination with a bright outline
+      const dest = path[path.length - 1];
+      if (dest.r >= r0 && dest.r < r1 && dest.c >= c0 && dest.c < c1) {
+        ctx.strokeStyle = '#4caf50';
+        ctx.lineWidth = Math.max(2, cell * 0.1);
+        const dx = dest.c * cell - cam.x + half, dy = dest.r * cell - cam.y + half;
+        ctx.strokeRect(dx + 1, dy + 1, inner - 2, inner - 2);
+      }
+      ctx.restore();
     }
 
     // one drawing per occupied tile (the stack), top unit + count badge

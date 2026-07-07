@@ -61,6 +61,10 @@ const Game = {
   noUnitTurns: [0, 0],
   noCityTurns: [0, 0],
   winner: null,
+  // Path preview: set when a player clicks a reachable tile before confirming.
+  previewPath: null,    // [{r,c}] from start to dest (inclusive), or null
+  previewDest: null,    // {r,c} destination tile
+  previewGroup: null,   // units that will move
 };
 let nextId = 1;
 // Consecutive eliminated turns a side must endure before it loses (see checkWinner).
@@ -253,11 +257,13 @@ function deserializeTerritory(rows, cols, data) {
 // reconstructed by walking back through the reachable-budget map used for the
 // move (`Game.reachable`). Robust: if a predecessor can't be resolved it stops
 // early, but the destination is always claimed by moveGroup.
-function claimPath(owner, sr, sc, dr, dc, startBudget) {
+// Reconstruct the shortest path from (sr,sc) to (dr,dc) using the reachable
+// budget map. Returns an array of {r,c} from start to dest (inclusive).
+function getPath(sr, sc, dr, dc, startBudget) {
   const reach = Game.reachable;
   const k = (r, c) => r + ',' + c;
+  const path = [{ r: dr, c: dc }];
   let cr = dr, cc = dc, guard = 0;
-  claimTile(cr, cc, owner);
   while (!(cr === sr && cc === sc) && guard++ < 100000) {
     const cur = reach.has(k(cr, cc)) ? reach.get(k(cr, cc)) : startBudget;
     const cost = TERRAIN[Game.terrain[cr][cc]].move_cost;
@@ -273,8 +279,47 @@ function claimPath(owner, sr, sc, dr, dc, startBudget) {
     }
     if (!prev) break;
     cr = prev[0]; cc = prev[1];
-    claimTile(cr, cc, owner);
+    path.push({ r: cr, c: cc });
   }
+  path.reverse();
+  return path;
+}
+
+// Find ALL distinct shortest paths from (sr,sc) to (dr,dc). Each path is an
+// array of {r,c} from start to dest. Explores every valid predecessor at each
+// step in the budget map, branching into separate paths.
+function findAllPaths(sr, sc, dr, dc, startBudget) {
+  const reach = Game.reachable;
+  const k = (r, c) => r + ',' + c;
+  // Work backwards from dest; each partial is [currentR, currentC, reversedPathSoFar].
+  let partials = [[dr, dc, [{ r: dr, c: dc }]]];
+  const results = [];
+  let guard = 0;
+  while (partials.length && guard++ < 50000) {
+    const next = [];
+    for (const [cr, cc, rpath] of partials) {
+      if (cr === sr && cc === sc) { results.push(rpath.slice().reverse()); continue; }
+      const cur = reach.has(k(cr, cc)) ? reach.get(k(cr, cc)) : startBudget;
+      const cost = TERRAIN[Game.terrain[cr][cc]].move_cost;
+      for (const [ddr, ddc] of Rules.DIRS) {
+        const pr = cr + ddr, pc = cc + ddc;
+        if (!inBounds(pr, pc)) continue;
+        if (!Rules.canStep(Game.terrain, pr, pc, cr, cc)) continue;
+        const isStart = pr === sr && pc === sc;
+        const pv = isStart ? startBudget : (reach.has(k(pr, pc)) ? reach.get(k(pr, pc)) : null);
+        if (pv == null) continue;
+        if (pv - cost === cur) next.push([pr, pc, [...rpath, { r: pr, c: pc }]]);
+      }
+    }
+    partials = next;
+    if (results.length > 200) break;
+  }
+  return results;
+}
+
+function claimPath(owner, sr, sc, dr, dc, startBudget) {
+  const path = getPath(sr, sc, dr, dc, startBudget);
+  for (const p of path) claimTile(p.r, p.c, owner);
 }
 
 // How many units the player-to-move still has to deploy.
@@ -900,7 +945,8 @@ function combineUnits(fill, material) {
 }
 
 // ---------------------------------------------------------------------------
-function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); }
+function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); clearPreview(); }
+function clearPreview() { Game.previewPath = null; Game.previewDest = null; Game.previewGroup = null; }
 
 // Recompute reachable tiles for the units in the current selection that can move.
 function recomputeReachable() {
@@ -957,8 +1003,10 @@ function selectNextWithMoves() {
 }
 
 // Move a group to (r,c). Group speed = slowest member; each loses the same
-// number of points; stacks merge at the destination.
-function moveGroup(group, r, c) {
+// number of points; stacks merge at the destination. If `explicitPath` is
+// provided, territory is claimed along that path and intermediate tiles are
+// captured; otherwise the default shortest path is reconstructed.
+function moveGroup(group, r, c, explicitPath) {
   const left = Game.reachable.get(key(r, c));
   if (left === undefined) return false;
   const startBudget = Math.min(...group.map((u) => u.movesLeft));
@@ -966,7 +1014,17 @@ function moveGroup(group, r, c) {
   const owner = group[0].owner;
   const sr = group[0].r, sc = group[0].c;
   // Paint the traversed path (and destination) into the mover's territory.
-  claimPath(owner, sr, sc, r, c, startBudget);
+  if (explicitPath && explicitPath.length) {
+    for (const p of explicitPath) {
+      claimTile(p.r, p.c, owner);
+      captureIfCity(p.r, p.c, owner);
+      captureIfStructure(p.r, p.c, owner);
+    }
+  } else {
+    claimPath(owner, sr, sc, r, c, startBudget);
+    captureIfCity(r, c, owner);
+    captureIfStructure(r, c, owner);
+  }
   for (const u of group) {
     removeFromStack(u);
     u.r = r; u.c = c;
@@ -974,8 +1032,6 @@ function moveGroup(group, r, c) {
     u.moved = true; // moved this turn -> no HP regen next turn
     addToStack(u);
   }
-  captureIfCity(r, c, owner);
-  captureIfStructure(r, c, owner);
   return true;
 }
 
@@ -1282,6 +1338,12 @@ function handleTapAt(r, c) {
   // Placement mode: taps deploy bought units into the player's zone.
   if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); Render.autoZoom(); return; }
 
+  // If a path preview is active, tapping elsewhere cancels it.
+  if (Game.previewPath) {
+    clearPreview();
+    // Fall through to normal tile inspection below.
+  }
+
   const tileStack = stackAt(r, c);
   const movers = Game.selUnits.filter((u) => u.owner === Game.turn);
 
@@ -1295,15 +1357,16 @@ function handleTapAt(r, c) {
       if (Game.selUnits.length) recomputeReachable(); else clearSelection();
       UI.refresh(); Render.render(); Render.autoZoom(); return;
     }
-    // Move: tapped a reachable (own/empty) tile.
+    // Move preview: tapped a reachable (own/empty) tile — show the path.
     if (Game.reachable.has(key(r, c)) && (!tileStack.length || tileStack[0].owner === Game.turn)) {
       const group = movers.filter((u) => u.movesLeft > 0);
-      if (group.length && moveGroup(group, r, c)) {
-        persist();
-        Game.selTile = { r, c };
-        Game.selUnits = group;
-        recomputeReachable();
-        UI.refresh(); Render.render(); Render.autoZoom(); return;
+      if (group.length) {
+        const sr = group[0].r, sc = group[0].c;
+        const startBudget = Math.min(...group.map((u) => u.movesLeft));
+        Game.previewPath = getPath(sr, sc, r, c, startBudget);
+        Game.previewDest = { r, c };
+        Game.previewGroup = group;
+        UI.refresh(); Render.render(); return;
       }
     }
   }
@@ -1311,6 +1374,46 @@ function handleTapAt(r, c) {
   // Otherwise inspect the tapped tile (even empty ones, for building).
   selectTile(r, c);
   UI.refresh(); Render.render();
+}
+
+// Confirm the previewed move: actually relocate units along the path.
+function confirmMove() {
+  if (!Game.previewPath || !Game.previewGroup) return;
+  const { r, c } = Game.previewDest;
+  const group = Game.previewGroup;
+  const path = Game.previewPath;
+  clearPreview();
+  if (moveGroup(group, r, c, path)) {
+    persist();
+    Game.selTile = { r, c };
+    Game.selUnits = group;
+    recomputeReachable();
+  }
+  UI.refresh(); Render.render(); Render.autoZoom();
+}
+
+// Cancel the previewed move and return to the reachable-highlight state.
+function cancelMove() {
+  clearPreview();
+  UI.refresh(); Render.render();
+}
+
+// Replace the current preview path with an alternative (called from the popup).
+function setPreviewPath(path) {
+  if (!path || !path.length) return;
+  Game.previewPath = path;
+  Game.previewDest = path[path.length - 1];
+  UI.refresh(); Render.render();
+}
+
+// Get all alternative paths to the current preview destination.
+function getAlternativePaths() {
+  if (!Game.previewGroup || !Game.previewDest) return [];
+  const group = Game.previewGroup;
+  const sr = group[0].r, sc = group[0].c;
+  const { r: dr, c: dc } = Game.previewDest;
+  const startBudget = Math.min(...group.map((u) => u.movesLeft));
+  return findAllPaths(sr, sc, dr, dc, startBudget);
 }
 
 function zoomAt(clientX, clientY, factor) {
@@ -1443,6 +1546,10 @@ window.totalSubunits = totalSubunits;
 window.canCombineUnits = canCombineUnits;
 window.combineUnits = combineUnits;
 window.selectTile = selectTile;
+window.confirmMove = confirmMove;
+window.cancelMove = cancelMove;
+window.setPreviewPath = setPreviewPath;
+window.getAlternativePaths = getAlternativePaths;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;
