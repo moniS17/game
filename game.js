@@ -340,10 +340,11 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty) {
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart) {
   const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const templates = [defaultTemplates(), defaultTemplates()];
-  const units = buildInitialArmies(terrain, templates);
+  const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
+  const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
   // PvE difficulty tunes gold income: easy gives the human +10%, hard gives the
   // AI +17%, normal leaves both at 1×. Percentages land on whole gold thanks to
@@ -371,34 +372,70 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   };
 }
 
-// Seed each player's starting force: ONE unit built from their default Infantry
-// template (4 infantry subunits), placed at the center of that player's
-// deployment zone (nudged off water). Everything else must be researched (tech
-// tree), designed (templates) and bought (buy page).
-function buildInitialArmies(terrain, templates) {
+// Seed each player's starting force. `count` units per side, placed either
+// randomly in the spawn zone or evenly spaced along the zone line closest to
+// the board center. Each unit uses the default Infantry template.
+function buildInitialArmies(terrain, templates, count, randomStart, seed) {
+  if (!count || count <= 0) return [];
   const units = [];
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
-  // Nearest dry tile to (r,c), scanning outward along the column.
-  const dryNear = (r, c) => {
-    if (dry(r, c)) return { r, c };
-    for (let d = 1; d <= 12; d++) {
-      if (dry(r + d, c)) return { r: r + d, c };
-      if (dry(r - d, c)) return { r: r - d, c };
-    }
-    return { r, c };
-  };
 
   const rows = Board.ROWS, cols = Board.COLS, zone = Board.zone();
-  const midRow = Math.floor(rows / 2);
-  // Center-most column of each player's spawn zone (Blue left, Red right).
-  const cLeft = Math.floor((zone - 1) / 2);
-  const cRight = cols - 1 - Math.floor((zone - 1) / 2);
-  const spots = [dryNear(midRow, cLeft), dryNear(midRow, cRight)];
+  const stackLimit = typeof Rules !== 'undefined' ? Rules.STACK_LIMIT : 17;
 
-  for (let owner = 0; owner < 2; owner++) {
-    const tmpl = templates[owner][0]; // the default Infantry template
-    const u = makeUnitFromTemplate(owner, tmpl, spots[owner].r, spots[owner].c, { acted: false });
-    if (u) units.push(u);
+  if (randomStart) {
+    // Seeded PRNG for deterministic random placement.
+    let s = ((seed || 0) ^ 0x5f3759df) >>> 0;
+    const rng = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+
+    for (let owner = 0; owner < 2; owner++) {
+      const tmpl = templates[owner][0];
+      const c0 = owner === 0 ? 0 : cols - zone;
+      const c1 = owner === 0 ? zone : cols;
+      // Collect all dry tiles in this owner's spawn zone.
+      const candidates = [];
+      for (let r = 0; r < rows; r++)
+        for (let c = c0; c < c1; c++)
+          if (dry(r, c)) candidates.push({ r, c });
+      // Shuffle candidates.
+      for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      // Place units, respecting stack limit per tile.
+      const placed = new Map();
+      let idx = 0;
+      for (let n = 0; n < count && idx < candidates.length; ) {
+        const spot = candidates[idx % candidates.length];
+        const k = spot.r + ',' + spot.c;
+        const cur = placed.get(k) || 0;
+        if (cur >= stackLimit) { idx++; continue; }
+        const u = makeUnitFromTemplate(owner, tmpl, spot.r, spot.c, { acted: false });
+        if (u) { units.push(u); placed.set(k, cur + 1); n++; }
+        idx++;
+      }
+    }
+  } else {
+    // Even placement: line up units along the spawn-zone column closest to center.
+    for (let owner = 0; owner < 2; owner++) {
+      const tmpl = templates[owner][0];
+      const spawnCol = owner === 0 ? zone - 1 : cols - zone;
+      // Collect dry tiles on that column in row order.
+      const candidates = [];
+      for (let r = 0; r < rows; r++)
+        if (dry(r, spawnCol)) candidates.push({ r, c: spawnCol });
+      if (!candidates.length) continue;
+      // Distribute `count` units evenly across the available tiles.
+      const n = Math.min(count, candidates.length * stackLimit);
+      for (let i = 0; i < n; i++) {
+        const idx = candidates.length <= n
+          ? i % candidates.length
+          : Math.round(i * (candidates.length - 1) / (n - 1 || 1));
+        const spot = candidates[idx];
+        const unit = makeUnitFromTemplate(owner, tmpl, spot.r, spot.c, { acted: false });
+        if (unit) units.push(unit);
+      }
+    }
   }
   return units;
 }
@@ -1362,7 +1399,7 @@ function boot() {
     // In PvE the human picks a side; the AI takes the other. `human` defaults to
     // Blue (0), so the AI defaults to Red (1) — the classic setup.
     const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
-    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty);
+    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart);
     SaveState.save(st);
   } else {
     st = SaveState.load();

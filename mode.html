@@ -82,6 +82,27 @@
     .seg button:hover { transform: none; background: #232a31; }
     .seg button.on[data-v="0"] { background: #1e88e5; border-color: #1e88e5; color: #fff; }
     .seg button.on[data-v="1"] { background: #e53935; border-color: #e53935; color: #fff; }
+
+    /* Starting units slider */
+    .spawn { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+    .spawn h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
+    .spawn .slider-row { display: flex; align-items: center; gap: .7rem; }
+    .spawn input[type="range"] {
+      flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
+      background: #3a3f45; border-radius: 3px; outline: none; cursor: pointer;
+    }
+    .spawn input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #f5c542; cursor: pointer;
+    }
+    .spawn .val { min-width: 2.5rem; text-align: center; font-size: 1.1rem; font-weight: 700; color: #f5c542; }
+    .spawn .range-labels { display: flex; justify-content: space-between; font-size: .6rem; color: #6b727a; margin-top: .25rem; }
+    .spawn-check {
+      display: flex; align-items: center; gap: .5rem;
+      font-size: .82rem; color: #cfd6dd; margin-top: .7rem; cursor: pointer;
+    }
+    .spawn-check input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
+    .spawn .note { font-size: .62rem; color: #6b727a; margin-top: .3rem; }
   </style>
 </head>
 <body>
@@ -108,6 +129,17 @@
         <button type="button" class="step" id="plus10Btn">+10</button>
       </div>
       <div id="sizeErr"></div>
+    </div>
+
+    <div class="spawn">
+      <h2>Starting units (per side)</h2>
+      <div class="slider-row">
+        <input type="range" id="startUnitsSlider" min="0" max="17" step="1" value="1" />
+        <span class="val" id="startUnitsVal">1</span>
+      </div>
+      <div class="range-labels"><span>0</span><span id="startUnitsMax">17</span></div>
+      <label class="spawn-check"><input type="checkbox" id="randomStartChk" checked /> 🎲 Random start locations</label>
+      <div class="note" id="spawnNote">Units placed at random tiles in each side's spawn zone.</div>
     </div>
 
     <div class="opt">
@@ -166,6 +198,7 @@
       widthInput.value = String(Algorithms.GRID);
       heightInput.value = String(Algorithms.GRID);
       errEl.textContent = '';
+      syncSlider();
     });
 
     // Adjust BOTH width and height by `delta`, clamped to [MIN, MAX]. A blank or
@@ -176,9 +209,40 @@
         el.value = String(Math.min(MAX, Math.max(MIN, cur + delta)));
       }
       errEl.textContent = '';
+      syncSlider();
     }
     document.getElementById('minus10Btn').addEventListener('click', () => stepBoth(-10));
     document.getElementById('plus10Btn').addEventListener('click', () => stepBoth(10));
+
+    // Starting units slider — max = 17 * (1 + boardSize % 10)
+    const startSlider = document.getElementById('startUnitsSlider');
+    const startVal = document.getElementById('startUnitsVal');
+    const startMaxLabel = document.getElementById('startUnitsMax');
+    const randomChk = document.getElementById('randomStartChk');
+    const spawnNote = document.getElementById('spawnNote');
+
+    function calcMaxUnits() {
+      const w = readDim(widthInput) || Algorithms.GRID;
+      return 17 * (1 + w % 10);
+    }
+    function syncSlider() {
+      const mx = calcMaxUnits();
+      startSlider.max = String(mx);
+      startMaxLabel.textContent = String(mx);
+      if (Number(startSlider.value) > mx) startSlider.value = String(mx);
+      startVal.textContent = startSlider.value;
+    }
+    function syncNote() {
+      spawnNote.textContent = randomChk.checked
+        ? "Units placed at random tiles in each side's spawn zone."
+        : "Units placed evenly along the spawn-zone line closest to the board center.";
+    }
+    startSlider.addEventListener('input', () => { startVal.textContent = startSlider.value; });
+    widthInput.addEventListener('input', syncSlider);
+    heightInput.addEventListener('input', syncSlider);
+    randomChk.addEventListener('change', syncNote);
+    syncSlider();
+    syncNote();
 
     // Segmented Blue/Red pickers: track the selected value, highlight the choice.
     function wireSeg(id) {
@@ -204,7 +268,9 @@
       SaveState.setIntent({ action: 'new', mode, rows, cols,
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
-        creative: document.getElementById('creativeChk').checked });
+        creative: document.getElementById('creativeChk').checked,
+        startUnits: Number(startSlider.value),
+        randomStart: randomChk.checked });
       window.location.href = 'index.html';
       return true;
     }

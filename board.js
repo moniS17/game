@@ -13,7 +13,7 @@
  *               (a village debuffs attackers, its defense buffs defenders)
  */
 window.TERRAIN = {
-  plains:  { name: 'Plains',  code: '.', color: '#7cb342', move_cost: 1, defense: 0 },
+  plains:  { name: 'Plains',  code: '.', color: '#a39f5c', move_cost: 1, defense: 0 },
   city:    { name: 'City',    code: 'C', color: '#9e9e9e', move_cost: 1, defense: 0 },
   village: { name: 'Village', code: 'V', color: '#caa16a', move_cost: 1, defense: 0.3, attack_penalty: 0.2 },
   forest:  { name: 'Forest',  code: 'F', color: '#2e7d32', move_cost: 1, defense: 0.15 },
