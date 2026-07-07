@@ -123,8 +123,42 @@ window.Render = (function () {
           ctx.fillRect(x, y, cell, cell); ctx.globalAlpha = 1;
         }
 
-        if (cell >= 14) { ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.strokeRect(x, y, cell, cell); }
+        if (cell >= 14) {
+          if (owner === 0 || owner === 1) {
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = PLAYERS[owner].color;
+          } else {
+            ctx.strokeStyle = 'rgba(100,105,112,0.35)';
+          }
+          ctx.lineWidth = 1.3;
+          ctx.strokeRect(x, y, cell, cell);
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 1;
+        }
       }
+    }
+
+    // Front-line: thick highlight where opposing players' territories meet.
+    if (territory) {
+      ctx.save();
+      ctx.lineWidth = Math.max(2.5, cell * 0.1);
+      ctx.strokeStyle = '#ffffff';
+      ctx.globalAlpha = 0.85;
+      for (let r = r0; r < r1; r++) {
+        for (let c = c0; c < c1; c++) {
+          const own = territory[r] ? territory[r][c] : null;
+          if (own !== 0 && own !== 1) continue;
+          const opp = own === 0 ? 1 : 0;
+          const tx = c * cell - cam.x, ty = r * cell - cam.y;
+          if (c + 1 < COLS && territory[r][c + 1] === opp) {
+            ctx.beginPath(); ctx.moveTo(tx + cell, ty); ctx.lineTo(tx + cell, ty + cell); ctx.stroke();
+          }
+          if (r + 1 < ROWS && territory[r + 1] && territory[r + 1][c] === opp) {
+            ctx.beginPath(); ctx.moveTo(tx, ty + cell); ctx.lineTo(tx + cell, ty + cell); ctx.stroke();
+          }
+        }
+      }
+      ctx.restore();
     }
 
     // During placement, brighten the current player's zone and its dry tiles.
@@ -189,13 +223,15 @@ window.Render = (function () {
     const color = PLAYERS[u.owner].color;
 
     if (detailed && images[u.type] && images[u.type].complete) {
-      ctx.globalAlpha = 0.85; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.414, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.7;
+      ctx.drawImage(images[u.type], x + cell * 0.225, y + cell * 0.225, cell * 0.55, cell * 0.55);
       ctx.globalAlpha = 1;
-      ctx.drawImage(images[u.type], x + cell * 0.158, y + cell * 0.158, cell * 0.684, cell * 0.684);
     } else {
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.36, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.65; ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x + cell / 2, y + cell / 2, cell * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
       if (cell >= 9) {
         ctx.fillStyle = '#fff';
         ctx.font = `bold ${Math.floor(cell * 0.495)}px monospace`;
