@@ -26,6 +26,11 @@
       width: 44px; height: 44px; background: #1b1f23; border-radius: 8px; display: flex;
       align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem;
     }
+    .card .icon-small {
+      width: 22px; height: 22px; background: #1b1f23; border-radius: 4px; display: flex;
+      align-items: center; justify-content: center;
+    }
+    .card .icon-small img { width: 100%; height: 100%; }
     .card h3 { font-size: 1rem; }
     .owned { font-size: .72rem; color: #9aa4ad; }
     .stats { font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
@@ -39,10 +44,10 @@
     .ups { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #3a3f45; padding-top: 10px; }
     .ups button {
       display: flex; justify-content: space-between; align-items: center; gap: 8px;
-      padding: .55rem .7rem; border: none; border-radius: 6px; background: #3a5bd9; color: #fff;
+      padding: .55rem .7rem; border: none; border-radius: 6px; background: #c62828; color: #fff;
       font-weight: 600; font-size: .85rem; cursor: pointer;
     }
-    .ups button:hover:not(:disabled) { background: #2f49b0; }
+    .ups button:hover:not(:disabled) { background: #a52020; }
     .ups button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
     .ups button .lvl { font-size: .72rem; color: #cdd6ff; font-weight: 700; }
     .ups button:disabled .lvl { color: #6b727a; }
@@ -222,7 +227,9 @@
         const open = unlocked && openType === k;
         const card = document.createElement("div");
         card.className = "card" + (unlocked ? " unlocked" : " locked") + (open ? " open" : "");
-        const visual = d.art ? `<img src="${d.art}" alt="${d.name}">` : `<div class="icon">${d.code}</div>`;
+        const visual = d.art
+          ? `<img src="${d.art}" alt="${d.name}"><div class="icon-small"><img src="${d.art}" alt="${d.name}"></div>`
+          : `<div class="icon">${d.code}</div><div class="icon-small" style="font-size:.6rem;font-weight:700">${d.code}</div>`;
         const status = unlocked
           ? `<div class="status unlocked">${open ? "▲" : "⚙ upgrade"}</div>`
           : "";

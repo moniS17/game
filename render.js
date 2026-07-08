@@ -207,6 +207,9 @@ window.Render = (function () {
             const [dr, dc] = dirs[i];
             const nr = r + dr, nc = c + dc;
             if (!Board.inBounds(nr, nc)) continue;
+            // Skip confrontation lines on the board perimeter
+            if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ||
+                nr === 0 || nr === ROWS - 1 || nc === 0 || nc === COLS - 1) continue;
             if (territory[nr] && territory[nr][nc] === opp) {
               // Draw the shared edge
               const a1 = Math.PI / 3 * i - Math.PI / 6;
@@ -262,8 +265,8 @@ window.Render = (function () {
         const sx = center.x - cam.x, sy = center.y - cam.y;
         const iconSize = Math.max(6, innerSize * 0.38);
         const ix = sx + innerSize * 0.25, iy = sy - innerSize * 0.55;
-        ctx.globalAlpha = 0.7;
-        ctx.fillStyle = PLAYERS[s.owner].color;
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#000';
         ctx.fillRect(ix - 1, iy - 1, iconSize + 2, iconSize + 2);
         ctx.globalAlpha = 1;
         ctx.drawImage(img, ix, iy, iconSize, iconSize);
@@ -379,24 +382,24 @@ window.Render = (function () {
   function drawStack(G, stack, r, c, size, detailed, innerSize) {
     const u = stack[stack.length - 1];
     const center = hexCenter(r, c, size);
-    const sx = center.x - cam.x, sy = center.y - cam.y;
+    const sx = center.x - cam.x - innerSize * 0.08, sy = center.y - cam.y;
     const def = PIECES[u.type];
     const color = PLAYERS[u.owner].color;
 
     if (detailed && images[u.type] && images[u.type].complete) {
       ctx.globalAlpha = 0.6; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.455, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.7;
-      const imgS = innerSize * 0.55;
+      const imgS = innerSize * 0.715;
       ctx.drawImage(images[u.type], sx - imgS / 2, sy - imgS / 2, imgS, imgS);
       ctx.globalAlpha = 1;
     } else {
       ctx.globalAlpha = 0.65; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.39, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       if (innerSize >= 9) {
         ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.floor(innerSize * 0.495)}px monospace`;
+        ctx.font = `bold ${Math.floor(innerSize * 0.644)}px monospace`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const label = stack.length > 1 ? def.code + toSub(stack.length) : def.code;
         ctx.fillText(label, sx, sy + 0.5);

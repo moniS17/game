@@ -16,7 +16,7 @@
  * Exposes window.Algorithms.
  */
 window.Algorithms = (function () {
-  const GRID = 100;              // legacy default (square)
+  const GRID = 34;              // default board size
   const MIN = 10, MAX = 1717;    // hard bounds on either dimension
   const clampDim = (n) => Math.max(MIN, Math.min(MAX, Math.floor(n) || GRID));
 

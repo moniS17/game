@@ -1481,11 +1481,17 @@ function runAiFor(me) {
       const wounded = avgHpRatio < 0.7;
       let target = null, bestD = Rules.hexDist(r, c, enemy.r, enemy.c);
       let targetSupply = null, bestSD = Infinity;
+      let targetDry = null, bestDryD = Rules.hexDist(r, c, enemy.r, enemy.c);
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
         const d = Rules.hexDist(rr, cc, enemy.r, enemy.c);
         if (d < bestD) { bestD = d; target = [rr, cc]; }
         if (wounded && aiInSupplyRange(rr, cc, me) && d < bestSD) { bestSD = d; targetSupply = [rr, cc]; }
+        if (!Board.isWater(Game.terrain, rr, cc) && d < bestDryD) { bestDryD = d; targetDry = [rr, cc]; }
+      }
+      // Avoid water: if the best tile is water and a non-water tile gets closer, prefer dry land
+      if (target && Board.isWater(Game.terrain, target[0], target[1]) && targetDry) {
+        target = targetDry;
       }
       // Wounded units move toward enemy but prefer staying in supply range.
       const chosen = (wounded && targetSupply) ? targetSupply : target;
