@@ -56,14 +56,14 @@
 
   <div class="grid" id="grid"></div>
   <div id="noTemplates" class="empty" style="display:none">
-    No buildable templates yet — design one in the <a href="template.html">Template designer</a>.
+    No buildable battalions yet — design one in the <a href="template.html">Battalion designer</a>.
   </div>
   <div class="queue" id="queue"></div>
 
   <div class="bar">
     <a href="index.html">⬅ Return to battle</a>
-    <a href="template.html" style="background:#6a4bd9">▦ Templates</a>
-    <a href="tech.html" style="background:#6a4bd9">🔬 Tech tree</a>
+    <a href="template.html" style="background:#6a4bd9">▦ Battalions</a>
+    <a href="tech.html" style="background:#6a4bd9">🔭 Tech tree</a>
   </div>
 
   <script src="units.js"></script>
@@ -87,7 +87,7 @@
       hp: PIECES[t].hp + steps(t, "hp") * UPGRADES.hp.gain,
       mov: PIECES[t].movement_speed + steps(t, "mov") * UPGRADES.mov.gain,
     });
-    // Aggregate a template's cost / stats, and whether every subunit is unlocked.
+    // Aggregate a battalion's cost / stats, and whether every unit is unlocked.
     function statsOf(tmpl) {
       let cost = 0, hp = 0, atk = 0, mov = Infinity, n = 0, ok = true;
       for (const t of (tmpl.cells || [])) {
@@ -100,7 +100,7 @@
     const templateById = (id) => save.templates[buyer].find((t) => t.id === id);
 
     document.getElementById("who").textContent =
-      PLAYERS[buyer].name + "'s turn — buy units built from your templates; deploy at your home edge.";
+      PLAYERS[buyer].name + "'s turn — buy units built from your battalions; deploy at your home edge.";
 
     const goldEl = document.getElementById("gold");
     const queueEl = document.getElementById("queue");
@@ -118,10 +118,10 @@
         const total = s.cost * qty[tmpl.id];
         const btn = card.querySelector("button.buy");
         const buyable = s.n > 0 && s.ok;
-        btn.innerHTML = !s.n ? "Empty template" : !s.ok ? "Needs research" : `Buy ×${qty[tmpl.id]} (${GOLD_ICON}${total})`;
+        btn.innerHTML = !s.n ? "Empty battalion" : !s.ok ? "Needs research" : `Buy ×${qty[tmpl.id]} (${GOLD_ICON}${total})`;
         btn.disabled = !buyable || total > gold;
       });
-      // queue summary grouped by template
+      // queue summary grouped by battalion
       const mine = save.pendingSpawns.filter((s) => s.owner === buyer);
       if (mine.length) {
         const counts = {};
@@ -164,7 +164,7 @@
         card.dataset.id = tmpl.id;
         card.innerHTML =
           `<div class="top">${miniHtml(tmpl)}<div><h3>${tmpl.name}</h3>` +
-            `<div class="stats"><span class="cost">${GOLD_ICON}${s.cost}</span> each · ${s.n}/25 subunits</div></div></div>` +
+            `<div class="stats"><span class="cost">${GOLD_ICON}${s.cost}</span> each · ${s.n}/25 units</div></div></div>` +
           `<div class="stats">❤️ HP <b>${s.hp}</b> &nbsp; ⚔️ ATK <b>${s.atk}</b> &nbsp; 👟 MOV <b>${s.mov}</b></div>` +
           `<div class="stepper">` +
             `<button class="dec10" type="button">−10</button>` +

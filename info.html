@@ -126,7 +126,7 @@
     // --- Healing & supply ---
     document.getElementById("healRules").innerHTML =
       `<li><b>Resting heals</b>: a unit that <b>does not move</b> on its turn recovers HP at the start of its next one. Within supply range of an <b>owned city</b> (${REGEN.range.city} tiles) or <b>village</b> (${REGEN.range.village} tile), it regains <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> of max HP.</li>` +
-      `<li><b>Motorized</b> subunits self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>` +
+      `<li><b>Motorized</b> units self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>` +
       `<li>A built <b>Supply Hub</b> also provides supply at village range (${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>`;
 
     // --- Units table ---
@@ -195,11 +195,11 @@
 
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
-      `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>subunits</b>. A board piece is a <b>unit</b> built from a template; its HP &amp; ATK are the <b>sum of its subunits</b>. Many units can share one template.</li>` +
+      `<li>A <b>battalion</b> is a reusable 5×5 blueprint of <b>units</b>. A board piece is a <b>unit</b> built from a battalion; its HP &amp; ATK are the <b>sum of its units</b>. Many units can share one battalion.</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} units</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their units' ATK</b>, applied one unit at a time; a unit is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
-      `<li><b>Terrain shapes attacks</b>: each subunit's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
+      `<li><b>Terrain shapes attacks</b>: each unit's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
       `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
       `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a unit paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured gaps</b> between tiles matching the player.</li>` +
       `<li><b>Front-line</b>: where your territory borders the enemy's, a <b>dark line</b> marks the confrontation — push it forward by advancing units.</li>` +
@@ -212,18 +212,18 @@
     // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting units (up to <b>3 × board height</b>).</li>` +
-      `<li><b>Tech tree</b>: only the <b>Infantry</b> subunit is unlocked at the start. Research other subunits with gold ` +
-        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
-      `<li><b>Templates</b>: design reusable 5×5 blueprints of subunits; a unit's <b>cost = the sum of its subunits' costs</b>.</li>` +
-      `<li><b>Buy</b>: pick a template and buy units built from it; deploy them in your zone.</li>` +
+      `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other units with gold ` +
+        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a battalion — per player, per game.</li>` +
+      `<li><b>Battalions</b>: design reusable 5×5 blueprints of units; a unit's <b>cost = the sum of its units' costs</b>.</li>` +
+      `<li><b>Buy</b>: pick a battalion and buy units built from it; deploy them in your zone.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
-        `strengthen a subunit wherever it appears, and apply only to the <b>current game</b>.</li>`;
+        `strengthen a unit wherever it appears, and apply only to the <b>current game</b>.</li>`;
 
     // --- Unit actions (refit, split, combine) ---
     document.getElementById("actionRules").innerHTML =
-      `<li><b>Refit</b>: swap a deployed unit to a different template. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new template and the <b>current value of the unit</b> — <span class="debuff">damaged units are worth less</span> (proportional to remaining HP), so refitting a battered unit costs more.</li>` +
-      `<li><b>Split</b>: break individual subunits off a deployed unit into separate 1-subunit units on the same tile. The original unit keeps its remaining subunits. Requires at least 2 subunits and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off units inherit the parent's HP ratio and cannot act until the next turn.</li>` +
-      `<li><b>Combine</b>: merge subunits from one unit (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs subunits up to the 25-subunit template cap. If the donor is fully absorbed it is removed from the board.</li>`;
+      `<li><b>Refit</b>: swap a deployed unit to a different battalion. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new battalion and the <b>current value of the unit</b> — <span class="debuff">damaged units are worth less</span> (proportional to remaining HP), so refitting a battered unit costs more.</li>` +
+      `<li><b>Split</b>: break individual units off a deployed unit into separate 1-unit pieces on the same tile. The original unit keeps its remaining units. Requires at least 2 units and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off units inherit the parent's HP ratio and cannot act until the next turn.</li>` +
+      `<li><b>Combine</b>: merge units from one unit (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs units up to the 25-unit battalion cap. If the donor is fully absorbed it is removed from the board.</li>`;
 
     // --- Structures ---
     document.getElementById("structureRules").innerHTML =

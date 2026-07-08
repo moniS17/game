@@ -214,9 +214,9 @@
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
       <div class="stat-row"><span>Villages (Blue / Red)</span><span id="villageCount">0 / 0</span></div>
 
-      <button class="shop" id="buyBtn">🛒 Buy subunits</button>
-      <button id="templateBtn">▦ Templates</button>
-      <button id="techBtn">🔬 Tech &amp; upgrades</button>
+      <button class="shop" id="buyBtn">🛒 Buy units</button>
+      <button id="templateBtn">▦ Battalions</button>
+      <button id="techBtn">🔭 Tech &amp; upgrades</button>
       <button id="nextRoundBtn">Next round ▶</button>
       <button class="ghost" id="infoBtn">📖 Field manual</button>
       <button class="ghost" id="menuBtn">Main menu</button>
@@ -264,11 +264,11 @@
     </div>
   </div>
 
-  <!-- Combine modal: merge subunits from one unit into another. -->
+  <!-- Combine modal: merge units from one unit into another. -->
   <div id="combineModal" class="modal-overlay" style="display:none">
     <div class="modal-box">
       <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Combine units</h2>
-      <p class="hint" style="margin:6px 0 2px;">Fill a unit with subunits from another, up to 25 total.</p>
+      <p class="hint" style="margin:6px 0 2px;">Fill a unit with units from another, up to 25 total.</p>
       <div id="combineModalBody"></div>
       <button id="combineModalClose" class="ghost">Cancel</button>
     </div>
@@ -393,7 +393,7 @@
           `<span>👟 MOV <b>${u.mov}</b></span>` +
           `<span>${GOLD_ICON} <b>${cost}</b></span>` +
         `</div>` +
-        `<div class="utmpl-comp">${comp || 'No subunits'}</div>` +
+        `<div class="utmpl-comp">${comp || 'No units'}</div>` +
         (showSplit ? `<button id="splitStartBtn" class="ghost" style="margin-top:8px">✂ Split</button>` : '');
       document.getElementById('unitModal').style.display = 'flex';
       if (showSplit) {
@@ -422,7 +422,7 @@
         const body = document.getElementById('unitModalBody');
         body.innerHTML =
           `<div class="utmpl-grid">${grid}</div>` +
-          `<div class="split-status">${selected.size} / ${maxSel} subunits selected for split</div>` +
+          `<div class="split-status">${selected.size} / ${maxSel} units selected for split</div>` +
           `<div class="split-btns">` +
             `<button id="splitConfirmBtn"${selected.size ? '' : ' disabled'}>Confirm split (${selected.size})</button>` +
             `<button id="splitCancelBtn" class="ghost">Cancel</button>` +
@@ -747,7 +747,7 @@
           const active = fillId === u.id ? ' combine-active' : '';
           const full = sub >= 25 ? ' style="opacity:.5;"' : '';
           html += `<div class="combine-unit${active}" data-fill="${u.id}"${full}>` +
-            `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub}/25 subunits</div>`;
+            `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub}/25 units</div>`;
         }
         html += '</div>';
 
@@ -760,7 +760,7 @@
             const sub = window.totalSubunits(u);
             const active = matId === u.id ? ' combine-active' : '';
             html += `<div class="combine-unit${active}" data-mat="${u.id}">` +
-              `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub} subunits</div>`;
+              `<b>${label}</b> — ${u.hp}/${u.maxHp} HP · ${sub} units</div>`;
           }
           html += '</div>';
         }
@@ -770,7 +770,7 @@
           const available = window.totalSubunits(matUnit);
           const willTake = Math.min(room, available);
           const consumed = willTake >= available;
-          html += `<div class="combine-preview">Will transfer <b>${willTake}</b> subunit(s)` +
+          html += `<div class="combine-preview">Will transfer <b>${willTake}</b> unit(s)` +
             (consumed ? ' — material unit will be consumed' : '') + '</div>';
           html += '<div class="combine-btns">' +
             `<button id="combineConfirmBtn">Combine (${willTake})</button>` +

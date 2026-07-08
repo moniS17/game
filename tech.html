@@ -68,7 +68,7 @@
 </head>
 <body>
   <header>
-    <h1>🔬 Tech &amp; Upgrades</h1>
+    <h1>🔭 Tech &amp; Upgrades</h1>
     <div class="gold"><img src="assets/gold.svg" alt="gold" style="width:1.15em;height:1.15em;vertical-align:-0.2em"> <span id="gold">0</span> gold</div>
   </header>
   <div class="who" id="who"></div>
@@ -76,10 +76,10 @@
   <div class="sec"><img src="assets/gold.svg" alt="" style="width:1.1em;height:1.1em;vertical-align:-0.2em"> Economy</div>
   <div class="econ" id="econ"></div>
 
-  <div class="sec">🔬 Subunits</div>
+  <div class="sec">🔭 Units</div>
   <div class="grid" id="grid"></div>
-  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a subunit once to place it in your
-    <a href="template.html" style="color:#8ea2ff">templates</a>; then <b>click an unlocked subunit</b> to buy
+  <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a unit once to place it in your
+    <a href="template.html" style="color:#8ea2ff">battalions</a>; then <b>click an unlocked unit</b> to buy
     Attack / Health / Movement upgrades for it. Everything lasts for <b>this game</b> only — a new map resets it.</div>
 
   <div class="bar">
@@ -102,7 +102,7 @@
     save.ecoUpgrades[me] = save.ecoUpgrades[me] || {};
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — research subunits and click one to upgrade it.";
+      PLAYERS[me].name + " — research units and click one to upgrade it.";
 
     const goldEl = document.getElementById("gold");
     const grid = document.getElementById("grid");
@@ -115,7 +115,7 @@
     const partsOf = (u) => u.parts || [];
     const ownedOf = (type) => save.units.filter((u) => u.owner === me && partsOf(u).some((p) => p.type === type)).length;
 
-    // Economy upgrades: per-player levels, cost doubles per step (like subunit
+    // Economy upgrades: per-player levels, cost doubles per step (like unit
     // upgrades). Each level adds ECO_UPGRADES[key].gain gold to that stream.
     const ecoSteps = (key) => (save.ecoUpgrades[me][key]) || 0;
     const ecoCost = (key) => ECO_UPGRADES[key].baseCost * Math.pow(2, ecoSteps(key));
@@ -154,7 +154,7 @@
         b.addEventListener("click", (e) => { e.stopPropagation(); ecoUpgrade(b.dataset.eco); }));
     }
 
-    let openType = null;                        // which unlocked subunit is expanded
+    let openType = null;                        // which unlocked unit is expanded
 
     function unlock(type) {
       if (isUnlocked(type)) return;
@@ -167,7 +167,7 @@
       render();
     }
 
-    // Buy one upgrade step of `stat` for subunit `type`; apply to existing units.
+    // Buy one upgrade step of `stat` for unit `type`; apply to existing units.
     function upgrade(type, stat) {
       const c = upCost(type, stat);
       if (save.economy[me] < c) return;
@@ -211,7 +211,7 @@
       };
       return `<div class="stats">⚔️ ATK ${bump(d.attack, eAtk)} &nbsp; ❤️ HP ${bump(d.hp, eHp)} &nbsp; 👟 MOV ${bump(d.movement_speed, eMov)}</div>` +
         `<div class="ups">${btn("atk", "⚔️")}${btn("hp", "❤️")}${btn("mov", "👟")}` +
-        `<div class="hint">You own ${ownedOf(k)} unit(s) using this subunit.</div></div>`;
+        `<div class="hint">You own ${ownedOf(k)} battalion(s) using this unit.</div></div>`;
     }
 
     function render() {
@@ -239,7 +239,7 @@
           (unlocked
             ? (open ? upsHtml(k)
               : `<div class="stats">❤️ HP <b>${d.hp + bonus(k,'hp')}</b> &nbsp; ⚔️ ATK <b>${d.attack + bonus(k,'atk')}</b> &nbsp; 👟 MOV <b>${d.movement_speed + bonus(k,'mov')}</b></div>`)
-            : `<div class="stats">❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>👟 MOV <b>${d.movement_speed}</b> &nbsp; ${GOLD_ICON} <b>${d.cost}</b>/subunit</div>` +
+            : `<div class="stats">❤️ HP <b>${d.hp}</b> &nbsp; ⚔️ ATK <b>${d.attack}</b><br>👟 MOV <b>${d.movement_speed}</b> &nbsp; ${GOLD_ICON} <b>${d.cost}</b>/unit</div>` +
               `<button class="unlock" data-type="${k}" ${save.economy[me] < cost ? "disabled" : ""}>Research (${GOLD_ICON}${cost})</button>`);
         grid.appendChild(card);
       }

@@ -723,7 +723,7 @@ function placeAt(r, c) {
     room--; placed++;
   }
   if (!placed && blockedLocked) {
-    UI.log('That template needs a subunit you have not researched yet.');
+    UI.log('That battalion needs a unit you have not researched yet.');
   } else {
     if (placed) { captureIfCity(r, c, owner); claimTile(r, c, owner); } // deploying claims the tile
     UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +
@@ -959,7 +959,7 @@ function splitUnit(u, selectedTypes) {
   u.movesLeft = Math.min(u.movesLeft, u.mov);
   u.type = primary;
 
-  UI.log(`${PLAYERS[owner].name} split ${created.length} subunit(s) off ${u.name}.`);
+  UI.log(`${PLAYERS[owner].name} split ${created.length} unit(s) off ${u.name}.`);
   persist();
   return created.length;
 }
@@ -1032,7 +1032,7 @@ function combineUnits(fill, material) {
     material.type = mPrimary;
   }
 
-  UI.log(`${PLAYERS[fill.owner].name} combined ${taken} subunit(s) from ${material.name || PIECES[material.type].name} into ${fill.name || PIECES[fill.type].name}.`);
+  UI.log(`${PLAYERS[fill.owner].name} combined ${taken} unit(s) from ${material.name || PIECES[material.type].name} into ${fill.name || PIECES[fill.type].name}.`);
   persist();
   return taken;
 }
@@ -1322,7 +1322,8 @@ function nextRound() {
 }
 
 // ---------------------------------------------------------------------------
-// PvE AI: each of the AI's stacks marches toward the nearest enemy and attacks.
+// PvE AI: strategic movement, retreat when outnumbered, avoid attacking
+// enemies in strong defensive positions.
 // ---------------------------------------------------------------------------
 function nearestEnemyTile(r, c, owner) {
   let best = null, bestD = Infinity;
@@ -1349,6 +1350,35 @@ function nearestUnownedCity(r, c, me) {
   return best;
 }
 
+function nearestUnownedCityOrVillage(r, c, me) {
+  let best = null, bestD = Infinity;
+  for (const s of Game.cities.concat(Game.villages)) {
+    if (s.owner === me) continue;
+    const d = Rules.hexDist(s.r, s.c, r, c);
+    if (d < bestD) { bestD = d; best = { r: s.r, c: s.c }; }
+  }
+  return best;
+}
+
+function isDefensiveTerrain(r, c) {
+  const t = Game.terrain[r][c];
+  return t === 'city' || t === 'village' || t === 'forest' || t === 'water';
+}
+
+function aiCountNeighborUnits(r, c, owner) {
+  let count = 0;
+  for (const [nr, nc] of Rules.neighbors(r, c)) {
+    if (!inBounds(nr, nc)) continue;
+    const s = stackAt(nr, nc);
+    for (const u of s) if (u.owner === owner) count++;
+  }
+  return count;
+}
+
+function aiMyCityCount(me) {
+  return Game.cities.filter(ci => ci.owner === me).length;
+}
+
 // The AI (Game.aiPlayer) spends its gold on reinforcements and deploys them in
 // its own zone, aimed at the row where the enemy has pushed closest to the AI's
 // home edge. Called after the AI's existing units have already moved this turn,
@@ -1373,10 +1403,10 @@ function compTemplate(name, comp) {
   return { id: 'adhoc', name, cells };
 }
 
-// Greedily spend the AI's gold on UNLOCKED subunits, packaged into UNITS. Each
-// unit is a small single-type template (up to 4 subunits); types are cycled for
-// variety. When the enemy fields tanks and cannon is unlocked, the AI spends
-// roughly half its budget on cannon units to counter them.
+// Greedily spend the AI's gold on UNLOCKED units, packaged into battalions.
+// Early game (few cities): focus on cheap infantry to capture cities fast.
+// When the enemy fields tanks and cannon is unlocked, the AI spends roughly
+// half its budget on cannon battalions to counter them.
 // Returns unit specs [{type, size}]. Mirrors the buy page's cost model.
 function aiBuyUnits(me) {
   const roster = Object.keys(PIECES)
@@ -1387,8 +1417,24 @@ function aiBuyUnits(me) {
   const units = [];
   let budget = Game.economy[me];
 
+  // Early game: build small infantry battalions for fast city capture.
+  const myCities = aiMyCityCount(me);
+  if (myCities < 5 && isUnlocked(me, 'infantry')) {
+    const infCost = PIECES.infantry.cost;
+    const earlyBudget = Math.floor(budget * 0.7);
+    let spent = 0;
+    while (spent + infCost <= earlyBudget && units.length < 100) {
+      const size = Math.min(4, Math.floor((earlyBudget - spent) / infCost));
+      if (size < 1) break;
+      let n = 0;
+      while (n < size && spent + infCost <= earlyBudget) { spent += infCost; n++; }
+      units.push({ type: 'infantry', size: n });
+    }
+    budget -= spent;
+  }
+
   // Counter-tanks: if enemy has tanks and cannon is unlocked, dedicate ~half
-  // budget to cannon units before spending the rest on variety.
+  // remaining budget to cannon battalions.
   const enemyTanks = aiEnemyHasTanks(me);
   if (enemyTanks && isUnlocked(me, 'cannon')) {
     const cannonCost = PIECES.cannon.cost;
@@ -1417,9 +1463,9 @@ function aiBuyUnits(me) {
   return units;
 }
 
-// The AI researches the cheapest still-locked subunit it can comfortably afford,
+// The AI researches the cheapest still-locked unit it can comfortably afford,
 // so over time it fields more than just infantry. Prioritises cannon when enemy
-// has tanks. Keeps a reserve for units.
+// has tanks. Keeps a reserve for buying.
 function aiResearchTech(me) {
   if (typeof TECH === 'undefined') return;
   // If enemy has tanks and cannon is still locked, rush cannon research.
@@ -1500,7 +1546,7 @@ function aiDeployUnits(me, specs) {
 
 function aiSpendAndReinforce(me) {
   if (Game.economy[me] < 1) return;
-  aiResearchTech(me); // occasionally unlock a new subunit before spending
+  aiResearchTech(me); // occasionally unlock a new unit before spending
   const specs = aiBuyUnits(me);
   const placed = aiDeployUnits(me, specs);
   if (placed) {
@@ -1564,59 +1610,115 @@ function runAiFor(me) {
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
   const noCities = aiHasNoCities(me);
+  const fewCities = aiMyCityCount(me) < 5;
+  const enemy = 1 - me;
 
   for (const k0 of tiles) {
     let [r, c] = k0.split(',').map(Number);
     let group = stackAt(r, c).filter((u) => u.owner === me);
     if (!group.length) continue;
 
-    // Healing: if the group's average HP is below 50% and currently in supply
-    // range, skip movement this turn so they rest and heal next turn.
     const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
+
+    // Healing hold: below 50% HP in supply range, rest to heal.
     if (avgHpRatio < 0.5 && aiInSupplyRange(r, c, me)) continue;
 
-    // When holding no cities, prioritize retaking one over chasing enemy units.
-    let enemy;
-    if (noCities) {
-      enemy = nearestUnownedCity(r, c, me) || nearestEnemyTile(r, c, me);
-    } else {
-      enemy = nearestEnemyTile(r, c, me);
-    }
-    if (!enemy) break;
+    // Count nearby enemy vs friendly units for retreat decision.
+    const nearbyEnemies = aiCountNeighborUnits(r, c, enemy);
+    const nearbyFriendlies = aiCountNeighborUnits(r, c, me);
 
-    if (!Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {
+    // RETREAT: if surrounded by more enemies than allies, retreat to a
+    // defensive tile (city/water/village/forest) for the defense buff.
+    if (nearbyEnemies > nearbyFriendlies + group.length) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
-
-      // If damaged (below 70%), prefer a reachable tile that is still in supply
-      // range while also closer to the enemy — retreat toward supply if needed.
-      const wounded = avgHpRatio < 0.7;
-      let target = null, bestD = Rules.hexDist(r, c, enemy.r, enemy.c);
-      let targetSupply = null, bestSD = Infinity;
-      let targetDry = null, bestDryD = Rules.hexDist(r, c, enemy.r, enemy.c);
+      let bestRetreat = null, bestRD = Infinity;
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
-        const d = Rules.hexDist(rr, cc, enemy.r, enemy.c);
-        if (d < bestD) { bestD = d; target = [rr, cc]; }
+        if (!isDefensiveTerrain(rr, cc)) continue;
+        const enemyNear = aiCountNeighborUnits(rr, cc, enemy);
+        const d = enemyNear * 100 - Rules.hexDist(rr, cc, r, c);
+        if (d < bestRD) { bestRD = d; bestRetreat = [rr, cc]; }
+      }
+      if (!bestRetreat) {
+        // No defensive tile reachable: just move to the tile with fewest adjacent enemies.
+        let bestD2 = Infinity;
+        for (const kk of Game.reachable.keys()) {
+          const [rr, cc] = kk.split(',').map(Number);
+          const en = aiCountNeighborUnits(rr, cc, enemy);
+          if (en < bestD2) { bestD2 = en; bestRetreat = [rr, cc]; }
+        }
+      }
+      if (bestRetreat) {
+        moveGroup(group, bestRetreat[0], bestRetreat[1]);
+      }
+      continue;
+    }
+
+    // TARGET: early game or no cities → capture cities/villages for income.
+    let target;
+    if (noCities || fewCities) {
+      target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
+    } else {
+      target = nearestEnemyTile(r, c, me);
+    }
+    if (!target) break;
+
+    if (!Rules.isHexNeighbor(r, c, target.r, target.c)) {
+      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+
+      const wounded = avgHpRatio < 0.7;
+      let best = null, bestD = Rules.hexDist(r, c, target.r, target.c);
+      let targetSupply = null, bestSD = Infinity;
+      let targetDry = null, bestDryD = Rules.hexDist(r, c, target.r, target.c);
+      for (const kk of Game.reachable.keys()) {
+        const [rr, cc] = kk.split(',').map(Number);
+        const d = Rules.hexDist(rr, cc, target.r, target.c);
+        if (d < bestD) { bestD = d; best = [rr, cc]; }
         if (wounded && aiInSupplyRange(rr, cc, me) && d < bestSD) { bestSD = d; targetSupply = [rr, cc]; }
         if (!Board.isWater(Game.terrain, rr, cc) && d < bestDryD) { bestDryD = d; targetDry = [rr, cc]; }
       }
-      // Avoid water: if the best tile is water and a non-water tile gets closer, prefer dry land
-      if (target && Board.isWater(Game.terrain, target[0], target[1]) && targetDry) {
-        target = targetDry;
+      if (best && Board.isWater(Game.terrain, best[0], best[1]) && targetDry) {
+        best = targetDry;
       }
-      // Wounded units move toward enemy but prefer staying in supply range.
-      const chosen = (wounded && targetSupply) ? targetSupply : target;
+      const chosen = (wounded && targetSupply) ? targetSupply : best;
       if (chosen) {
         moveGroup(group, chosen[0], chosen[1]);
         r = chosen[0]; c = chosen[1];
         group = stackAt(r, c).filter((u) => u.owner === me);
-        enemy = noCities
-          ? (nearestUnownedCity(r, c, me) || nearestEnemyTile(r, c, me))
-          : nearestEnemyTile(r, c, me);
+        if (noCities || fewCities) {
+          target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
+        } else {
+          target = nearestEnemyTile(r, c, me);
+        }
       }
     }
-    if (enemy && group.length && Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {
-      doAttack(group, enemy.r, enemy.c);
+
+    // ATTACK decision: don't attack enemies on strong defensive tiles.
+    if (target && group.length && Rules.isHexNeighbor(r, c, target.r, target.c)) {
+      const enemyTerrain = Game.terrain[target.r][target.c];
+      const enemyOnDefensive = enemyTerrain === 'city' || enemyTerrain === 'village' ||
+                               enemyTerrain === 'forest' || enemyTerrain === 'water';
+
+      if (enemyOnDefensive) {
+        // Enemy is in a strong position. Find own defensive tile and hold,
+        // or retreat if we're on open ground.
+        if (!isDefensiveTerrain(r, c)) {
+          Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+          let bestDef = null, bestDD = Infinity;
+          for (const kk of Game.reachable.keys()) {
+            const [rr, cc] = kk.split(',').map(Number);
+            if (!isDefensiveTerrain(rr, cc)) continue;
+            const d = Rules.hexDist(rr, cc, target.r, target.c);
+            if (d < bestDD) { bestDD = d; bestDef = [rr, cc]; }
+          }
+          if (bestDef) {
+            moveGroup(group, bestDef[0], bestDef[1]);
+          }
+        }
+        // Hold position on our defensive tile — don't attack.
+      } else {
+        doAttack(group, target.r, target.c);
+      }
     }
   }
 }
