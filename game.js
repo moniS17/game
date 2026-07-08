@@ -657,20 +657,32 @@ function placeAt(r, c) {
 // ---------------------------------------------------------------------------
 // Combat — mutual, stack-vs-stack, damage applied 1-by-1 (rules in rules.js)
 // ---------------------------------------------------------------------------
-// Apply `total` damage to a stack (array of units), front-to-back. Mutates the
-// passed array and the global Game.units/unitAt. Returns units destroyed.
+// Apply `total` damage evenly across a stack. Each unit takes an equal share;
+// overkill from killed units redistributes to survivors. Mutates the passed
+// array and the global Game.units/unitAt. Returns units destroyed.
 function applyDamage(stack, total) {
   let killed = 0;
   while (total > 0 && stack.length) {
-    const u = stack[0];
-    if (u.hp > total) { u.hp -= total; total = 0; }
-    else {
-      total -= u.hp;
-      stack.shift();
+    const n = stack.length;
+    const base = Math.floor(total / n);
+    const extra = total % n;
+    let leftover = 0;
+    const dead = [];
+    for (let i = 0; i < n; i++) {
+      const u = stack[i];
+      const dmg = base + (i < extra ? 1 : 0);
+      if (u.hp > dmg) { u.hp -= dmg; }
+      else { leftover += dmg - u.hp; dead.push(i); }
+    }
+    for (let i = dead.length - 1; i >= 0; i--) {
+      const u = stack[dead[i]];
+      stack.splice(dead[i], 1);
       removeFromStack(u);
       Game.units = Game.units.filter((x) => x !== u);
       killed++;
     }
+    total = leftover;
+    if (!dead.length) break;
   }
   return killed;
 }
@@ -1438,10 +1450,9 @@ function handleTapAt(r, c) {
     // ATTACK: tapped an enemy-held tile
     if (tileStack.length && tileStack[0].owner !== Game.turn && group.length) {
       if (Rules.isHexNeighbor(selR, selC, r, c)) {
-        // Direct adjacency: attack from current tile (no move needed)
         const path = [{ r: selR, c: selC }];
         addOrder(group, { r: selR, c: selC }, { r: selR, c: selC }, path, true, { r, c });
-        autoAdvance();
+        UI.refresh(); Render.render();
         return;
       }
       const adj = bestAdjacentForAttack(r, c, Game.reachable, Game.unitAt, Game.turn, group.length);
@@ -1449,7 +1460,7 @@ function handleTapAt(r, c) {
         const startBudget = Math.min(...group.map(u => u.movesLeft));
         const path = getPath(selR, selC, adj.r, adj.c, startBudget);
         addOrder(group, { r: selR, c: selC }, adj, path, true, { r, c });
-        autoAdvance();
+        UI.refresh(); Render.render();
         return;
       }
     }
@@ -1459,7 +1470,7 @@ function handleTapAt(r, c) {
       const startBudget = Math.min(...group.map(u => u.movesLeft));
       const path = getPath(selR, selC, r, c, startBudget);
       addOrder(group, { r: selR, c: selC }, { r, c }, path, false, null);
-      autoAdvance();
+      UI.refresh(); Render.render();
       return;
     }
   }
