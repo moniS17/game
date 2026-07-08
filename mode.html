@@ -69,6 +69,29 @@
       font-size: .85rem; color: #cfd6dd; margin: 0 0 1rem; cursor: pointer;
     }
     .creative input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
+    .editor-btn {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; padding: .7rem 1rem; margin-bottom: .5rem;
+      border: 1px solid #6a4bd9; border-radius: 8px; background: #2b3138;
+      color: #d1c4e9; font-size: .92rem; font-weight: 600; cursor: pointer;
+    }
+    .editor-btn:hover { background: #342b5e; }
+    .editor-btn small { font-size: .68rem; color: #9aa4ad; font-weight: 400; }
+    .load-btn {
+      width: 100%; padding: .6rem; margin-bottom: .7rem;
+      border: 1px solid #3a3f45; border-radius: 8px; background: #2b3138;
+      color: #cfd6dd; font-size: .88rem; font-weight: 600; cursor: pointer;
+    }
+    .load-btn:hover { background: #363d45; }
+    .map-list { max-height: 200px; overflow-y: auto; margin-bottom: .7rem; }
+    .map-item { display: flex; align-items: center; justify-content: space-between; padding: .5rem .6rem; border-bottom: 1px solid #333; font-size: .82rem; }
+    .map-item .info { flex: 1; }
+    .map-item .info b { color: #fff; }
+    .map-item .info small { color: #7e8893; }
+    .map-item button { padding: 3px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: .75rem; font-weight: 600; margin-left: 6px; }
+    .map-item .use-btn { background: #2e7d46; color: #fff; }
+    .map-item .del-btn { background: #6b3030; color: #fff; }
+    .loaded-badge { font-size: .75rem; color: #7cb342; font-weight: 600; margin-bottom: .4rem; }
 
     /* Segmented Blue/Red pickers */
     .opt { margin-bottom: 1rem; text-align: left; }
@@ -160,6 +183,12 @@
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
+    <button class="editor-btn" id="editorBtn">🎨 Creative Mode <small>Edit Map →</small></button>
+    <div id="loadedInfo" class="loaded-badge" style="display:none;"></div>
+    <button class="load-btn" id="loadMapBtn" style="display:none;">📂 Load Map</button>
+    <div id="mapListPanel" style="display:none;">
+      <div class="map-list" id="mapList"></div>
+    </div>
     <div id="modeBtns">
       <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
       <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
@@ -265,12 +294,14 @@
         errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
         return false;
       }
-      SaveState.setIntent({ action: 'new', mode, rows, cols,
+      const intentObj = { action: 'new', mode, rows, cols,
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
-        creative: document.getElementById('creativeChk').checked,
+        creative: document.getElementById('creativeChk').checked || !!loadedMap,
         startUnits: Number(startSlider.value),
-        randomStart: randomChk.checked });
+        randomStart: randomChk.checked };
+      if (loadedMap) intentObj.customMap = loadedMap;
+      SaveState.setIntent(intentObj);
       window.location.href = 'index.html';
       return true;
     }
@@ -296,6 +327,58 @@
     }
     document.getElementById('backBtn').addEventListener('click', () => {
       window.location.href = 'menu.html';
+    });
+
+    // --- Map editor + Load map ---
+    let loadedMap = null;
+    const loadMapBtn = document.getElementById('loadMapBtn');
+    const mapListPanel = document.getElementById('mapListPanel');
+    const loadedInfo = document.getElementById('loadedInfo');
+
+    // Show load button if any maps exist
+    function refreshMapList() {
+      const maps = SaveState.loadMaps();
+      loadMapBtn.style.display = maps.length ? '' : 'none';
+      const list = document.getElementById('mapList');
+      list.innerHTML = '';
+      for (const m of maps) {
+        const el = document.createElement('div');
+        el.className = 'map-item';
+        el.innerHTML = `<div class="info"><b>${m.name}</b><br><small>${m.rows}×${m.cols} · ${m.author}</small></div>` +
+          `<button class="use-btn" data-id="${m.id}">Load</button>` +
+          `<button class="del-btn" data-id="${m.id}">✕</button>`;
+        list.appendChild(el);
+      }
+      list.querySelectorAll('.use-btn').forEach(btn => btn.addEventListener('click', () => {
+        const map = maps.find(m => m.id === btn.dataset.id);
+        if (map) {
+          loadedMap = map;
+          loadedInfo.textContent = `✓ Loaded: ${map.name} (${map.rows}×${map.cols})`;
+          loadedInfo.style.display = '';
+          widthInput.value = map.cols;
+          heightInput.value = map.rows;
+          mapListPanel.style.display = 'none';
+        }
+      }));
+      list.querySelectorAll('.del-btn').forEach(btn => btn.addEventListener('click', () => {
+        const idx = maps.findIndex(m => m.id === btn.dataset.id);
+        if (idx >= 0) { maps.splice(idx, 1); SaveState.saveMaps(maps); refreshMapList(); }
+      }));
+    }
+    refreshMapList();
+
+    loadMapBtn.addEventListener('click', () => {
+      mapListPanel.style.display = mapListPanel.style.display === 'none' ? '' : 'none';
+    });
+
+    document.getElementById('editorBtn').addEventListener('click', () => {
+      const cols = readDim(widthInput), rows = readDim(heightInput);
+      if (cols == null || rows == null) {
+        errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
+        return;
+      }
+      SaveState.setIntent({ action: 'editor', rows, cols });
+      window.location.href = 'editor.html';
     });
   </script>
 </body>

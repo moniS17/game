@@ -327,7 +327,7 @@ function inPlacement() { return pendingForTurn() > 0; }
 // State (de)serialization — bridges localStorage and the runtime Game
 // ---------------------------------------------------------------------------
 function serialize() {
-  return {
+  const out = {
     seed: Game.seed,
     rows: Board.ROWS,
     cols: Board.COLS,
@@ -356,8 +356,10 @@ function serialize() {
     ecoUpgrades: [ { ...Game.ecoUpgrades[0] }, { ...Game.ecoUpgrades[1] } ],
     unlocked: [ { ...Game.unlocked[0] }, { ...Game.unlocked[1] } ],
     templates: [ (Game.templates[0] || []).map(cloneTemplate), (Game.templates[1] || []).map(cloneTemplate) ],
-    pendingSpawns: [], // always flushed into toPlace once applied
+    pendingSpawns: [],
   };
+  if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
+  return out;
 }
 function cloneTemplate(t) { return { id: t.id, name: t.name, cells: (t.cells || []).slice() }; }
 
@@ -411,6 +413,40 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     unlocked: [{ infantry: true }, { infantry: true }],
     ecoUpgrades: [{}, {}],
     templates, pendingSpawns: [],
+  };
+}
+
+function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, difficulty) {
+  const rows = customMap.rows, cols = customMap.cols;
+  Board.setDims(rows, cols);
+  const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
+  const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
+  const incomeMult = [1, 1];
+  if (ai !== null) {
+    const human = ai === 0 ? 1 : 0;
+    if (diff === 'easy') incomeMult[human] = 1.10;
+    else if (diff === 'hard') incomeMult[ai] = 1.17;
+  }
+  const templates = [defaultTemplates(), defaultTemplates()];
+  const allUnlocked = {};
+  for (const k in PIECES) allUnlocked[k] = true;
+  return {
+    seed: 0, mode, rows, cols,
+    turn: startPlayer === 1 ? 1 : 0, round: 1,
+    creative: !!creative, aiPlayer: ai,
+    difficulty: diff, incomeMult,
+    noUnitTurns: [0, 0], noCityTurns: [0, 0],
+    economy: (customMap.economy || [ECONOMY.start, ECONOMY.start]).slice(),
+    territory: buildInitialTerritory(rows, cols)
+      .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
+    cities: (customMap.cities || []).map(c => ({ ...c })),
+    villages: (customMap.villages || []).map(v => ({ ...v })),
+    structures: [], units: (customMap.units || []).map((u, i) => ({ ...u, id: i + 1 })),
+    toPlace: [], upgrades: [{}, {}],
+    unlocked: [{ ...allUnlocked }, { ...allUnlocked }],
+    ecoUpgrades: [{}, {}],
+    templates, pendingSpawns: [],
+    customTerrain: customMap.terrain,
   };
 }
 
@@ -495,8 +531,15 @@ function loadIntoGame(st) {
     ? st.noUnitTurns.slice() : [0, 0];
   Game.noCityTurns = (Array.isArray(st.noCityTurns) && st.noCityTurns.length === 2)
     ? st.noCityTurns.slice() : [0, 0];
-  // Restore board size (old saves predate this and default to 100x100).
-  Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
+  // Restore board: use custom terrain if present, otherwise regenerate from seed.
+  if (st.customTerrain && Array.isArray(st.customTerrain)) {
+    Board.setDims(st.rows, st.cols);
+    Game.terrain = st.customTerrain.map(row => row.slice());
+    Game.customTerrain = true;
+  } else {
+    Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
+    Game.customTerrain = false;
+  }
   // Territory grid (old saves predate this: rebuild from the deployment zones).
   Game.territory = deserializeTerritory(Board.ROWS, Board.COLS, st.territory);
   Game.turn = st.turn || 0;
@@ -1650,11 +1693,13 @@ function boot() {
   let st;
   if (intent && intent.action === 'new') {
     const mode = intent.mode || 'pvp';
-    const start = intent.start === 1 ? 1 : 0;               // which side moves first
-    // In PvE the human picks a side; the AI takes the other. `human` defaults to
-    // Blue (0), so the AI defaults to Red (1) — the classic setup.
+    const start = intent.start === 1 ? 1 : 0;
     const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
-    st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart);
+    if (intent.customMap) {
+      st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty);
+    } else {
+      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart);
+    }
     SaveState.save(st);
   } else {
     st = SaveState.load();

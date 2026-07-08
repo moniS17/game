@@ -12,6 +12,7 @@
 window.SaveState = (function () {
   const SAVE_KEY = 'battlegrid.save';
   const INTENT_KEY = 'battlegrid.intent';
+  const MAPS_KEY = 'battlegrid.maps';
 
   return {
     // Intent is a one-shot hand-off from the menu to the game page:
@@ -30,5 +31,11 @@ window.SaveState = (function () {
     save(state) { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); },
     exists() { return !!localStorage.getItem(SAVE_KEY); },
     clear() { localStorage.removeItem(SAVE_KEY); },
+
+    loadMaps() {
+      const raw = localStorage.getItem(MAPS_KEY);
+      try { return raw ? JSON.parse(raw) : []; } catch { return []; }
+    },
+    saveMaps(maps) { localStorage.setItem(MAPS_KEY, JSON.stringify(maps)); },
   };
 })();

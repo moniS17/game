@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Battlegrid — Map Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1b1f23; color: #e6e6e6; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: #2b3138; flex-shrink: 0; }
+    header h1 { font-size: 1.1rem; }
+    header .actions { display: flex; gap: 8px; align-items: center; }
+    header input { background: #3a3f45; border: 1px solid #555; border-radius: 6px; color: #fff; padding: 5px 10px; font-size: .9rem; width: 160px; }
+    header button { padding: 6px 14px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: .85rem; }
+    .save-btn { background: #2e7d46; color: #fff; }
+    .save-btn:hover { background: #256b3b; }
+    .back-btn { background: #3a3f45; color: #ccc; }
+    .back-btn:hover { background: #4a5058; }
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+    .canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+    .sidebar { width: 220px; background: #2b3138; padding: 12px; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; }
+    .sidebar h3 { font-size: .85rem; color: #9aa4ad; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+    .palette { display: flex; flex-wrap: wrap; gap: 4px; }
+    .swatch { width: 36px; height: 30px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; display: flex; align-items: center; justify-content: center; font-size: .6rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
+    .swatch.active { border-color: #ffeb3b; }
+    .tool-row { display: flex; gap: 6px; align-items: center; }
+    .tool-row select { flex: 1; background: #3a3f45; border: 1px solid #555; border-radius: 4px; color: #fff; padding: 4px 6px; font-size: .82rem; }
+    .tool-row label { font-size: .78rem; color: #aab2bd; white-space: nowrap; }
+    .gold-row { display: flex; align-items: center; gap: 6px; font-size: .85rem; }
+    .gold-row .val { font-weight: 700; color: #f5c542; min-width: 50px; }
+    .gold-row button { padding: 3px 8px; border: none; border-radius: 4px; background: #3a5bd9; color: #fff; cursor: pointer; font-size: .75rem; font-weight: 600; }
+    .gold-row button:hover { background: #2f49b0; }
+    .mode-tabs { display: flex; gap: 4px; }
+    .mode-tabs button { flex: 1; padding: 6px; border: none; border-radius: 4px; background: #3a3f45; color: #aab2bd; font-size: .78rem; font-weight: 600; cursor: pointer; }
+    .mode-tabs button.active { background: #6a4bd9; color: #fff; }
+    .link-btn { display: block; width: 100%; padding: 8px; border: none; border-radius: 6px; background: #3a3f45; color: #ccc; font-weight: 600; font-size: .82rem; cursor: pointer; text-align: center; }
+    .link-btn:hover { background: #4a5058; }
+    .status { font-size: .72rem; color: #7cb342; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ Map Editor</h1>
+    <div class="actions">
+      <input id="mapName" type="text" placeholder="Map name…" />
+      <button class="save-btn" id="saveBtn">💾 Save</button>
+      <button class="back-btn" id="backBtn">← Back</button>
+    </div>
+  </header>
+  <div class="main">
+    <div class="canvas-wrap"><canvas id="editorCanvas"></canvas></div>
+    <div class="sidebar">
+      <div>
+        <h3>Mode</h3>
+        <div class="mode-tabs">
+          <button class="active" data-mode="terrain">Terrain</button>
+          <button data-mode="unit">Units</button>
+          <button data-mode="erase">Erase</button>
+        </div>
+      </div>
+      <div id="terrainPanel">
+        <h3>Terrain</h3>
+        <div class="palette" id="terrainPalette"></div>
+      </div>
+      <div id="unitPanel" style="display:none">
+        <h3>Place Unit</h3>
+        <div class="tool-row">
+          <label>Type</label>
+          <select id="unitType"></select>
+        </div>
+        <div class="tool-row">
+          <label>Owner</label>
+          <select id="unitOwner">
+            <option value="0">🔵 Blue</option>
+            <option value="1">🔴 Red</option>
+          </select>
+        </div>
+        <div style="font-size:.7rem; color:#7e8893; margin-top:4px;">Click hex to place (max 17 per tile)</div>
+      </div>
+      <div>
+        <h3>Gold</h3>
+        <div class="gold-row">
+          <span style="color:#00acc1">Blue</span>
+          <span class="val" id="goldBlue">100</span>
+          <button onclick="addGold(0,100)">+100</button>
+          <button onclick="addGold(0,1000)">+1k</button>
+        </div>
+        <div class="gold-row" style="margin-top:6px;">
+          <span style="color:#e53935">Red</span>
+          <span class="val" id="goldRed">100</span>
+          <button onclick="addGold(1,100)">+100</button>
+          <button onclick="addGold(1,1000)">+1k</button>
+        </div>
+      </div>
+      <div>
+        <h3>Info</h3>
+        <div style="font-size:.78rem; color:#aab2bd;" id="mapInfo">—</div>
+      </div>
+      <div id="statusMsg" class="status"></div>
+    </div>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="algorithms.js"></script>
+  <script src="board.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const intent = SaveState.takeIntent();
+    const ROWS = Algorithms.clampDim(intent && intent.rows ? intent.rows : Algorithms.GRID);
+    const COLS = Algorithms.clampDim(intent && intent.cols ? intent.cols : Algorithms.GRID);
+
+    const S3 = Math.sqrt(3);
+    const terrain = [];
+    for (let r = 0; r < ROWS; r++) terrain.push(new Array(COLS).fill('plains'));
+    const cities = [];
+    const villages = [];
+    const units = [];
+    const economy = [100, 100];
+    let nextUnitId = 1;
+
+    let editMode = 'terrain';
+    let terrainBrush = 'plains';
+
+    const canvas = document.getElementById('editorCanvas');
+    const ctx = canvas.getContext('2d');
+    const cam = { x: 0, y: 0, cell: 14 };
+    const MIN_CELL = 5, MAX_CELL = 48;
+
+    function hexW(s) { return S3 * s; }
+    function rowH(s) { return 1.5 * s; }
+    function hexCenter(r, c, s) {
+      const w = hexW(s);
+      return { x: w * (c + 0.5) + (r & 1) * w * 0.5, y: s + r * rowH(s) };
+    }
+    function boardWidth(s) { return hexW(s) * (COLS + 0.5); }
+    function boardHeight(s) { return rowH(s) * (ROWS - 1) + 2 * s; }
+    function hexPath(cx, cy, s) {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 3 * i - Math.PI / 6;
+        const vx = cx + s * Math.cos(a), vy = cy + s * Math.sin(a);
+        if (i === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+      }
+      ctx.closePath();
+    }
+    function cellFromPoint(cx, cy) {
+      const px = cx + cam.x, py = cy + cam.y;
+      const s = cam.cell, w = hexW(s), rh = rowH(s);
+      const rowEst = (py - s) / rh, row = Math.round(rowEst);
+      const colEst = (px - (row & 1) * w * 0.5) / w - 0.5, col = Math.round(colEst);
+      let bestR = row, bestC = col, bestD = Infinity;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const tr = row + dr, tc = col + dc;
+        const c = hexCenter(tr, tc, s);
+        const dx = px - c.x, dy = py - c.y, d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; bestR = tr; bestC = tc; }
+      }
+      return { r: bestR, c: bestC };
+    }
+    function clamp() {
+      const pad = 3 * cam.cell * 1.5;
+      const bw = boardWidth(cam.cell), bh = boardHeight(cam.cell);
+      cam.x = Math.min(Math.max(cam.x, -pad), Math.max(bw - canvas.width + pad, -pad));
+      cam.y = Math.min(Math.max(cam.y, -pad), Math.max(bh - canvas.height + pad, -pad));
+    }
+
+    // Images
+    const images = {};
+    function preload() {
+      const sources = {};
+      for (const k in PIECES) if (PIECES[k].art) sources[k] = PIECES[k].art;
+      for (const k in sources) {
+        const img = new Image();
+        img.onload = render;
+        img.src = sources[k];
+        images[k] = img;
+      }
+    }
+
+    function unitsAt(r, c) {
+      return units.filter(u => u.r === r && u.c === c);
+    }
+
+    function render() {
+      if (!canvas.width || !canvas.height) return;
+      ctx.fillStyle = '#6a6f76';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const s = cam.cell, w = hexW(s), rh = rowH(s);
+      const innerSize = s * 0.83;
+      const detailed = s >= 22;
+      const r0 = Math.max(0, Math.floor((cam.y - s) / rh));
+      const r1 = Math.min(ROWS, Math.ceil((cam.y + canvas.height + s) / rh) + 1);
+      const c0 = Math.max(0, Math.floor((cam.x - w) / w));
+      const c1 = Math.min(COLS, Math.ceil((cam.x + canvas.width + w) / w) + 1);
+
+      for (let r = r0; r < r1; r++) {
+        for (let c = c0; c < c1; c++) {
+          const center = hexCenter(r, c, s);
+          const sx = center.x - cam.x, sy = center.y - cam.y;
+          if (sx < -s * 1.2 || sx > canvas.width + s * 1.2 || sy < -s * 1.2 || sy > canvas.height + s * 1.2) continue;
+          ctx.fillStyle = '#8a9099';
+          hexPath(sx, sy, s);
+          ctx.fill();
+          const tkey = terrain[r][c];
+          ctx.fillStyle = TERRAIN[tkey].color;
+          hexPath(sx, sy, innerSize);
+          ctx.fill();
+          if (detailed && s >= 14) {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = `${Math.floor(s * 0.28)}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(TERRAIN[tkey].code, sx, sy);
+          }
+        }
+      }
+
+      // Units
+      for (let r = r0; r < r1; r++) {
+        for (let c = c0; c < c1; c++) {
+          const stack = unitsAt(r, c);
+          if (!stack.length) continue;
+          const u = stack[stack.length - 1];
+          const center = hexCenter(r, c, s);
+          const sx = center.x - cam.x - innerSize * 0.08, sy = center.y - cam.y;
+          const color = PLAYERS[u.owner].color;
+          ctx.globalAlpha = 0.6; ctx.fillStyle = color;
+          ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+          if (detailed && images[u.type] && images[u.type].complete) {
+            ctx.globalAlpha = 0.7;
+            const imgS = innerSize * 0.5;
+            ctx.drawImage(images[u.type], sx - imgS / 2, sy - imgS / 2, imgS, imgS);
+            ctx.globalAlpha = 1;
+          } else if (innerSize >= 9) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.floor(innerSize * 0.5)}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(PIECES[u.type].code, sx, sy + 0.5);
+          }
+          if (stack.length > 1 && innerSize >= 12) {
+            const bs = Math.max(8, innerSize * 0.42);
+            const bx = sx + innerSize * 0.3, by = sy + innerSize * 0.3;
+            ctx.fillStyle = 'rgba(0,0,0,0.78)';
+            ctx.fillRect(bx, by, bs, bs);
+            ctx.fillStyle = '#ffeb3b';
+            ctx.font = `bold ${Math.floor(bs * 0.72)}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(stack.length), bx + bs / 2, by + bs / 2 + 0.5);
+          }
+        }
+      }
+    }
+
+    function resize() {
+      const wrap = canvas.parentElement;
+      canvas.width = wrap.clientWidth;
+      canvas.height = wrap.clientHeight;
+      clamp();
+      render();
+    }
+
+    function autoZoom() {
+      const fitW = canvas.width / (S3 * (COLS + 0.5));
+      const fitH = canvas.height / (1.5 * (ROWS - 1) + 2);
+      cam.cell = Math.min(Math.floor(Math.min(fitW, fitH)), MAX_CELL);
+      clamp();
+      render();
+    }
+
+    // --- Input ---
+    let dragging = false, dragMoved = false, lastX = 0, lastY = 0;
+    canvas.addEventListener('mousedown', e => { dragging = true; dragMoved = false; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener('mouseup', () => { dragging = false; });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX, dy = e.clientY - lastY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved = true;
+      cam.x -= dx; cam.y -= dy; lastX = e.clientX; lastY = e.clientY;
+      clamp(); render();
+    });
+    canvas.addEventListener('click', e => {
+      if (dragMoved) return;
+      const rect = canvas.getBoundingClientRect();
+      const { r, c } = cellFromPoint(e.clientX - rect.left, e.clientY - rect.top);
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
+      applyBrush(r, c);
+    });
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const wpx = cam.x + mx, wpy = cam.y + my;
+      const bw = boardWidth(cam.cell), bh = boardHeight(cam.cell);
+      const fx = wpx / bw, fy = wpy / bh;
+      const old = cam.cell;
+      cam.cell = Math.round(Math.max(MIN_CELL, Math.min(MAX_CELL, cam.cell * (e.deltaY < 0 ? 1.15 : 0.87))));
+      if (cam.cell !== old) {
+        const nbw = boardWidth(cam.cell), nbh = boardHeight(cam.cell);
+        cam.x = fx * nbw - mx; cam.y = fy * nbh - my;
+        clamp(); render();
+      }
+    }, { passive: false });
+
+    // Touch support
+    let touchPan = null, pinch = null, tap = null;
+    const dist = e => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    canvas.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        touchPan = { x: t.clientX, y: t.clientY, moved: false };
+        tap = { x: t.clientX, y: t.clientY, time: Date.now() };
+      } else if (e.touches.length === 2) {
+        touchPan = null; tap = null;
+        pinch = { d: dist(e), cell: cam.cell };
+      }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1 && touchPan) {
+        const t = e.touches[0];
+        const dx = t.clientX - touchPan.x, dy = t.clientY - touchPan.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) touchPan.moved = true;
+        cam.x -= dx; cam.y -= dy;
+        touchPan.x = t.clientX; touchPan.y = t.clientY;
+        clamp(); render();
+      } else if (e.touches.length === 2 && pinch) {
+        const d = dist(e);
+        cam.cell = Math.round(Math.max(MIN_CELL, Math.min(MAX_CELL, pinch.cell * (d / pinch.d))));
+        clamp(); render();
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', e => {
+      if (tap && !touchPan?.moved && Date.now() - tap.time < 300) {
+        const rect = canvas.getBoundingClientRect();
+        const { r, c } = cellFromPoint(tap.x - rect.left, tap.y - rect.top);
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) applyBrush(r, c);
+      }
+      touchPan = null; pinch = null; tap = null;
+    }, { passive: false });
+
+    function applyBrush(r, c) {
+      if (editMode === 'terrain') {
+        const old = terrain[r][c];
+        terrain[r][c] = terrainBrush;
+        if (old === 'city' && terrainBrush !== 'city') {
+          const idx = cities.findIndex(ci => ci.r === r && ci.c === c);
+          if (idx >= 0) cities.splice(idx, 1);
+        }
+        if (old === 'village' && terrainBrush !== 'village') {
+          const idx = villages.findIndex(v => v.r === r && v.c === c);
+          if (idx >= 0) villages.splice(idx, 1);
+        }
+        if (terrainBrush === 'city' && !cities.some(ci => ci.r === r && ci.c === c)) {
+          cities.push({ r, c, owner: null });
+        }
+        if (terrainBrush === 'village' && !villages.some(v => v.r === r && v.c === c)) {
+          villages.push({ r, c, owner: null });
+        }
+      } else if (editMode === 'unit') {
+        const stack = unitsAt(r, c);
+        if (stack.length >= 17) return;
+        const type = document.getElementById('unitType').value;
+        const owner = Number(document.getElementById('unitOwner').value);
+        const def = PIECES[type];
+        units.push({
+          id: nextUnitId++, type, owner, r, c,
+          hp: def.hp, maxHp: def.hp,
+          mov: def.movement_speed, movesLeft: def.movement_speed,
+          parts: [{ type, count: 1, atk: def.attack, hp: def.hp, mov: def.movement_speed }],
+          acted: false, moved: false
+        });
+      } else if (editMode === 'erase') {
+        const stack = unitsAt(r, c);
+        if (stack.length) {
+          const last = stack[stack.length - 1];
+          const idx = units.indexOf(last);
+          if (idx >= 0) units.splice(idx, 1);
+        }
+      }
+      updateInfo();
+      render();
+    }
+
+    // --- UI setup ---
+    const palette = document.getElementById('terrainPalette');
+    for (const k in TERRAIN) {
+      const t = TERRAIN[k];
+      const el = document.createElement('div');
+      el.className = 'swatch' + (k === terrainBrush ? ' active' : '');
+      el.style.background = t.color;
+      el.textContent = t.name.slice(0, 3);
+      el.dataset.type = k;
+      el.addEventListener('click', () => {
+        terrainBrush = k;
+        palette.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.type === k));
+      });
+      palette.appendChild(el);
+    }
+
+    const unitSelect = document.getElementById('unitType');
+    for (const k in PIECES) {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = PIECES[k].name;
+      unitSelect.appendChild(opt);
+    }
+
+    document.querySelectorAll('.mode-tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        editMode = btn.dataset.mode;
+        document.querySelectorAll('.mode-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        document.getElementById('terrainPanel').style.display = editMode === 'terrain' ? '' : 'none';
+        document.getElementById('unitPanel').style.display = editMode === 'unit' ? '' : 'none';
+      });
+    });
+
+    window.addGold = function(player, amount) {
+      economy[player] += amount;
+      document.getElementById(player === 0 ? 'goldBlue' : 'goldRed').textContent = economy[player];
+    };
+
+    function updateInfo() {
+      const uBlue = units.filter(u => u.owner === 0).length;
+      const uRed = units.filter(u => u.owner === 1).length;
+      document.getElementById('mapInfo').textContent =
+        `${ROWS}×${COLS} · ${cities.length} cities · ${villages.length} villages · Units: ${uBlue}B / ${uRed}R`;
+    }
+
+    // --- Save ---
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const name = document.getElementById('mapName').value.trim() || ('Map ' + new Date().toLocaleDateString());
+      const author = localStorage.getItem('battlegrid.user') || 'local';
+      const mapObj = {
+        id: 'map' + Date.now().toString(36),
+        name, author, rows: ROWS, cols: COLS,
+        terrain: terrain.map(row => row.slice()),
+        cities: cities.map(c => ({ ...c })),
+        villages: villages.map(v => ({ ...v })),
+        units: units.map(u => ({ ...u, parts: u.parts ? u.parts.map(p => ({ ...p })) : [] })),
+        economy: economy.slice()
+      };
+      const maps = SaveState.loadMaps();
+      maps.push(mapObj);
+      SaveState.saveMaps(maps);
+      const msg = document.getElementById('statusMsg');
+      msg.textContent = `Saved "${name}"!`;
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.location.href = 'mode.html';
+    });
+
+    // Boot
+    preload();
+    window.addEventListener('resize', resize);
+    resize();
+    autoZoom();
+    updateInfo();
+  </script>
+</body>
+</html>
