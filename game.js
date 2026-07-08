@@ -61,6 +61,7 @@ const Game = {
   noUnitTurns: [0, 0],
   noCityTurns: [0, 0],
   winner: null,
+  winReason: null,
   // Order queue: queued move/attack orders from multiple tiles, executed together.
   orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
 };
@@ -430,6 +431,20 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
   const templates = [defaultTemplates(), defaultTemplates()];
   const allUnlocked = {};
   for (const k in PIECES) allUnlocked[k] = true;
+  const cities = (customMap.cities || []).map(c => ({ ...c }));
+  const villages = (customMap.villages || []).map(v => ({ ...v }));
+  const terrain = customMap.terrain || [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const t = terrain[r] && terrain[r][c];
+      if (t === 'city' && !cities.some(ci => ci.r === r && ci.c === c)) {
+        cities.push({ r, c, owner: null });
+      }
+      if (t === 'village' && !villages.some(v => v.r === r && v.c === c)) {
+        villages.push({ r, c, owner: null });
+      }
+    }
+  }
   return {
     seed: 0, mode, rows, cols,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
@@ -439,8 +454,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     economy: (customMap.economy || [ECONOMY.start, ECONOMY.start]).slice(),
     territory: buildInitialTerritory(rows, cols)
       .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
-    cities: (customMap.cities || []).map(c => ({ ...c })),
-    villages: (customMap.villages || []).map(v => ({ ...v })),
+    cities, villages,
     structures: [], units: (customMap.units || []).map((u, i) => ({ ...u, id: i + 1 })),
     toPlace: [], upgrades: [{}, {}],
     unlocked: [{ ...allUnlocked }, { ...allUnlocked }],
@@ -547,6 +561,19 @@ function loadIntoGame(st) {
   Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
   Game.villages = (st.villages || []).map((v) => ({ ...v }));
+  if (Game.customTerrain) {
+    for (let r = 0; r < Board.ROWS; r++) {
+      for (let c = 0; c < Board.COLS; c++) {
+        const t = Game.terrain[r] && Game.terrain[r][c];
+        if (t === 'city' && !Game.cities.some(ci => ci.r === r && ci.c === c)) {
+          Game.cities.push({ r, c, owner: null });
+        }
+        if (t === 'village' && !Game.villages.some(v => v.r === r && v.c === c)) {
+          Game.villages.push({ r, c, owner: null });
+        }
+      }
+    }
+  }
   Game.structures = (st.structures || []).map((s) => ({ ...s }));
   Game.units = (st.units || []).map(migrateUnit);
   Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
@@ -563,6 +590,7 @@ function loadIntoGame(st) {
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
   Game.winner = null;
+  Game.winReason = null;
   clearSelection();
   checkWinner();
 
@@ -795,8 +823,14 @@ function updateEliminationStreaks() {
 function checkWinner() {
   if (Game.winner !== null) return;
   for (let p = 0; p < 2; p++) {
-    if (Game.noUnitTurns[p] >= LOSE_TURNS || Game.noCityTurns[p] >= LOSE_TURNS) {
+    if (Game.noUnitTurns[p] >= LOSE_TURNS) {
       Game.winner = 1 - p;
+      Game.winReason = `${PLAYERS[p].name} lost all units`;
+      return;
+    }
+    if (Game.noCityTurns[p] >= LOSE_TURNS) {
+      Game.winner = 1 - p;
+      Game.winReason = `${PLAYERS[p].name} lost all cities`;
       return;
     }
   }

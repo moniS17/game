@@ -503,7 +503,8 @@
         const sel = document.getElementById('selInfo');
         if (Game.winner !== null) {
           sel.className = '';
-          sel.innerHTML = `<b style="color:${PLAYERS[Game.winner].color}">${PLAYERS[Game.winner].name} wins!</b>`;
+          sel.innerHTML = `<b style="color:${PLAYERS[Game.winner].color}">${PLAYERS[Game.winner].name} wins!</b>` +
+            (Game.winReason ? `<div style="font-size:.85rem;color:#9aa4ad;margin-top:4px">${Game.winReason}</div>` : '');
         } else if (Game.selTile && stackAtTile(Game.selTile).length) {
           const stack = stackAtTile(Game.selTile);
           const owner = stack[0].owner;
