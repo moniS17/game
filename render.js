@@ -210,6 +210,8 @@ window.Render = (function () {
             // Skip confrontation lines on the board perimeter
             if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ||
                 nr === 0 || nr === ROWS - 1 || nc === 0 || nc === COLS - 1) continue;
+            // Skip confrontation lines on water tiles
+            if (G.terrain[r][c] === 'water' || G.terrain[nr][nc] === 'water') continue;
             if (territory[nr] && territory[nr][nc] === opp) {
               // Draw the shared edge
               const a1 = Math.PI / 3 * i - Math.PI / 6;
@@ -388,14 +390,14 @@ window.Render = (function () {
 
     if (detailed && images[u.type] && images[u.type].complete) {
       ctx.globalAlpha = 0.6; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.455, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.7;
-      const imgS = innerSize * 0.715;
+      const imgS = innerSize * 0.5;
       ctx.drawImage(images[u.type], sx - imgS / 2, sy - imgS / 2, imgS, imgS);
       ctx.globalAlpha = 1;
     } else {
       ctx.globalAlpha = 0.65; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.39, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       if (innerSize >= 9) {
         ctx.fillStyle = '#fff';
