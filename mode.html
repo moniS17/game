@@ -297,7 +297,7 @@
       const intentObj = { action: 'new', mode, rows, cols,
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
-        creative: document.getElementById('creativeChk').checked || !!loadedMap,
+        creative: document.getElementById('creativeChk').checked,
         startUnits: Number(startSlider.value),
         randomStart: randomChk.checked };
       if (loadedMap) intentObj.customMap = loadedMap;
