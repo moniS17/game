@@ -268,8 +268,8 @@ function getPath(sr, sc, dr, dc, startBudget) {
     const cur = reach.has(k(cr, cc)) ? reach.get(k(cr, cc)) : startBudget;
     const cost = TERRAIN[Game.terrain[cr][cc]].move_cost;
     let prev = null;
-    for (const [ddr, ddc] of Rules.DIRS) {
-      const pr = cr + ddr, pc = cc + ddc;
+    const hexNeighbors = Rules.neighbors(cr, cc);
+    for (const [pr, pc] of hexNeighbors) {
       if (!inBounds(pr, pc)) continue;
       if (!Rules.canStep(Game.terrain, pr, pc, cr, cc)) continue;
       const isStart = pr === sr && pc === sc;
@@ -301,8 +301,8 @@ function findAllPaths(sr, sc, dr, dc, startBudget) {
       if (cr === sr && cc === sc) { results.push(rpath.slice().reverse()); continue; }
       const cur = reach.has(k(cr, cc)) ? reach.get(k(cr, cc)) : startBudget;
       const cost = TERRAIN[Game.terrain[cr][cc]].move_cost;
-      for (const [ddr, ddc] of Rules.DIRS) {
-        const pr = cr + ddr, pc = cc + ddc;
+      const hexNeighbors = Rules.neighbors(cr, cc);
+      for (const [pr, pc] of hexNeighbors) {
         if (!inBounds(pr, pc)) continue;
         if (!Rules.canStep(Game.terrain, pr, pc, cr, cc)) continue;
         const isStart = pr === sr && pc === sc;
@@ -599,7 +599,7 @@ function unitHasType(u, type) {
 function nearOwnedSite(r, c, sites, owner, dist) {
   for (const s of sites) {
     if (s.owner !== owner) continue;
-    if (Math.abs(s.r - r) + Math.abs(s.c - c) <= dist) return true;
+    if (Rules.hexDist(s.r, s.c, r, c) <= dist) return true;
   }
   return false;
 }
@@ -1093,7 +1093,7 @@ function nearestEnemyTile(r, c, owner) {
   for (const [k, s] of Game.unitAt) {
     if (!s.length || s[0].owner === owner) continue;
     const [er, ec] = k.split(',').map(Number);
-    const d = Math.abs(er - r) + Math.abs(ec - c);
+    const d = Rules.hexDist(er, ec, r, c);
     if (d < bestD) { bestD = d; best = { r: er, c: ec }; }
   }
   return best;
@@ -1214,7 +1214,7 @@ function aiDeployUnits(me, specs) {
         if (Game.terrain[r][c] === 'water') continue;
         const s = stackAt(r, c);
         if (s.length && s[0].owner !== me) continue;
-        cands.push({ r, c, d: Math.abs(r - tRow) * 2 + Math.abs(c - frontCol) });
+        cands.push({ r, c, d: Rules.hexDist(r, c, tRow, frontCol) });
       }
     }
     cands.sort((a, b) => a.d - b.d);
@@ -1293,17 +1293,17 @@ function runAiTurn() {
     let enemy = nearestEnemyTile(r, c, me);
     if (!enemy) break;
 
-    if (Math.abs(enemy.r - r) + Math.abs(enemy.c - c) !== 1) {
+    if (!Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
 
       // If damaged (below 70%), prefer a reachable tile that is still in supply
       // range while also closer to the enemy — retreat toward supply if needed.
       const wounded = avgHpRatio < 0.7;
-      let target = null, bestD = Math.abs(r - enemy.r) + Math.abs(c - enemy.c);
+      let target = null, bestD = Rules.hexDist(r, c, enemy.r, enemy.c);
       let targetSupply = null, bestSD = Infinity;
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
-        const d = Math.abs(rr - enemy.r) + Math.abs(cc - enemy.c);
+        const d = Rules.hexDist(rr, cc, enemy.r, enemy.c);
         if (d < bestD) { bestD = d; target = [rr, cc]; }
         if (wounded && aiInSupplyRange(rr, cc, me) && d < bestSD) { bestSD = d; targetSupply = [rr, cc]; }
       }
@@ -1316,7 +1316,7 @@ function runAiTurn() {
         enemy = nearestEnemyTile(r, c, me);
       }
     }
-    if (enemy && group.length && Math.abs(enemy.r - r) + Math.abs(enemy.c - c) === 1) {
+    if (enemy && group.length && Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {
       doAttack(group, enemy.r, enemy.c);
     }
   }
@@ -1350,7 +1350,7 @@ function handleTapAt(r, c) {
   if (Game.selTile && movers.length) {
     // Attack: tapped an adjacent enemy-held tile.
     if (tileStack.length && tileStack[0].owner !== Game.turn &&
-        Math.abs(Game.selTile.r - r) + Math.abs(Game.selTile.c - c) === 1) {
+        Rules.isHexNeighbor(Game.selTile.r, Game.selTile.c, r, c)) {
       doAttack(movers, r, c);
       persist();
       Game.selUnits = Game.selUnits.filter((u) => Game.units.includes(u));
@@ -1420,10 +1420,22 @@ function zoomAt(clientX, clientY, factor) {
   const cam = Render.cam;
   const rect = Render.canvas.getBoundingClientRect();
   const mx = clientX - rect.left, my = clientY - rect.top;
-  const wx = (cam.x + mx) / cam.cell, wy = (cam.y + my) / cam.cell;
+  // World pixel under cursor
+  const wpx = cam.x + mx, wpy = cam.y + my;
+  // Fractional position within the board (0..1)
+  const S3 = Math.sqrt(3);
+  const bw = S3 * cam.cell * (Board.COLS + 0.5);
+  const bh = 1.5 * cam.cell * (Board.ROWS - 1) + 2 * cam.cell;
+  const fx = wpx / bw, fy = wpy / bh;
   const old = cam.cell;
   cam.cell = Math.round(Math.max(Render.MIN_CELL, Math.min(Render.MAX_CELL, cam.cell * factor)));
-  if (cam.cell !== old) { cam.x = wx * cam.cell - mx; cam.y = wy * cam.cell - my; Render.clamp(); Render.render(); }
+  if (cam.cell !== old) {
+    const nbw = S3 * cam.cell * (Board.COLS + 0.5);
+    const nbh = 1.5 * cam.cell * (Board.ROWS - 1) + 2 * cam.cell;
+    cam.x = fx * nbw - mx;
+    cam.y = fy * nbh - my;
+    Render.clamp(); Render.render();
+  }
 }
 
 function wireInput() {

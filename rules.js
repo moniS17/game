@@ -22,7 +22,7 @@
  * COMBAT (mutual, stack-vs-stack, adjacent only)
  *   - Count both sides first. Each side deals the SUM of its members' attack,
  *     reduced by the OTHER tile's terrain defense and a river penalty.
- *   - A stack whose FOUR orthogonal neighbours are all the enemy's territory
+ *   - A stack whose SIX hex neighbours are all the enemy's territory
  *     colour is surrounded and takes DOUBLE damage from that enemy.
  *   - Damage is dealt 1-by-1 down each stack (see game.js applyDamage).
  *
@@ -30,16 +30,41 @@
  *   income(player) = base_income + city_income*(cities owned) + 50%*(villages owned)
  */
 window.Rules = (function () {
-  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const STACK_LIMIT = 17; // max UNITS that may stack on one tile (a template's 5x5 = 25 subunits is separate)
+  // Hex neighbors for odd-r offset (pointy-top hexagons).
+  // Order matches hex edge index: E, NE, NW, W, SW, SE
+  const DIRS_EVEN = [[0, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]];
+  const DIRS_ODD  = [[0, 1], [-1, 1], [-1, 0], [0, -1], [1, 0], [1, 1]];
+  // Legacy DIRS: unique offsets across both parities.
+  const DIRS = [[0, 1], [0, -1], [-1, 0], [-1, -1], [1, 0], [1, -1], [-1, 1], [1, 1]];
+  const STACK_LIMIT = 17;
 
   const COMBAT = {
     river_attack_penalty: 0.2, // fraction cut from ATK when you or your target stands in water
   };
 
-  // Can a unit step from (r,c) to the orthogonally-adjacent (nr,nc)?
-  // Enforces the "no two consecutive water tiles" rule. Does not check the
-  // movement budget (the caller does that) or occupancy.
+  // Get hex neighbors for a given row (odd-r offset)
+  function neighbors(r, c) {
+    const dirs = (r & 1) ? DIRS_ODD : DIRS_EVEN;
+    const result = [];
+    for (const [dr, dc] of dirs) result.push([r + dr, c + dc]);
+    return result;
+  }
+
+  function isHexNeighbor(r1, c1, r2, c2) {
+    const dirs = (r1 & 1) ? DIRS_ODD : DIRS_EVEN;
+    for (const [dr, dc] of dirs) {
+      if (r1 + dr === r2 && c1 + dc === c2) return true;
+    }
+    return false;
+  }
+
+  function hexDist(r1, c1, r2, c2) {
+    const q1 = c1 - (r1 >> 1), q2 = c2 - (r2 >> 1);
+    const dq = q2 - q1, dr = r2 - r1;
+    return (Math.abs(dq) + Math.abs(dq + dr) + Math.abs(dr)) / 2;
+  }
+
+  // Can a unit step from (r,c) to the adjacent hex (nr,nc)?
   function canStep(terrain, r, c, nr, nc) {
     if (!Board.inBounds(nr, nc)) return false;
     if (Board.isWater(terrain, r, c) && Board.isWater(terrain, nr, nc)) return false;
@@ -69,8 +94,8 @@ window.Rules = (function () {
     const frontier = [[sr, sc, budget0]];
     while (frontier.length) {
       const [r, c, budget] = frontier.shift();
-      for (const [dr, dc] of DIRS) {
-        const nr = r + dr, nc = c + dc;
+      const hexNeighbors = neighbors(r, c);
+      for (const [nr, nc] of hexNeighbors) {
         if (!canStep(terrain, r, c, nr, nc)) continue;
         const info = stackInfo(unitAt, nr, nc);
         if (info.count && info.owner !== owner) continue; // enemy = wall
@@ -162,13 +187,13 @@ window.Rules = (function () {
     return s;
   }
 
-  // Is the tile (r,c) hemmed in on all FOUR orthogonal sides by `byOwner`'s
+  // Is the tile (r,c) hemmed in on all SIX hex sides by `byOwner`'s
   // territory colour? Board-edge tiles (a missing neighbour) are never counted
   // as surrounded.
   function surroundedBy(territory, r, c, byOwner) {
     if (!territory) return false;
-    for (const [dr, dc] of DIRS) {
-      const nr = r + dr, nc = c + dc;
+    const hexNeighbors = neighbors(r, c);
+    for (const [nr, nc] of hexNeighbors) {
       if (!Board.inBounds(nr, nc)) return false;
       if (!territory[nr] || territory[nr][nc] !== byOwner) return false;
     }
@@ -215,7 +240,7 @@ window.Rules = (function () {
   }
 
   function isAdjacent(a, b) {
-    return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
+    return isHexNeighbor(a.r, a.c, b.r, b.c);
   }
 
   // Gold per round for `player`: flat base + city_income per owned city +
@@ -234,5 +259,5 @@ window.Rules = (function () {
     return ECONOMY.base_income + (eco.passive || 0) * g('passive') + perCity * cityOwned + perVillage * villageOwned;
   }
 
-  return { DIRS, COMBAT, STACK_LIMIT, canStep, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult, surroundedBy };
+  return { DIRS, DIRS_EVEN, DIRS_ODD, COMBAT, STACK_LIMIT, canStep, neighbors, isHexNeighbor, hexDist, reachable, resolveCombat, isAdjacent, income, unitAttack, unitAttackOn, terrainAtkMult, unitMatchupMult, surroundedBy };
 })();
