@@ -61,11 +61,10 @@ const Game = {
   noUnitTurns: [0, 0],
   noCityTurns: [0, 0],
   winner: null,
-  // Path preview: set when a player clicks a reachable tile before confirming.
-  previewPath: null,    // [{r,c}] from start to dest (inclusive), or null
-  previewDest: null,    // {r,c} destination tile
-  previewGroup: null,   // units that will move
+  // Order queue: queued move/attack orders from multiple tiles, executed together.
+  orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
 };
+let nextOrderId = 1;
 let nextId = 1;
 // Consecutive eliminated turns a side must endure before it loses (see checkWinner).
 const LOSE_TURNS = 3;
@@ -285,9 +284,7 @@ function getPath(sr, sc, dr, dc, startBudget) {
   return path;
 }
 
-// Find ALL distinct shortest paths from (sr,sc) to (dr,dc). Each path is an
-// array of {r,c} from start to dest. Explores every valid predecessor at each
-// step in the budget map, branching into separate paths.
+// Find ALL distinct shortest paths from (sr,sc) to (dr,dc). Kept for AI use.
 function findAllPaths(sr, sc, dr, dc, startBudget) {
   const reach = Game.reachable;
   const k = (r, c) => r + ',' + c;
@@ -945,22 +942,73 @@ function combineUnits(fill, material) {
 }
 
 // ---------------------------------------------------------------------------
-function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); clearPreview(); }
-function clearPreview() { Game.previewPath = null; Game.previewDest = null; Game.previewGroup = null; }
+function clearSelection() { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); clearAllOrders(); }
+
+function committedUnitIds() {
+  const s = new Set();
+  for (const o of Game.orderQueue) for (const u of o.group) s.add(u.id);
+  return s;
+}
+function addOrder(group, sourceTile, destTile, path, isAttack, attackTarget) {
+  Game.orderQueue.push({
+    id: nextOrderId++, group, sourceTile, destTile, path,
+    isAttack: !!isAttack, attackTarget: attackTarget || null,
+  });
+  for (const u of group) u._committed = true;
+}
+function clearAllOrders() {
+  for (const o of Game.orderQueue) for (const u of o.group) delete u._committed;
+  Game.orderQueue = [];
+  nextOrderId = 1;
+}
+function bestAdjacentForAttack(tr, tc, reachable, unitAt, owner, groupSize) {
+  const nbrs = Rules.neighbors(tr, tc);
+  let best = null, bestBudget = -1;
+  for (const [nr, nc] of nbrs) {
+    if (!Board.inBounds(nr, nc)) continue;
+    const k = Board.key(nr, nc);
+    if (!reachable.has(k)) continue;
+    const stack = unitAt.get(k) || [];
+    if (stack.length && stack[0].owner !== owner) continue;
+    if (stack.length + groupSize > Rules.STACK_LIMIT) continue;
+    const budget = reachable.get(k);
+    if (budget > bestBudget) { bestBudget = budget; best = { r: nr, c: nc }; }
+  }
+  return best;
+}
+function autoAdvance() {
+  const committed = committedUnitIds();
+  const movers = Game.units.filter(u =>
+    u.owner === Game.turn && u.movesLeft > 0 && !committed.has(u.id));
+  if (!movers.length) { Game.selTile = null; Game.selUnits = []; Game.reachable = new Map(); UI.refresh(); Render.render(); return; }
+  const seen = new Set(), tiles = [];
+  for (const u of movers) {
+    const k = key(u.r, u.c);
+    if (seen.has(k)) continue;
+    seen.add(k); tiles.push({ r: u.r, c: u.c });
+  }
+  tiles.sort((a, b) => (a.r - b.r) || (a.c - b.c));
+  const next = tiles[0];
+  selectTile(next.r, next.c);
+  if (Render.centerOn) Render.centerOn(next.r, next.c);
+  UI.refresh(); Render.render();
+}
 
 // Recompute reachable tiles for the units in the current selection that can move.
 function recomputeReachable() {
-  const g = Game.selUnits.filter((u) => u.owner === Game.turn && u.movesLeft > 0);
+  const committed = committedUnitIds();
+  const g = Game.selUnits.filter(u => u.owner === Game.turn && u.movesLeft > 0 && !committed.has(u.id));
   Game.reachable = g.length ? Rules.reachable(Game.terrain, Game.unitAt, g) : new Map();
 }
 
 // Inspect a tile: select its whole stack (subset can be unchecked in sidebar).
 function selectTile(r, c) {
   const s = stackAt(r, c);
+  const committed = committedUnitIds();
   Game.selTile = { r, c };
-  Game.selUnits = s.slice();
-  Game.reachable = s.length ? (function () {
-    const g = s.filter((u) => u.owner === Game.turn && u.movesLeft > 0);
+  Game.selUnits = s.filter(u => !committed.has(u.id));
+  Game.reachable = Game.selUnits.length ? (function () {
+    const g = Game.selUnits.filter(u => u.owner === Game.turn && u.movesLeft > 0);
     return g.length ? Rules.reachable(Game.terrain, Game.unitAt, g) : new Map();
   })() : new Map();
 }
@@ -1035,6 +1083,47 @@ function moveGroup(group, r, c, explicitPath) {
   return true;
 }
 
+function executeOrders() {
+  if (!Game.orderQueue.length) return;
+  const moves = Game.orderQueue.filter(o => !o.isAttack);
+  const attacks = Game.orderQueue.filter(o => o.isAttack);
+  for (const order of moves) {
+    const group = order.group.filter(u => Game.units.includes(u));
+    if (!group.length) continue;
+    Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+    if (Game.reachable.has(key(order.destTile.r, order.destTile.c))) {
+      moveGroup(group, order.destTile.r, order.destTile.c, order.path);
+    }
+  }
+  for (const order of attacks) {
+    const group = order.group.filter(u => Game.units.includes(u));
+    if (!group.length) continue;
+    const sr = group[0].r, sc = group[0].c;
+    const dr = order.destTile.r, dc = order.destTile.c;
+    if (sr !== dr || sc !== dc) {
+      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+      if (Game.reachable.has(key(dr, dc))) {
+        moveGroup(group, dr, dc, order.path);
+      }
+    }
+    const survivors = group.filter(u => Game.units.includes(u));
+    if (survivors.length && order.attackTarget) {
+      const at = order.attackTarget;
+      const defenders = stackAt(at.r, at.c);
+      if (defenders.length && defenders[0].owner !== Game.turn) {
+        doAttack(survivors, at.r, at.c);
+      }
+    }
+  }
+  clearAllOrders();
+  Game.reachable = new Map();
+  persist();
+  clearSelection();
+  UI.refresh();
+  Render.render();
+  Render.autoZoom();
+}
+
 // ---------------------------------------------------------------------------
 // Turns & economy
 // ---------------------------------------------------------------------------
@@ -1082,6 +1171,7 @@ function advanceTo(player) {
 function nextRound() {
   if (Game.winner !== null) return;
   if (inPlacement()) { UI.log('Deploy your bought units first.'); UI.refresh(); return; }
+  if (Game.orderQueue.length) executeOrders();
   advanceTo(1 - Game.turn);
 }
 
@@ -1335,85 +1425,47 @@ function runAiTurn() {
 function handleTapAt(r, c) {
   if (Game.winner !== null || !inBounds(r, c)) return;
 
-  // Placement mode: taps deploy bought units into the player's zone.
   if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); Render.autoZoom(); return; }
 
-  // If a path preview is active, tapping elsewhere cancels it.
-  if (Game.previewPath) {
-    clearPreview();
-    // Fall through to normal tile inspection below.
-  }
-
   const tileStack = stackAt(r, c);
-  const movers = Game.selUnits.filter((u) => u.owner === Game.turn);
+  const committed = committedUnitIds();
+  const movers = Game.selUnits.filter(u => u.owner === Game.turn && !committed.has(u.id));
 
   if (Game.selTile && movers.length) {
-    // Attack: tapped an adjacent enemy-held tile.
-    if (tileStack.length && tileStack[0].owner !== Game.turn &&
-        Rules.isHexNeighbor(Game.selTile.r, Game.selTile.c, r, c)) {
-      doAttack(movers, r, c);
-      persist();
-      Game.selUnits = Game.selUnits.filter((u) => Game.units.includes(u));
-      if (Game.selUnits.length) recomputeReachable(); else clearSelection();
-      UI.refresh(); Render.render(); Render.autoZoom(); return;
-    }
-    // Move preview: tapped a reachable (own/empty) tile — show the path.
-    if (Game.reachable.has(key(r, c)) && (!tileStack.length || tileStack[0].owner === Game.turn)) {
-      const group = movers.filter((u) => u.movesLeft > 0);
-      if (group.length) {
-        const sr = group[0].r, sc = group[0].c;
-        const startBudget = Math.min(...group.map((u) => u.movesLeft));
-        Game.previewPath = getPath(sr, sc, r, c, startBudget);
-        Game.previewDest = { r, c };
-        Game.previewGroup = group;
-        UI.refresh(); Render.render(); return;
+    const group = movers.filter(u => u.movesLeft > 0);
+    const selR = Game.selTile.r, selC = Game.selTile.c;
+
+    // ATTACK: tapped an enemy-held tile
+    if (tileStack.length && tileStack[0].owner !== Game.turn && group.length) {
+      if (Rules.isHexNeighbor(selR, selC, r, c)) {
+        // Direct adjacency: attack from current tile (no move needed)
+        const path = [{ r: selR, c: selC }];
+        addOrder(group, { r: selR, c: selC }, { r: selR, c: selC }, path, true, { r, c });
+        autoAdvance();
+        return;
+      }
+      const adj = bestAdjacentForAttack(r, c, Game.reachable, Game.unitAt, Game.turn, group.length);
+      if (adj) {
+        const startBudget = Math.min(...group.map(u => u.movesLeft));
+        const path = getPath(selR, selC, adj.r, adj.c, startBudget);
+        addOrder(group, { r: selR, c: selC }, adj, path, true, { r, c });
+        autoAdvance();
+        return;
       }
     }
+
+    // MOVE: tapped a reachable empty/friendly tile
+    if (Game.reachable.has(key(r, c)) && (!tileStack.length || tileStack[0].owner === Game.turn) && group.length) {
+      const startBudget = Math.min(...group.map(u => u.movesLeft));
+      const path = getPath(selR, selC, r, c, startBudget);
+      addOrder(group, { r: selR, c: selC }, { r, c }, path, false, null);
+      autoAdvance();
+      return;
+    }
   }
 
-  // Otherwise inspect the tapped tile (even empty ones, for building).
   selectTile(r, c);
   UI.refresh(); Render.render();
-}
-
-// Confirm the previewed move: actually relocate units along the path.
-function confirmMove() {
-  if (!Game.previewPath || !Game.previewGroup) return;
-  const { r, c } = Game.previewDest;
-  const group = Game.previewGroup;
-  const path = Game.previewPath;
-  clearPreview();
-  if (moveGroup(group, r, c, path)) {
-    persist();
-    Game.selTile = { r, c };
-    Game.selUnits = group;
-    recomputeReachable();
-  }
-  UI.refresh(); Render.render(); Render.autoZoom();
-}
-
-// Cancel the previewed move and return to the reachable-highlight state.
-function cancelMove() {
-  clearPreview();
-  UI.refresh(); Render.render();
-}
-
-// Replace the current preview path with an alternative (called from the popup).
-function setPreviewPath(path) {
-  if (!path || !path.length) return;
-  Game.previewPath = path;
-  Game.previewDest = path[path.length - 1];
-  UI.refresh(); Render.render();
-}
-
-// Get all alternative paths to the current preview destination.
-function getAlternativePaths() {
-  if (!Game.previewGroup || !Game.previewDest) return [];
-  const group = Game.previewGroup;
-  const sr = group[0].r, sc = group[0].c;
-  const { r: dr, c: dc } = Game.previewDest;
-  const startBudget = Math.min(...group.map((u) => u.movesLeft));
-  return findAllPaths(sr, sc, dr, dc, startBudget);
 }
 
 function zoomAt(clientX, clientY, factor) {
@@ -1558,10 +1610,9 @@ window.totalSubunits = totalSubunits;
 window.canCombineUnits = canCombineUnits;
 window.combineUnits = combineUnits;
 window.selectTile = selectTile;
-window.confirmMove = confirmMove;
-window.cancelMove = cancelMove;
-window.setPreviewPath = setPreviewPath;
-window.getAlternativePaths = getAlternativePaths;
+window.executeOrders = executeOrders;
+window.clearAllOrders = clearAllOrders;
+window.committedUnitIds = committedUnitIds;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;

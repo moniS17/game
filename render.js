@@ -271,76 +271,84 @@ window.Render = (function () {
     }
 
     // Reachable highlight
-    if (G.previewPath) {
-      for (const k of G.reachable.keys()) {
-        const [r, c] = k.split(',').map(Number);
-        if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
-        const center = hexCenter(r, c, size);
-        const sx = center.x - cam.x, sy = center.y - cam.y;
-        ctx.fillStyle = 'rgba(255,255,0,0.12)';
-        hexPath(sx, sy, innerSize);
-        ctx.fill();
-      }
-    } else {
-      for (const k of G.reachable.keys()) {
-        const [r, c] = k.split(',').map(Number);
-        if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
-        const center = hexCenter(r, c, size);
-        const sx = center.x - cam.x, sy = center.y - cam.y;
-        ctx.fillStyle = 'rgba(255,255,0,0.35)';
-        hexPath(sx, sy, innerSize);
-        ctx.fill();
-      }
+    for (const k of G.reachable.keys()) {
+      const [r, c] = k.split(',').map(Number);
+      if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
+      const center = hexCenter(r, c, size);
+      const sx = center.x - cam.x, sy = center.y - cam.y;
+      ctx.fillStyle = 'rgba(255,255,0,0.35)';
+      hexPath(sx, sy, innerSize);
+      ctx.fill();
     }
 
-    // Path preview
-    if (G.previewPath && G.previewPath.length > 1) {
-      const path = G.previewPath;
-      for (const p of path) {
-        if (p.r < r0 || p.r >= r1 || p.c < c0 || p.c >= c1) continue;
-        const center = hexCenter(p.r, p.c, size);
-        const sx = center.x - cam.x, sy = center.y - cam.y;
-        ctx.fillStyle = 'rgba(76,175,80,0.45)';
-        hexPath(sx, sy, innerSize);
-        ctx.fill();
-      }
-      // Draw arrows between consecutive tiles
+    // Order queue paths
+    if (G.orderQueue && G.orderQueue.length) {
       ctx.save();
-      ctx.strokeStyle = '#fff';
-      ctx.fillStyle = '#fff';
-      ctx.lineWidth = Math.max(2, size * 0.08);
       ctx.lineCap = 'round';
       const arrowLen = innerSize * 0.22;
-      for (let i = 0; i < path.length - 1; i++) {
-        const from = path[i], to = path[i + 1];
-        const fc = hexCenter(from.r, from.c, size);
-        const tc = hexCenter(to.r, to.c, size);
-        const fx = fc.x - cam.x, fy = fc.y - cam.y;
-        const tx = tc.x - cam.x, ty = tc.y - cam.y;
-        ctx.beginPath();
-        ctx.moveTo(fx, fy);
-        ctx.lineTo(tx, ty);
-        ctx.stroke();
-        // Arrowhead
-        const dx = tx - fx, dy = ty - fy;
-        const len = Math.sqrt(dx * dx + dy * dy) || 1;
-        const ux = dx / len, uy = dy / len;
-        ctx.beginPath();
-        ctx.moveTo(tx, ty);
-        ctx.lineTo(tx - ux * arrowLen - uy * arrowLen * 0.5, ty - uy * arrowLen + ux * arrowLen * 0.5);
-        ctx.lineTo(tx - ux * arrowLen + uy * arrowLen * 0.5, ty - uy * arrowLen - ux * arrowLen * 0.5);
-        ctx.closePath();
-        ctx.fill();
-      }
-      // Destination outline
-      const dest = path[path.length - 1];
-      if (dest.r >= r0 && dest.r < r1 && dest.c >= c0 && dest.c < c1) {
-        const dc = hexCenter(dest.r, dest.c, size);
-        const dx = dc.x - cam.x, dy = dc.y - cam.y;
-        ctx.strokeStyle = '#4caf50';
-        ctx.lineWidth = Math.max(2, size * 0.1);
-        hexPath(dx, dy, innerSize * 0.9);
-        ctx.stroke();
+      for (let oi = 0; oi < G.orderQueue.length; oi++) {
+        const order = G.orderQueue[oi];
+        const path = order.path;
+        if (!path || path.length < 2) continue;
+        const isAtk = order.isAttack;
+        const pathColor = isAtk ? 'rgba(244,67,54,0.45)' : 'rgba(76,175,80,0.45)';
+        const lineColor = isAtk ? '#ef5350' : '#fff';
+        const outlineColor = isAtk ? '#f44336' : '#4caf50';
+        for (const p of path) {
+          if (p.r < r0 || p.r >= r1 || p.c < c0 || p.c >= c1) continue;
+          const center = hexCenter(p.r, p.c, size);
+          const sx = center.x - cam.x, sy = center.y - cam.y;
+          ctx.fillStyle = pathColor;
+          hexPath(sx, sy, innerSize);
+          ctx.fill();
+        }
+        ctx.strokeStyle = lineColor;
+        ctx.fillStyle = lineColor;
+        ctx.lineWidth = Math.max(2, size * 0.08);
+        for (let i = 0; i < path.length - 1; i++) {
+          const from = path[i], to = path[i + 1];
+          const fc = hexCenter(from.r, from.c, size);
+          const tc = hexCenter(to.r, to.c, size);
+          const fx = fc.x - cam.x, fy = fc.y - cam.y;
+          const tx = tc.x - cam.x, ty = tc.y - cam.y;
+          ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(tx, ty); ctx.stroke();
+          const dx = tx - fx, dy = ty - fy;
+          const len = Math.sqrt(dx * dx + dy * dy) || 1;
+          const ux = dx / len, uy = dy / len;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(tx - ux * arrowLen - uy * arrowLen * 0.5, ty - uy * arrowLen + ux * arrowLen * 0.5);
+          ctx.lineTo(tx - ux * arrowLen + uy * arrowLen * 0.5, ty - uy * arrowLen - ux * arrowLen * 0.5);
+          ctx.closePath(); ctx.fill();
+        }
+        const dest = path[path.length - 1];
+        if (dest.r >= r0 && dest.r < r1 && dest.c >= c0 && dest.c < c1) {
+          const dc = hexCenter(dest.r, dest.c, size);
+          const dx = dc.x - cam.x, dy = dc.y - cam.y;
+          ctx.strokeStyle = outlineColor;
+          ctx.lineWidth = Math.max(2, size * 0.1);
+          hexPath(dx, dy, innerSize * 0.9);
+          ctx.stroke();
+          if (size >= 14) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.floor(size * 0.4)}px monospace`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(String(oi + 1), dx + innerSize * 0.35, dy - innerSize * 0.35);
+          }
+        }
+        if (isAtk && order.attackTarget) {
+          const at = order.attackTarget;
+          if (at.r >= r0 && at.r < r1 && at.c >= c0 && at.c < c1) {
+            const ac = hexCenter(at.r, at.c, size);
+            const ax = ac.x - cam.x, ay = ac.y - cam.y;
+            ctx.strokeStyle = '#f44336';
+            ctx.lineWidth = Math.max(2, size * 0.12);
+            ctx.setLineDash([size * 0.15, size * 0.1]);
+            hexPath(ax, ay, innerSize * 0.95);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
       }
       ctx.restore();
     }
