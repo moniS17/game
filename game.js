@@ -446,6 +446,12 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
       }
     }
   }
+  const third = Math.floor(cols / 3);
+  for (const s of cities.concat(villages)) {
+    if (s.c < third) s.owner = 0;
+    else if (s.c >= cols - third) s.owner = 1;
+    else if (s.owner == null) s.owner = null;
+  }
   return {
     seed: 0, mode, rows, cols,
     turn: startPlayer === 1 ? 1 : 0, round: 1,

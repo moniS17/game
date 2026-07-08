@@ -120,7 +120,8 @@
       `<li>Each player earns gold at the start of every round: <b>${ECONOMY.base_income}</b> base income, no matter what.</li>` +
       `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
       `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
-      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>`;
+      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
+      `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Blue; those in the <b>right third</b> start owned by Red. The middle third remains neutral.</li>`;
 
     // --- Healing & supply ---
     document.getElementById("healRules").innerHTML =
@@ -210,7 +211,7 @@
 
     // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
-      `<li>Each player starts with <b>${ECONOMY.start}</b> gold and <b>one unit built from the Infantry template (4 infantry)</b>.</li>` +
+      `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting units (up to <b>3 × board height</b>).</li>` +
       `<li><b>Tech tree</b>: only the <b>Infantry</b> subunit is unlocked at the start. Research other subunits with gold ` +
         `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
       `<li><b>Templates</b>: design reusable 5×5 blueprints of subunits; a unit's <b>cost = the sum of its subunits' costs</b>.</li>` +

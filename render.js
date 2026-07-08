@@ -49,7 +49,7 @@ window.Render = (function () {
   // Preload SVG art so it can be drawn when zoomed in.
   const images = {};
   function preload() {
-    const sources = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg' };
+    const sources = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg' };
     for (const k in PIECES) if (PIECES[k].art) sources[k] = PIECES[k].art;
     if (typeof STRUCTURES !== 'undefined') for (const k in STRUCTURES) if (STRUCTURES[k].art) sources[k] = STRUCTURES[k].art;
     for (const k in sources) {

@@ -106,20 +106,16 @@
     .seg button.on[data-v="0"] { background: #1e88e5; border-color: #1e88e5; color: #fff; }
     .seg button.on[data-v="1"] { background: #e53935; border-color: #e53935; color: #fff; }
 
-    /* Starting units slider */
+    /* Starting units */
     .spawn { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
     .spawn h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
-    .spawn .slider-row { display: flex; align-items: center; gap: .7rem; }
-    .spawn input[type="range"] {
-      flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
-      background: #3a3f45; border-radius: 3px; outline: none; cursor: pointer;
+    .spawn .units-row { display: flex; align-items: center; gap: .7rem; justify-content: center; }
+    .spawn input[type="number"] {
+      width: 5rem; padding: .55rem; font-size: 1rem; text-align: center; color: #e6e6e6;
+      background: #0f1216; border: 1px solid #3a3f45; border-radius: 6px;
     }
-    .spawn input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-      background: #f5c542; cursor: pointer;
-    }
-    .spawn .val { min-width: 2.5rem; text-align: center; font-size: 1.1rem; font-weight: 700; color: #f5c542; }
-    .spawn .range-labels { display: flex; justify-content: space-between; font-size: .6rem; color: #6b727a; margin-top: .25rem; }
+    .spawn input[type="number"]:focus { outline: none; border-color: #3a5bd9; }
+    .spawn .max-label { font-size: .7rem; color: #6b727a; }
     .spawn-check {
       display: flex; align-items: center; gap: .5rem;
       font-size: .82rem; color: #cfd6dd; margin-top: .7rem; cursor: pointer;
@@ -156,11 +152,10 @@
 
     <div class="spawn">
       <h2>Starting units (per side)</h2>
-      <div class="slider-row">
-        <input type="range" id="startUnitsSlider" min="0" max="17" step="1" value="1" />
-        <span class="val" id="startUnitsVal">1</span>
+      <div class="units-row">
+        <input type="number" id="startUnitsInput" min="0" max="102" step="1" value="1" inputmode="numeric" />
+        <span class="max-label" id="startUnitsMaxLabel">max 102</span>
       </div>
-      <div class="range-labels"><span>0</span><span id="startUnitsMax">17</span></div>
       <label class="spawn-check"><input type="checkbox" id="randomStartChk" checked /> 🎲 Random start locations</label>
       <div class="note" id="spawnNote">Units placed at random tiles in each side's spawn zone.</div>
     </div>
@@ -227,7 +222,7 @@
       widthInput.value = String(Algorithms.GRID);
       heightInput.value = String(Algorithms.GRID);
       errEl.textContent = '';
-      syncSlider();
+      syncStartUnits();
     });
 
     // Adjust BOTH width and height by `delta`, clamped to [MIN, MAX]. A blank or
@@ -238,39 +233,42 @@
         el.value = String(Math.min(MAX, Math.max(MIN, cur + delta)));
       }
       errEl.textContent = '';
-      syncSlider();
+      syncStartUnits();
     }
     document.getElementById('minus10Btn').addEventListener('click', () => stepBoth(-10));
     document.getElementById('plus10Btn').addEventListener('click', () => stepBoth(10));
 
-    // Starting units slider — max = 17 * (1 + boardSize % 10)
-    const startSlider = document.getElementById('startUnitsSlider');
-    const startVal = document.getElementById('startUnitsVal');
-    const startMaxLabel = document.getElementById('startUnitsMax');
+    // Starting units input — max = 3 * board height
+    const startInput = document.getElementById('startUnitsInput');
+    const startMaxLabel = document.getElementById('startUnitsMaxLabel');
     const randomChk = document.getElementById('randomStartChk');
     const spawnNote = document.getElementById('spawnNote');
 
     function calcMaxUnits() {
-      const w = readDim(widthInput) || Algorithms.GRID;
-      return 17 * (1 + w % 10);
+      const h = readDim(heightInput) || Algorithms.GRID;
+      return 3 * h;
     }
-    function syncSlider() {
+    function syncStartUnits() {
       const mx = calcMaxUnits();
-      startSlider.max = String(mx);
-      startMaxLabel.textContent = String(mx);
-      if (Number(startSlider.value) > mx) startSlider.value = String(mx);
-      startVal.textContent = startSlider.value;
+      startInput.max = String(mx);
+      startMaxLabel.textContent = 'max ' + mx;
+      if (Number(startInput.value) > mx) startInput.value = String(mx);
     }
     function syncNote() {
       spawnNote.textContent = randomChk.checked
         ? "Units placed at random tiles in each side's spawn zone."
         : "Units placed evenly along the spawn-zone line closest to the board center.";
     }
-    startSlider.addEventListener('input', () => { startVal.textContent = startSlider.value; });
-    widthInput.addEventListener('input', syncSlider);
-    heightInput.addEventListener('input', syncSlider);
+    startInput.addEventListener('input', () => {
+      const mx = calcMaxUnits();
+      let v = Math.floor(Number(startInput.value));
+      if (v < 0) startInput.value = '0';
+      else if (v > mx) startInput.value = String(mx);
+    });
+    widthInput.addEventListener('input', syncStartUnits);
+    heightInput.addEventListener('input', syncStartUnits);
     randomChk.addEventListener('change', syncNote);
-    syncSlider();
+    syncStartUnits();
     syncNote();
 
     // Segmented Blue/Red pickers: track the selected value, highlight the choice.
@@ -298,7 +296,7 @@
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
         creative: document.getElementById('creativeChk').checked,
-        startUnits: Number(startSlider.value),
+        startUnits: Math.max(0, Math.floor(Number(startInput.value)) || 0),
         randomStart: randomChk.checked };
       if (loadedMap) intentObj.customMap = loadedMap;
       SaveState.setIntent(intentObj);
