@@ -69,6 +69,7 @@ let nextOrderId = 1;
 let nextId = 1;
 // Consecutive eliminated turns a side must endure before it loses (see checkWinner).
 const LOSE_TURNS = 3;
+const LOSE_CITY_TURNS = 7; // 3 full player-turns of grace before city-loss defeat
 
 // Upgrade tuning lives in units.js (window.UPGRADES) so the shop/upgrade pages
 // share one source of truth. Steps are stored per-player in the save.
@@ -828,7 +829,7 @@ function checkWinner() {
       Game.winReason = `${PLAYERS[p].name} lost all units`;
       return;
     }
-    if (Game.noCityTurns[p] >= LOSE_TURNS) {
+    if (Game.noCityTurns[p] >= LOSE_CITY_TURNS) {
       Game.winner = 1 - p;
       Game.winReason = `${PLAYERS[p].name} lost all cities`;
       return;
@@ -1328,6 +1329,20 @@ function nearestEnemyTile(r, c, owner) {
   return best;
 }
 
+function aiHasNoCities(me) {
+  return !Game.cities.some(ci => ci.owner === me);
+}
+
+function nearestUnownedCity(r, c, me) {
+  let best = null, bestD = Infinity;
+  for (const ci of Game.cities) {
+    if (ci.owner === me) continue;
+    const d = Rules.hexDist(ci.r, ci.c, r, c);
+    if (d < bestD) { bestD = d; best = { r: ci.r, c: ci.c }; }
+  }
+  return best;
+}
+
 // The AI (Game.aiPlayer) spends its gold on reinforcements and deploys them in
 // its own zone, aimed at the row where the enemy has pushed closest to the AI's
 // home edge. Called after the AI's existing units have already moved this turn,
@@ -1433,6 +1448,7 @@ function aiDeployUnits(me, specs) {
   const frontCol = me === 1 ? cols - zone : zone - 1;
   const targetRow = aiThreatRow(me);
   const tankRow = aiEnemyTankRow(me);
+  const noCities = aiHasNoCities(me);
 
   // Build candidate list for a given target row.
   function buildCands(tRow) {
@@ -1443,10 +1459,14 @@ function aiDeployUnits(me, specs) {
         if (Game.terrain[r][c] === 'water') continue;
         const s = stackAt(r, c);
         if (s.length && s[0].owner !== me) continue;
-        cands.push({ r, c, d: Rules.hexDist(r, c, tRow, frontCol) });
+        cands.push({ r, c, d: Rules.hexDist(r, c, tRow, frontCol), isCity: Game.terrain[r][c] === 'city' });
       }
     }
-    cands.sort((a, b) => a.d - b.d);
+    if (noCities) {
+      cands.sort((a, b) => (b.isCity - a.isCity) || (a.d - b.d));
+    } else {
+      cands.sort((a, b) => a.d - b.d);
+    }
     return cands;
   }
 
@@ -1537,6 +1557,8 @@ function runAiFor(me) {
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
+  const noCities = aiHasNoCities(me);
+
   for (const k0 of tiles) {
     let [r, c] = k0.split(',').map(Number);
     let group = stackAt(r, c).filter((u) => u.owner === me);
@@ -1547,7 +1569,13 @@ function runAiFor(me) {
     const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
     if (avgHpRatio < 0.5 && aiInSupplyRange(r, c, me)) continue;
 
-    let enemy = nearestEnemyTile(r, c, me);
+    // When holding no cities, prioritize retaking one over chasing enemy units.
+    let enemy;
+    if (noCities) {
+      enemy = nearestUnownedCity(r, c, me) || nearestEnemyTile(r, c, me);
+    } else {
+      enemy = nearestEnemyTile(r, c, me);
+    }
     if (!enemy) break;
 
     if (!Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {
@@ -1576,7 +1604,9 @@ function runAiFor(me) {
         moveGroup(group, chosen[0], chosen[1]);
         r = chosen[0]; c = chosen[1];
         group = stackAt(r, c).filter((u) => u.owner === me);
-        enemy = nearestEnemyTile(r, c, me);
+        enemy = noCities
+          ? (nearestUnownedCity(r, c, me) || nearestEnemyTile(r, c, me))
+          : nearestEnemyTile(r, c, me);
       }
     }
     if (enemy && group.length && Rules.isHexNeighbor(r, c, enemy.r, enemy.c)) {

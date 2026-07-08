@@ -145,7 +145,7 @@ window.Render = (function () {
     const placing = window.inPlacement && window.inPlacement();
 
     const territory = G.territory;
-    const innerSize = size * 0.83;
+    const innerSize = size * 0.915;
 
     // Viewport culling: determine visible row/col range
     const r0 = Math.max(0, Math.floor((cam.y - size) / rh));
