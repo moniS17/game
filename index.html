@@ -57,6 +57,8 @@
     h1 { font-size: 1.15rem; }
     h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; margin-bottom: 6px; }
     .panel { background: #2b3138; border-radius: 8px; padding: 12px; }
+    .ai-takeover-label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #aab2bd; margin-bottom: 8px; cursor: pointer; }
+    .ai-takeover-label input { accent-color: #f5c542; }
 
     #turnBadge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-weight: 600; color: #fff; }
     /* turn header: round on the left, a compact gold read-out tucked to the right */
@@ -196,6 +198,7 @@
     </div>
 
     <div class="panel">
+      <label class="ai-takeover-label"><input type="checkbox" id="aiTakeoverChk"> AI takeover this turn</label>
       <h2>Turn</h2>
       <div class="turn-line">
         <span>Now playing: <span id="turnBadge">—</span> &nbsp; <span class="muted">Round <span id="roundNum">1</span></span></span>
@@ -613,6 +616,12 @@
       window.clearAllOrders && window.clearAllOrders();
       if (Game.selTile) window.selectTile(Game.selTile.r, Game.selTile.c);
       UI.refresh(); Render.render();
+    });
+    document.getElementById('aiTakeoverChk').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        e.target.checked = false;
+        window.runAiTakeover && window.runAiTakeover();
+      }
     });
 
     // Combat-log pop-up: OK closes it; the checkbox preference is remembered.

@@ -1107,6 +1107,7 @@ function executeOrders() {
       moveGroup(group, order.destTile.r, order.destTile.c, order.path);
     }
   }
+  // Move all attack groups to their adjacent tiles first
   for (const order of attacks) {
     const group = order.group.filter(u => Game.units.includes(u));
     if (!group.length) continue;
@@ -1118,14 +1119,24 @@ function executeOrders() {
         moveGroup(group, dr, dc, order.path);
       }
     }
-    const survivors = group.filter(u => Game.units.includes(u));
-    if (survivors.length && order.attackTarget) {
-      const at = order.attackTarget;
-      const defenders = stackAt(at.r, at.c);
-      if (defenders.length && defenders[0].owner !== Game.turn) {
-        doAttack(survivors, at.r, at.c);
-      }
-    }
+  }
+  // Group attacks by target tile — multiple stacks attacking the same tile
+  // share the defender's retaliation damage across all of them
+  const atkByTarget = new Map();
+  for (const order of attacks) {
+    const survivors = order.group.filter(u => Game.units.includes(u));
+    if (!survivors.length || !order.attackTarget) continue;
+    const tk = key(order.attackTarget.r, order.attackTarget.c);
+    if (!atkByTarget.has(tk)) atkByTarget.set(tk, []);
+    atkByTarget.get(tk).push(survivors);
+  }
+  for (const [tk, groups] of atkByTarget) {
+    const [tr, tc] = tk.split(',').map(Number);
+    const defenders = stackAt(tr, tc).slice();
+    if (!defenders.length || defenders[0].owner === Game.turn) continue;
+    const allAttackers = groups.flat().filter(u => !u.acted && u.owner === Game.turn);
+    if (!allAttackers.length) continue;
+    doCoordinatedAttack(allAttackers, groups, tr, tc);
   }
   clearAllOrders();
   Game.reachable = new Map();
@@ -1134,6 +1145,45 @@ function executeOrders() {
   UI.refresh();
   Render.render();
   Render.autoZoom();
+}
+
+// Coordinated attack: multiple stacks from different tiles attack one target.
+// Total ATK is the sum of all attackers. Defender retaliation is split across
+// all attacking groups proportionally to group size.
+function doCoordinatedAttack(allAttackers, groups, tr, tc) {
+  const defenders = stackAt(tr, tc).slice();
+  if (!defenders.length || defenders[0].owner === allAttackers[0].owner) return;
+
+  let { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded } =
+    Rules.resolveCombat(Game.terrain, allAttackers, defenders, Game.territory);
+
+  const defFort = structureAt(tr, tc);
+  if (defFort && defFort.type === 'fort' && defFort.owner === defenders[0].owner) {
+    dmgToDef = Math.max(1, Math.round(dmgToDef * (1 - STRUCTURES.fort.defense)));
+  }
+
+  const defKilled = applyDamage(defenders, dmgToDef);
+
+  // Split retaliation damage across attacking groups by share of total units
+  const totalCount = allAttackers.length;
+  let atkKilled = 0;
+  for (const grp of groups) {
+    const alive = grp.filter(u => Game.units.includes(u) && !u.acted && u.owner === Game.turn);
+    if (!alive.length) continue;
+    const share = Math.max(1, Math.round(dmgToAtk * alive.length / totalCount));
+    atkKilled += applyDamage(alive, share);
+  }
+
+  for (const u of allAttackers) {
+    if (Game.units.includes(u)) { u.acted = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
+  }
+
+  const foe = 1 - Game.turn;
+  const stkCount = groups.length > 1 ? ` (${groups.length} stacks)` : '';
+  UI.log(`${PLAYERS[Game.turn].name}${stkCount} (${allAttackers.length}) struck ` +
+    `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back split). ` +
+    `Destroyed ${defKilled} / lost ${atkKilled}.`);
+  checkWinner();
 }
 
 // ---------------------------------------------------------------------------
@@ -1379,6 +1429,34 @@ function aiEnemyHasTanks(me) {
 function runAiTurn() {
   const me = Game.aiPlayer;
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
+  runAiFor(me);
+  if (Game.winner === null) aiSpendAndReinforce(me);
+  Game.reachable = new Map();
+  persist();
+  UI.refresh();
+  Render.render();
+  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
+  advanceTo(1 - me);
+}
+
+// AI takeover: let the AI play the current human player's turn
+function runAiTakeover() {
+  if (Game.winner !== null) return;
+  if (inPlacement()) { UI.log('Deploy your units first.'); UI.refresh(); return; }
+  if (Game.orderQueue.length) clearAllOrders();
+  const me = Game.turn;
+  const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
+  runAiFor(me);
+  if (Game.winner === null) aiSpendAndReinforce(me);
+  Game.reachable = new Map();
+  persist();
+  UI.refresh();
+  Render.render();
+  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
+  advanceTo(1 - me);
+}
+
+function runAiFor(me) {
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
@@ -1422,13 +1500,6 @@ function runAiTurn() {
       doAttack(group, enemy.r, enemy.c);
     }
   }
-  if (Game.winner === null) aiSpendAndReinforce(me); // buy + deploy reinforcements
-  Game.reachable = new Map();
-  persist();
-  UI.refresh();
-  Render.render();
-  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  advanceTo(1 - me); // hand control back to the human
 }
 
 // ---------------------------------------------------------------------------
@@ -1624,6 +1695,7 @@ window.selectTile = selectTile;
 window.executeOrders = executeOrders;
 window.clearAllOrders = clearAllOrders;
 window.committedUnitIds = committedUnitIds;
+window.runAiTakeover = runAiTakeover;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;
