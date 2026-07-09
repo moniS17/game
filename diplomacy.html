@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script>if(!localStorage.getItem("battlegrid.user"))location.replace("login.html");</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1b1f23" />
+  <title>Battlegrid — Diplomacy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
+      background: linear-gradient(135deg, #1b2735 0%, #090a0f 100%); color: #e6e6e6;
+      padding: 20px;
+    }
+    .page { background: #23282e; padding: 2rem; border-radius: 14px; width: 100%; max-width: 520px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+    h1 { font-size: 1.4rem; margin-bottom: .3rem; }
+    .sub { color: #9aa4ad; font-size: .82rem; margin-bottom: 1.2rem; }
+    .country-card {
+      background: #2b3138; border-radius: 8px; padding: 12px; margin-bottom: 10px;
+      border-left: 4px solid #555;
+    }
+    .cc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .cc-swatch { width: 16px; height: 16px; border-radius: 4px; }
+    .cc-name { font-weight: 700; font-size: .95rem; }
+    .cc-stats { font-size: .8rem; color: #9aa4ad; margin-bottom: 6px; }
+    .cc-rel { font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
+    .cc-rel.war { color: #ff5a52; }
+    .cc-rel.peace { color: #f5c542; }
+    .cc-rel.alliance { color: #4caf50; }
+    .cc-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cc-actions button {
+      padding: 5px 10px; font-size: .78rem; font-weight: 600; border: none; border-radius: 5px;
+      cursor: pointer; color: #fff;
+    }
+    .btn-war { background: #c62828; } .btn-war:hover { background: #a52020; }
+    .btn-peace { background: #f9a825; color: #1b2026; } .btn-peace:hover { background: #f5c542; }
+    .btn-ally { background: #2e7d32; } .btn-ally:hover { background: #1b5e20; }
+    .btn-gold { background: #ef6c00; } .btn-gold:hover { background: #e65100; }
+    .btn-join { background: #1565c0; } .btn-join:hover { background: #0d47a1; }
+    button.back { width: 100%; padding: 10px; font-size: .92rem; font-weight: 600; color: #fff; background: #444c55; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+    button.back:hover { background: #525c66; }
+    .gold-input { width: 60px; padding: 3px 6px; font-size: .82rem; background: #0f1216; border: 1px solid #3a3f45; border-radius: 4px; color: #e6e6e6; text-align: center; }
+    .eliminated { opacity: .5; }
+    .self { border-left-color: #3a5bd9; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>🤝 Diplomacy</h1>
+    <div class="sub">Manage relationships with other countries.</div>
+    <div id="cards"></div>
+    <button class="back" id="backBtn">← Back to battle</button>
+  </div>
+
+  <script src="units.js"></script>
+  <script src="board.js"></script>
+  <script src="rules.js"></script>
+  <script src="state.js"></script>
+  <script>
+    const save = SaveState.loadGame();
+    if (!save) { window.location.href = 'index.html'; }
+
+    // Reconstruct minimal game state for diplomacy reads
+    const n = save.playerCount || 2;
+    if (save.players) initPlayers(save.players.length, save.players.map(p => p.name));
+    const diplomacy = save.diplomacy || [];
+    const eliminated = new Set(save.eliminated || []);
+    const me = save.turn || 0;
+
+    function render() {
+      const cards = document.getElementById('cards');
+      let html = '';
+      for (let p = 0; p < PLAYERS.length; p++) {
+        const isElim = eliminated.has(p);
+        const isSelf = p === me;
+        const cls = (isElim ? ' eliminated' : '') + (isSelf ? ' self' : '');
+        const rel = diplomacy[me] && diplomacy[me][p] ? diplomacy[me][p] : (isSelf ? '-' : 'war');
+        const relLabel = isSelf ? 'You' : rel.charAt(0).toUpperCase() + rel.slice(1);
+        const relCls = isSelf ? '' : rel;
+
+        const units = (save.units || []).filter(u => u.owner === p).length;
+        const cities = (save.cities || []).filter(c => c.owner === p).length;
+        const villages = (save.villages || []).filter(v => v.owner === p).length;
+        const gold = save.economy ? save.economy[p] : 0;
+
+        html += `<div class="country-card${cls}" style="border-left-color:${PLAYERS[p].color}">`;
+        html += `<div class="cc-head"><span class="cc-swatch" style="background:${PLAYERS[p].color}"></span><span class="cc-name">${PLAYERS[p].name}</span>${isElim ? '<span style="color:#ff5a52;font-size:.75rem;"> (Eliminated)</span>' : ''}</div>`;
+        html += `<div class="cc-stats">${units} units · ${cities} cities · ${villages} villages · ${gold} gold</div>`;
+        html += `<div class="cc-rel ${relCls}">${relLabel}</div>`;
+
+        if (!isSelf && !isElim) {
+          html += '<div class="cc-actions">';
+          if (rel === 'war') {
+            html += `<button class="btn-peace" data-p="${p}" data-act="peace">🕊 Propose Peace</button>`;
+            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">🤝 Propose Alliance</button>`;
+          } else if (rel === 'peace') {
+            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">🤝 Form Alliance</button>`;
+            html += `<button class="btn-war" data-p="${p}" data-act="war">⚔️ Declare War</button>`;
+          } else if (rel === 'alliance') {
+            html += `<button class="btn-war" data-p="${p}" data-act="war">⚔️ Break Alliance</button>`;
+            html += `<button class="btn-gold" data-p="${p}" data-act="gold">💰 Send Gold</button>`;
+            html += `<input type="number" class="gold-input" id="goldAmt${p}" min="1" max="${gold}" value="10" />`;
+          }
+          // Join war: if ally is at war with someone, offer to join
+          if (rel === 'alliance') {
+            for (let e = 0; e < PLAYERS.length; e++) {
+              if (e === me || e === p || eliminated.has(e)) continue;
+              if (diplomacy[p] && diplomacy[p][e] === 'war' && diplomacy[me] && diplomacy[me][e] !== 'war') {
+                html += `<button class="btn-join" data-p="${e}" data-act="joinwar">⚔️ Join war vs ${PLAYERS[e].name}</button>`;
+              }
+            }
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      cards.innerHTML = html;
+
+      cards.querySelectorAll('button[data-act]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = parseInt(btn.dataset.p);
+          const act = btn.dataset.act;
+          if (act === 'gold') {
+            const input = document.getElementById('goldAmt' + p);
+            const amt = Math.max(1, Math.min(save.economy[me], parseInt(input.value) || 10));
+            save.economy[me] -= amt;
+            save.economy[p] = (save.economy[p] || 0) + amt;
+          } else if (act === 'joinwar') {
+            setRel(me, p, 'war');
+          } else {
+            setRel(me, p, act);
+          }
+          SaveState.saveGame(save);
+          render();
+        });
+      });
+    }
+
+    function setRel(a, b, state) {
+      if (!save.diplomacy) {
+        save.diplomacy = [];
+        for (let i = 0; i < n; i++) {
+          save.diplomacy[i] = [];
+          for (let j = 0; j < n; j++) save.diplomacy[i][j] = i === j ? 'self' : 'war';
+        }
+      }
+      save.diplomacy[a][b] = state;
+      save.diplomacy[b][a] = state;
+      diplomacy[a] = save.diplomacy[a];
+      diplomacy[b] = save.diplomacy[b];
+    }
+
+    render();
+    document.getElementById('backBtn').addEventListener('click', () => { window.location.href = 'index.html'; });
+  </script>
+</body>
+</html>

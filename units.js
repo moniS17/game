@@ -94,10 +94,30 @@ window.UNIT_COMBAT = {
   cannon:    { tank: 1.4 },
 };
 
-// Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
-window.PLAYERS = [  { name: 'Country1', side: 'left',  color: '#4A148C' },
-  { name: 'Country2',  side: 'right', color: '#e53935' },
+// Player color palette — up to 8 visually distinct colors.
+window.PLAYER_COLORS = [
+  '#4A148C', '#e53935', '#1e88e5', '#2e7d32',
+  '#ef6c00', '#00838f', '#ad1457', '#f9a825',
 ];
+
+// Players. Defaults to 2; overridden by initPlayers(n) at game start.
+window.PLAYERS = [
+  { name: 'Country1', color: '#4A148C' },
+  { name: 'Country2', color: '#e53935' },
+];
+
+window.initPlayers = function (n, names) {
+  n = Math.max(2, Math.min(8, n || 2));
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    arr.push({
+      name: (names && names[i]) || ('Country' + (i + 1)),
+      color: PLAYER_COLORS[i],
+    });
+  }
+  window.PLAYERS = arr;
+  return arr;
+};
 
 // Economy tuning (applied by rules.js). Gold amounts are scaled ×10 (see PIECES).
 window.ECONOMY = {

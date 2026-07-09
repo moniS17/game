@@ -207,6 +207,23 @@
       display: flex; align-items: center; justify-content: center;
     }
 
+    /* AI strategy modal */
+    .strat-btns { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .strat-btns button {
+      padding: 12px; font-size: .95rem; font-weight: 600; border: none; border-radius: 8px;
+      cursor: pointer; color: #fff; display: flex; align-items: center; gap: 8px;
+    }
+    .strat-btns .strat-attack { background: #c62828; }
+    .strat-btns .strat-attack:hover { background: #a52020; }
+    .strat-btns .strat-defend { background: #1565c0; }
+    .strat-btns .strat-defend:hover { background: #0d47a1; }
+    .strat-btns .strat-balanced { background: #2e7d32; }
+    .strat-btns .strat-balanced:hover { background: #1b5e20; }
+
+    /* Peace deal modal */
+    .peace-deal-list { margin: 10px 0; font-size: .88rem; line-height: 1.6; }
+    .peace-deal-list .pd-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #333; }
+
   </style>
 </head>
 <body>
@@ -252,10 +269,7 @@
       <!-- creative-mode cheat: only shown when the game was started in creative mode -->
       <button id="creativeBtn" style="display:none; background:#8e5bd9;">🎁 +171,717 gold</button>
 
-      <div class="stat-row"><span>Country1 units</span><span id="blueCount">0</span></div>
-      <div class="stat-row"><span>Country2 units</span><span id="redCount">0</span></div>
-      <div class="stat-row"><span>Cities (Country1 / Country2)</span><span id="cityCount">0 / 0</span></div>
-      <div class="stat-row"><span>Villages (Country1 / Country2)</span><span id="villageCount">0 / 0</span></div>
+      <div id="playerStats"></div>
 
       <div class="shop-row">
         <button class="shop" id="buyBtn">🛒 Buy</button>
@@ -273,6 +287,7 @@
       <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
 
       <div class="btn-grid">
+        <button class="ghost" id="diplomacyBtn">🤝 Diplomacy</button>
         <button class="ghost" id="infoBtn">📖 Field manual</button>
         <button class="ghost" id="menuBtn">Main menu</button>
       </div>
@@ -329,6 +344,29 @@
       <p class="hint" style="margin:6px 0 2px;">Place a structure on the selected tile (not water, no existing structure).</p>
       <div id="buildModalBody"></div>
       <button id="buildModalClose" class="ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- AI strategy modal — shown when AI takeover button is clicked -->
+  <div id="aiStratModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:4px;">AI Takeover — Choose Strategy</h2>
+      <p class="hint" style="margin-bottom:8px;">How should the AI play this turn?</p>
+      <div class="strat-btns">
+        <button class="strat-attack" data-strat="attack">⚔️ Focus Attack <small style="opacity:.7">— aggressive, low caution</small></button>
+        <button class="strat-defend" data-strat="defend">🛡️ Focus Defend <small style="opacity:.7">— hold terrain, cautious</small></button>
+        <button class="strat-balanced" data-strat="balanced">⚖️ Balanced <small style="opacity:.7">— default behavior</small></button>
+      </div>
+      <button id="aiStratCancel" class="ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Peace deal modal — shown when a country is eliminated -->
+  <div id="peaceDealModal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h2 id="peaceDealTitle" style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Peace Deal</h2>
+      <div id="peaceDealBody" class="peace-deal-list"></div>
+      <button id="peaceDealOk">OK</button>
     </div>
   </div>
 
@@ -525,16 +563,17 @@
         // creative-mode cheat button (only when the game is in creative mode)
         document.getElementById('creativeBtn').style.display = Game.creative ? '' : 'none';
 
-        let c1 = 0, c2 = 0;
-        for (const u of Game.units) (u.owner === 0 ? c1++ : c2++, 0);
-        document.getElementById('blueCount').textContent = c1;
-        document.getElementById('redCount').textContent = c2;
-        let cb = 0, cr = 0;
-        for (const c of Game.cities) { if (c.owner === 0) cb++; else if (c.owner === 1) cr++; }
-        document.getElementById('cityCount').textContent = cb + ' / ' + cr;
-        let vb = 0, vr = 0;
-        for (const v of (Game.villages || [])) { if (v.owner === 0) vb++; else if (v.owner === 1) vr++; }
-        document.getElementById('villageCount').textContent = vb + ' / ' + vr;
+        // Dynamic player stats
+        const statsEl = document.getElementById('playerStats');
+        let statsHtml = '';
+        for (let p = 0; p < PLAYERS.length; p++) {
+          if (Game.eliminated && Game.eliminated.has(p)) continue;
+          const uCount = Game.units.filter(u => u.owner === p).length;
+          const cCount = Game.cities.filter(ci => ci.owner === p).length;
+          const vCount = (Game.villages || []).filter(v => v.owner === p).length;
+          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}u · ${cCount}c · ${vCount}v</span></div>`;
+        }
+        statsEl.innerHTML = statsHtml;
 
         // placement banner
         const placePanel = document.getElementById('placePanel');
@@ -551,8 +590,10 @@
         const sel = document.getElementById('selInfo');
         if (Game.winner !== null) {
           sel.className = '';
-          sel.innerHTML = `<b style="color:${PLAYERS[Game.winner].color}">${PLAYERS[Game.winner].name} wins!</b>` +
-            (Game.winReason ? `<div style="font-size:.85rem;color:#9aa4ad;margin-top:4px">${Game.winReason}</div>` : '');
+          const w = PLAYERS[Game.winner];
+          sel.innerHTML = `<b style="color:${w ? w.color : '#fff'}">${w ? w.name : 'Unknown'} wins!</b>` +
+            (Game.winReason ? `<div style="font-size:.85rem;color:#9aa4ad;margin-top:4px">${Game.winReason}</div>` : '') +
+            (Game.eliminated && Game.eliminated.size ? `<div style="font-size:.8rem;color:#6b727a;margin-top:4px">Eliminated: ${[...Game.eliminated].map(p => PLAYERS[p].name).join(', ')}</div>` : '');
         } else if (Game.selTile && stackAtTile(Game.selTile).length) {
           const stack = stackAtTile(Game.selTile);
           const owner = stack[0].owner;
@@ -679,6 +720,7 @@
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
     document.getElementById('templateBtn').addEventListener('click', () => { window.location.href = 'template.html'; });
     document.getElementById('techBtn').addEventListener('click', () => { window.location.href = 'tech.html'; });
+    document.getElementById('diplomacyBtn').addEventListener('click', () => { window.location.href = 'diplomacy.html'; });
     document.getElementById('infoBtn').addEventListener('click', () => { window.location.href = 'info.html'; });
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
     document.getElementById('creativeBtn').addEventListener('click', () => window.creativeGrant());
@@ -693,8 +735,30 @@
       UI.refresh(); Render.render();
     });
     document.getElementById('aiTakeoverBtn').addEventListener('click', () => {
-      window.runAiTakeover && window.runAiTakeover();
+      document.getElementById('aiStratModal').style.display = 'flex';
     });
+    // AI strategy modal
+    document.querySelectorAll('#aiStratModal .strat-btns button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById('aiStratModal').style.display = 'none';
+        window.runAiTakeover && window.runAiTakeover(btn.dataset.strat);
+      });
+    });
+    document.getElementById('aiStratCancel').addEventListener('click', () => {
+      document.getElementById('aiStratModal').style.display = 'none';
+    });
+    document.getElementById('aiStratModal').addEventListener('click', (e) => {
+      if (e.target.id === 'aiStratModal') e.currentTarget.style.display = 'none';
+    });
+    // Peace deal modal
+    document.getElementById('peaceDealOk').addEventListener('click', () => {
+      document.getElementById('peaceDealModal').style.display = 'none';
+    });
+    window.showPeaceDeal = function(title, body) {
+      document.getElementById('peaceDealTitle').textContent = title;
+      document.getElementById('peaceDealBody').innerHTML = body;
+      document.getElementById('peaceDealModal').style.display = 'flex';
+    };
 
     // Combat-log pop-up: OK closes it; the checkbox preference is remembered.
     document.getElementById('logModalOk').addEventListener('click', () => {

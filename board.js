@@ -37,9 +37,9 @@ window.Board = (function () {
   function zone() { return Math.max(1, Math.min(17, Math.floor(COLS / 3))); }
 
   // Build terrain + cities for a seed at the current (or given) dimensions.
-  function fromSeed(seed, rows, cols) {
+  function fromSeed(seed, rows, cols, playerCount) {
     if (rows != null && cols != null) setDims(rows, cols);
-    return Algorithms.generateMap(seed, ROWS, COLS);
+    return Algorithms.generateMap(seed, ROWS, COLS, playerCount);
   }
 
   const typeAt = (terrain, r, c) => terrain[r][c];

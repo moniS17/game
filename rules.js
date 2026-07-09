@@ -98,7 +98,9 @@ window.Rules = (function () {
       for (const [nr, nc] of hexNeighbors) {
         if (!canStep(terrain, r, c, nr, nc)) continue;
         const info = stackInfo(unitAt, nr, nc);
-        if (info.count && info.owner !== owner) continue; // enemy = wall
+        if (info.count && info.owner !== owner) {
+          if (!(window.isAlly && window.isAlly(owner, info.owner))) continue;
+        }
         const left = budget - TERRAIN[terrain[nr][nc]].move_cost;
         if (left < 0) continue;
         const k = Board.key(nr, nc);

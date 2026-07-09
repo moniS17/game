@@ -35,13 +35,14 @@ const Game = {
   seed: 0,
   mode: 'pvp',          // 'pvp' | 'pve' (pve: Game.aiPlayer is controlled by the AI)
   terrain: [],
-  cities: [],           // [{r, c, owner}]  owner: 0 | 1 | null (neutral)
+  cities: [],           // [{r, c, owner}]  owner: 0..N-1 | null (neutral)
   villages: [],         // [{r, c, owner}]  capturable; each pays 50% of a city
   structures: [],       // [{type, r, c, owner}]  fort / supply hub — built by players
   units: [],            // Unit[] — board pieces built from templates (see makeUnitFromTemplate)
   unitAt: new Map(),    // "r,c" -> Unit[]  (a stack, all same owner)
-  territory: [],        // ROWS×COLS grid of 0 | 1 | null — which player owns each tile's colour
+  territory: [],        // ROWS×COLS grid of 0..N-1 | null — which player owns each tile's colour
 
+  playerCount: 2,
   economy: [0, 0],
   incomeMult: [1, 1],   // per-player income multiplier from PvE difficulty (see buildInitialState)
   difficulty: 'normal', // pve: 'easy' | 'normal' | 'hard'
@@ -57,14 +58,14 @@ const Game = {
   templates: [[], []],  // per-player library of blueprints: {id, name, cells:[type|null ×25]}
   creative: false,      // creative mode: enables the in-game "+gold" cheat button
   aiPlayer: 1,          // pve: which side (0/1) the AI controls; null in pvp
-  // Elimination is not instant: a side must be wiped out (no units, or no owned
-  // cities) for LOSE_TURNS consecutive turn hand-offs before it loses, giving it
-  // a window to reinforce. These count consecutive turns spent fully eliminated.
+  eliminated: new Set(),
+  diplomacy: [],        // NxN matrix: diplomacy[a][b] = 'war' | 'peace' | 'alliance'
+  damageDealt: [],      // NxN matrix: accumulated combat damage for peace deals
+  aiStrategy: [],       // per-player: 'attack' | 'defend' | 'balanced' | null
   noUnitTurns: [0, 0],
   noCityTurns: [0, 0],
   winner: null,
   winReason: null,
-  // Order queue: queued move/attack orders from multiple tiles, executed together.
   orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
 };
 let nextOrderId = 1;
@@ -241,23 +242,88 @@ function rebuildUnitAt() {
   for (const u of Game.units) addToStack(u);
 }
 
-// Placement-zone test for a column (Country1 left 17, Country2 right 17).
-function inZone(owner, c) { return owner === 0 ? c < ZONE() : c >= COLS() - ZONE(); }
+// Placement-zone test for a column: each player gets cols/N columns.
+function inZone(owner, c) {
+  const n = Game.playerCount || 2;
+  const cols = COLS();
+  const c0 = Math.floor(owner * cols / n);
+  const c1 = Math.floor((owner + 1) * cols / n);
+  return c >= c0 && c < c1;
+}
+
+// Diplomacy helpers
+function initDiplomacy(n) {
+  const d = [];
+  for (let i = 0; i < n; i++) {
+    d[i] = [];
+    for (let j = 0; j < n; j++) d[i][j] = i === j ? 'self' : 'war';
+  }
+  return d;
+}
+function initDamageDealt(n) {
+  const d = [];
+  for (let i = 0; i < n; i++) { d[i] = []; for (let j = 0; j < n; j++) d[i][j] = 0; }
+  return d;
+}
+function isAtWar(a, b) {
+  if (a === b) return false;
+  return !Game.diplomacy.length || !Game.diplomacy[a] || Game.diplomacy[a][b] === 'war';
+}
+function isAlly(a, b) {
+  if (a === b) return true;
+  return Game.diplomacy.length && Game.diplomacy[a] && Game.diplomacy[a][b] === 'alliance';
+}
+function setDiplomacy(a, b, state) {
+  if (!Game.diplomacy.length) return;
+  Game.diplomacy[a][b] = state;
+  Game.diplomacy[b][a] = state;
+}
+function getEnemies(player) {
+  const enemies = [];
+  for (let i = 0; i < Game.playerCount; i++) {
+    if (i !== player && !Game.eliminated.has(i) && isAtWar(player, i)) enemies.push(i);
+  }
+  return enemies;
+}
+function getAllies(player) {
+  const allies = [];
+  for (let i = 0; i < Game.playerCount; i++) {
+    if (i !== player && !Game.eliminated.has(i) && isAlly(player, i)) allies.push(i);
+  }
+  return allies;
+}
+function nextPlayer(current) {
+  const n = Game.playerCount || 2;
+  for (let i = 1; i <= n; i++) {
+    const p = (current + i) % n;
+    if (!Game.eliminated.has(p)) return p;
+  }
+  return current;
+}
+function firstSurvivingPlayer() {
+  for (let i = 0; i < (Game.playerCount || 2); i++) {
+    if (!Game.eliminated.has(i)) return i;
+  }
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
-// Territory — a per-tile ownership grid (0 | 1 | null) painted in each player's
+// Territory — a per-tile ownership grid (0..N-1 | null) painted in each player's
 // colour. Each side's deployment zone starts claimed; moving units paint their
 // path and destination, and deploying claims the drop tile. Combat uses it for
 // the "surrounded by enemy colour" double-damage rule (rules.js).
 // ---------------------------------------------------------------------------
-function buildInitialTerritory(rows, cols) {
-  const zone = Board.zone();
+function buildInitialTerritory(rows, cols, n) {
+  n = n || Game.playerCount || 2;
   const grid = [];
   for (let r = 0; r < rows; r++) {
     const row = new Array(cols).fill(null);
-    for (let c = 0; c < cols; c++) {
-      if (c < zone) row[c] = 0;
-      else if (c >= cols - zone) row[c] = 1;
+    for (let p = 0; p < n; p++) {
+      const c0 = Math.floor(p * cols / n);
+      const c1 = Math.floor((p + 1) * cols / n);
+      const zoneW = Math.max(1, Math.min(17, Math.floor((c1 - c0) / 3)));
+      const start = c0;
+      for (let c = start; c < start + zoneW && c < c1; c++) row[c] = p;
     }
     grid.push(row);
   }
@@ -268,18 +334,22 @@ function claimTile(r, c, owner) {
   if (!Game.territory[r]) Game.territory[r] = new Array(COLS()).fill(null);
   Game.territory[r][c] = owner;
 }
-// Compact save form: one string per row, chars '0' | '1' | '.' (neutral).
+// Compact save form: one string per row, chars '0'–'7' for owners, '.' for null.
 function serializeTerritory() {
   return (Game.territory || []).map((row) =>
-    row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join(''));
+    row.map((v) => (v != null && v >= 0 && v <= 7 ? String(v) : '.')).join(''));
 }
 function deserializeTerritory(rows, cols, data) {
-  if (!Array.isArray(data) || data.length !== rows) return buildInitialTerritory(rows, cols);
+  if (!Array.isArray(data) || data.length !== rows) return buildInitialTerritory(rows, cols, Game.playerCount || 2);
   const grid = [];
   for (let r = 0; r < rows; r++) {
     const s = data[r] || '';
     const row = new Array(cols).fill(null);
-    for (let c = 0; c < cols; c++) row[c] = s[c] === '0' ? 0 : s[c] === '1' ? 1 : null;
+    for (let c = 0; c < cols; c++) {
+      const ch = s[c];
+      if (ch >= '0' && ch <= '7') row[c] = Number(ch);
+      else row[c] = null;
+    }
     grid.push(row);
   }
   return grid;
@@ -359,19 +429,21 @@ function inPlacement() { return pendingForTurn() > 0; }
 // State (de)serialization — bridges localStorage and the runtime Game
 // ---------------------------------------------------------------------------
 function serialize() {
+  const n = Game.playerCount || 2;
   const out = {
     seed: Game.seed,
     rows: Board.ROWS,
     cols: Board.COLS,
     mode: Game.mode,
+    playerCount: n,
     turn: Game.turn,
     round: Game.round,
     creative: Game.creative,
     aiPlayer: Game.aiPlayer,
     difficulty: Game.difficulty,
-    incomeMult: (Game.incomeMult || [1, 1]).slice(),
-    noUnitTurns: (Game.noUnitTurns || [0, 0]).slice(),
-    noCityTurns: (Game.noCityTurns || [0, 0]).slice(),
+    incomeMult: (Game.incomeMult || []).slice(),
+    noUnitTurns: (Game.noUnitTurns || []).slice(),
+    noCityTurns: (Game.noCityTurns || []).slice(),
     economy: Game.economy.slice(),
     cities: Game.cities.map((c) => ({ r: c.r, c: c.c, owner: c.owner })),
     villages: Game.villages.map((v) => ({ r: v.r, c: v.c, owner: v.owner })),
@@ -384,11 +456,16 @@ function serialize() {
       hp: u.hp, maxHp: u.maxHp, mov: u.mov, movesLeft: u.movesLeft, acted: u.acted, moved: !!u.moved,
     })),
     toPlace: Game.toPlace.slice(),
-    upgrades: [ { ...Game.upgrades[0] }, { ...Game.upgrades[1] } ],
-    ecoUpgrades: [ { ...Game.ecoUpgrades[0] }, { ...Game.ecoUpgrades[1] } ],
-    unlocked: [ { ...Game.unlocked[0] }, { ...Game.unlocked[1] } ],
-    templates: [ (Game.templates[0] || []).map(cloneTemplate), (Game.templates[1] || []).map(cloneTemplate) ],
+    upgrades: Game.upgrades.map(u => ({ ...u })),
+    ecoUpgrades: (Game.ecoUpgrades || []).map(e => ({ ...e })),
+    unlocked: Game.unlocked.map(u => ({ ...u })),
+    templates: Game.templates.map(arr => (arr || []).map(cloneTemplate)),
     pendingSpawns: [],
+    eliminated: [...Game.eliminated],
+    diplomacy: Game.diplomacy.map(row => row.slice()),
+    damageDealt: Game.damageDealt.map(row => row.slice()),
+    aiStrategy: (Game.aiStrategy || []).slice(),
+    players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
   if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
   return out;
@@ -416,53 +493,76 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart) {
-  const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
-  const templates = [defaultTemplates(), defaultTemplates()];
-  templates[0].push(makeHqTemplate());
-  templates[1].push(makeHqTemplate());
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames) {
+  const n = playerCount || 2;
+  if (playerNames) window.initPlayers(n, playerNames);
+  else window.initPlayers(n);
+  const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID, n);
+  const templates = [];
+  for (let i = 0; i < n; i++) { templates.push(defaultTemplates()); templates[i].push(makeHqTemplate()); }
   const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
-  const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed);
+  const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed, n);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
-  // PvE difficulty tunes AI gold: AI starts with 170 gold and its per-round
-  // income is scaled by difficulty — hard 1.7×, normal 1×, easy 0.17×.
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
-  const incomeMult = [1, 1];
+  const incomeMult = new Array(n).fill(1);
   if (ai !== null) {
-    if (diff === 'easy') incomeMult[ai] = 0.17;
-    else if (diff === 'hard') incomeMult[ai] = 1.7;
+    const aiMult = diff === 'easy' ? 0.17 : diff === 'hard' ? 1.7 : 1;
+    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) incomeMult[i] = aiMult;
   }
-  const startGold = [ECONOMY.start, ECONOMY.start];
-  if (ai !== null) startGold[ai] = 170;
+  const startGold = new Array(n).fill(ECONOMY.start);
+  if (ai !== null) {
+    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = 170;
+  }
+  // Assign cities to player zones
+  const boardCols = Board.COLS;
+  for (const site of cities.concat(villages || [])) {
+    let assigned = false;
+    for (let p = 0; p < n; p++) {
+      const zc0 = Math.floor(p * boardCols / n);
+      const zc1 = Math.floor((p + 1) * boardCols / n);
+      const zoneW = Math.max(1, Math.min(17, Math.floor((zc1 - zc0) / 3)));
+      if (site.c >= zc0 && site.c < zc0 + zoneW) { site.owner = p; assigned = true; break; }
+      if (site.c >= zc1 - zoneW && site.c < zc1) { site.owner = p; assigned = true; break; }
+    }
+    if (!assigned) site.owner = null;
+  }
   return {
-    seed, mode, rows: Board.ROWS, cols: Board.COLS,
+    seed, mode, rows: Board.ROWS, cols: Board.COLS, playerCount: n,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
-    noUnitTurns: [0, 0], noCityTurns: [0, 0],
+    noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
     economy: startGold,
-    territory: buildInitialTerritory(Board.ROWS, Board.COLS)
-      .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
-    cities, villages: villages || [], structures: [], units, toPlace: [], upgrades: [{}, {}],
-    unlocked: [{ infantry: true }, { infantry: true }],
-    ecoUpgrades: [{}, {}],
+    territory: buildInitialTerritory(Board.ROWS, Board.COLS, n)
+      .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
+    cities, villages: villages || [], structures: [], units, toPlace: [],
+    upgrades: Array.from({ length: n }, () => ({})),
+    unlocked: Array.from({ length: n }, () => ({ infantry: true })),
+    ecoUpgrades: Array.from({ length: n }, () => ({})),
     templates, pendingSpawns: [],
+    eliminated: [],
+    diplomacy: initDiplomacy(n),
+    damageDealt: initDamageDealt(n),
+    aiStrategy: new Array(n).fill(null),
+    players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
 }
 
-function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, difficulty) {
+function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, difficulty, playerCount, playerNames) {
+  const n = playerCount || 2;
+  if (playerNames) window.initPlayers(n, playerNames);
+  else window.initPlayers(n);
   const rows = customMap.rows, cols = customMap.cols;
   Board.setDims(rows, cols);
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
-  const incomeMult = [1, 1];
+  const incomeMult = new Array(n).fill(1);
   if (ai !== null) {
-    if (diff === 'easy') incomeMult[ai] = 0.17;
-    else if (diff === 'hard') incomeMult[ai] = 1.7;
+    const aiMult = diff === 'easy' ? 0.17 : diff === 'hard' ? 1.7 : 1;
+    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) incomeMult[i] = aiMult;
   }
-  const templates = [defaultTemplates(), defaultTemplates()];
-  templates[0].push(makeHqTemplate());
-  templates[1].push(makeHqTemplate());
+  const templates = [];
+  for (let i = 0; i < n; i++) { templates.push(defaultTemplates()); templates[i].push(makeHqTemplate()); }
   const allUnlocked = {};
   for (const k in PIECES) allUnlocked[k] = true;
   const cities = (customMap.cities || []).map(c => ({ ...c }));
@@ -479,27 +579,42 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
       }
     }
   }
-  const third = Math.floor(cols / 3);
+  // Assign cities to player zones
   for (const s of cities.concat(villages)) {
-    if (s.c < third) s.owner = 0;
-    else if (s.c >= cols - third) s.owner = 1;
-    else if (s.owner == null) s.owner = null;
+    let assigned = false;
+    for (let p = 0; p < n; p++) {
+      const zc0 = Math.floor(p * cols / n);
+      const zc1 = Math.floor((p + 1) * cols / n);
+      const zoneW = Math.max(1, Math.min(17, Math.floor((zc1 - zc0) / 3)));
+      if (s.c >= zc0 && s.c < zc0 + zoneW) { s.owner = p; assigned = true; break; }
+      if (s.c >= zc1 - zoneW && s.c < zc1) { s.owner = p; assigned = true; break; }
+    }
+    if (!assigned && s.owner == null) s.owner = null;
   }
+  const startGold = new Array(n).fill(ECONOMY.start);
+  if (customMap.economy) for (let i = 0; i < Math.min(customMap.economy.length, n); i++) startGold[i] = customMap.economy[i];
+  if (ai !== null) { for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = Math.max(startGold[i], 170); }
   return {
-    seed: 0, mode, rows, cols,
+    seed: 0, mode, rows, cols, playerCount: n,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
-    noUnitTurns: [0, 0], noCityTurns: [0, 0],
-    economy: (() => { const e = (customMap.economy || [ECONOMY.start, ECONOMY.start]).slice(); if (ai !== null) e[ai] = Math.max(e[ai], 170); return e; })(),
-    territory: buildInitialTerritory(rows, cols)
-      .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
+    noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
+    economy: startGold,
+    territory: buildInitialTerritory(rows, cols, n)
+      .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
     cities, villages,
     structures: [], units: (customMap.units || []).map((u, i) => ({ ...u, id: i + 1 })),
-    toPlace: [], upgrades: [{}, {}],
-    unlocked: [{ ...allUnlocked }, { ...allUnlocked }],
-    ecoUpgrades: [{}, {}],
+    toPlace: [],
+    upgrades: Array.from({ length: n }, () => ({})),
+    unlocked: Array.from({ length: n }, () => ({ ...allUnlocked })),
+    ecoUpgrades: Array.from({ length: n }, () => ({})),
     templates, pendingSpawns: [],
+    eliminated: [],
+    diplomacy: initDiplomacy(n),
+    damageDealt: initDamageDealt(n),
+    aiStrategy: new Array(n).fill(null),
+    players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
     customTerrain: customMap.terrain,
   };
 }
@@ -507,79 +622,76 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
 // Seed each player's starting force. `count` units per side, placed either
 // randomly in the spawn zone or evenly spaced along the zone line closest to
 // the board center. Each unit uses the default Infantry template.
-function buildInitialArmies(terrain, templates, count, randomStart, seed) {
+function buildInitialArmies(terrain, templates, count, randomStart, seed, playerCount) {
   if (!count || count <= 0) return [];
   const units = [];
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
-
-  const rows = Board.ROWS, cols = Board.COLS, zone = Board.zone();
+  const n = playerCount || 2;
+  const rows = Board.ROWS, cols = Board.COLS;
   const stackLimit = typeof Rules !== 'undefined' ? Rules.STACK_LIMIT : 17;
 
   if (randomStart) {
-    // Seeded PRNG for deterministic random placement.
     let s = ((seed || 0) ^ 0x5f3759df) >>> 0;
     const rng = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
-    for (let owner = 0; owner < 2; owner++) {
+    for (let owner = 0; owner < n; owner++) {
       const tmpl = templates[owner][0];
-      const c0 = owner === 0 ? 0 : cols - zone;
-      const c1 = owner === 0 ? zone : cols;
-      // Collect all dry tiles in this owner's spawn zone.
+      const c0 = Math.floor(owner * cols / n);
+      const c1 = Math.floor((owner + 1) * cols / n);
       const candidates = [];
       for (let r = 0; r < rows; r++)
         for (let c = c0; c < c1; c++)
           if (dry(r, c)) candidates.push({ r, c });
-      // Shuffle candidates.
       for (let i = candidates.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
       }
-      // Place units, respecting stack limit per tile.
       const placed = new Map();
       let idx = 0;
-      for (let n = 0; n < count && idx < candidates.length; ) {
+      for (let nn = 0; nn < count && idx < candidates.length; ) {
         const spot = candidates[idx % candidates.length];
         const k = spot.r + ',' + spot.c;
         const cur = placed.get(k) || 0;
         if (cur >= stackLimit) { idx++; continue; }
         const u = makeUnitFromTemplate(owner, tmpl, spot.r, spot.c, { acted: false });
-        if (u) { units.push(u); placed.set(k, cur + 1); n++; }
+        if (u) { units.push(u); placed.set(k, cur + 1); nn++; }
         idx++;
       }
     }
   } else {
-    // Even placement: line up units along the spawn-zone column closest to center.
-    for (let owner = 0; owner < 2; owner++) {
+    for (let owner = 0; owner < n; owner++) {
       const tmpl = templates[owner][0];
-      const spawnCol = owner === 0 ? zone - 1 : cols - zone;
-      // Collect dry tiles on that column in row order.
+      const c0 = Math.floor(owner * cols / n);
+      const c1 = Math.floor((owner + 1) * cols / n);
+      const spawnCol = Math.floor((c0 + c1) / 2);
       const candidates = [];
       for (let r = 0; r < rows; r++)
         if (dry(r, spawnCol)) candidates.push({ r, c: spawnCol });
       if (!candidates.length) continue;
-      // Distribute `count` units evenly across the available tiles.
-      const n = Math.min(count, candidates.length * stackLimit);
-      for (let i = 0; i < n; i++) {
-        const idx = candidates.length <= n
+      const cnt = Math.min(count, candidates.length * stackLimit);
+      for (let i = 0; i < cnt; i++) {
+        const idx = candidates.length <= cnt
           ? i % candidates.length
-          : Math.round(i * (candidates.length - 1) / (n - 1 || 1));
+          : Math.round(i * (candidates.length - 1) / (cnt - 1 || 1));
         const spot = candidates[idx];
         const unit = makeUnitFromTemplate(owner, tmpl, spot.r, spot.c, { acted: false });
         if (unit) units.push(unit);
       }
     }
   }
-  // Place 1 HQ per side near the center of their deployment zone.
-  for (let owner = 0; owner < 2; owner++) {
+  // Place 1 HQ per side near the center of their zone.
+  for (let owner = 0; owner < n; owner++) {
     const hqTmpl = templates[owner].find(t => t.isHq) || makeHqTemplate();
-    const spawnCol = owner === 0 ? Math.floor(zone / 2) : cols - Math.floor(zone / 2) - 1;
+    const c0 = Math.floor(owner * cols / n);
+    const c1 = Math.floor((owner + 1) * cols / n);
+    const spawnCol = Math.floor((c0 + c1) / 2);
     const midRow = Math.floor(rows / 2);
     let placed = false;
     for (let dr = 0; dr <= rows; dr++) {
       for (const rr of [midRow + dr, midRow - dr]) {
         if (rr < 0 || rr >= rows || !dry(rr, spawnCol)) continue;
-        const s = units.filter(u => u.r === rr && u.c === spawnCol);
-        if (s.length >= stackLimit) continue;
+        const ss = units.filter(u => u.r === rr && u.c === spawnCol);
+        if (ss.length >= stackLimit) continue;
         const hq = makeUnitFromTemplate(owner, hqTmpl, rr, spawnCol, { acted: false });
         if (hq) { units.push(hq); placed = true; }
         break;
@@ -592,31 +704,40 @@ function buildInitialArmies(terrain, templates, count, randomStart, seed) {
 
 // Load a saved state object into the live Game (regenerating the map).
 function loadIntoGame(st) {
+  const n = st.playerCount || 2;
+  Game.playerCount = n;
+  if (st.players && st.players.length) {
+    window.initPlayers(st.players.length, st.players.map(p => p.name));
+    for (let i = 0; i < st.players.length; i++) if (st.players[i].color) PLAYERS[i].color = st.players[i].color;
+  } else {
+    window.initPlayers(n);
+  }
   Game.seed = st.seed;
   Game.mode = st.mode || 'pvp';
-  Game.aiPlayer = (st.aiPlayer === 0 || st.aiPlayer === 1) ? st.aiPlayer : (Game.mode === 'pve' ? 1 : null);
+  Game.aiPlayer = (st.aiPlayer != null && st.aiPlayer >= 0) ? st.aiPlayer : (Game.mode === 'pve' ? 1 : null);
   Game.creative = !!st.creative;
   Game.difficulty = (st.difficulty === 'easy' || st.difficulty === 'hard') ? st.difficulty : 'normal';
-  Game.incomeMult = (Array.isArray(st.incomeMult) && st.incomeMult.length === 2)
-    ? st.incomeMult.slice() : [1, 1];
-  Game.noUnitTurns = (Array.isArray(st.noUnitTurns) && st.noUnitTurns.length === 2)
-    ? st.noUnitTurns.slice() : [0, 0];
-  Game.noCityTurns = (Array.isArray(st.noCityTurns) && st.noCityTurns.length === 2)
-    ? st.noCityTurns.slice() : [0, 0];
-  // Restore board: use custom terrain if present, otherwise regenerate from seed.
+  Game.incomeMult = Array.isArray(st.incomeMult) ? st.incomeMult.slice() : new Array(n).fill(1);
+  Game.noUnitTurns = Array.isArray(st.noUnitTurns) ? st.noUnitTurns.slice() : new Array(n).fill(0);
+  Game.noCityTurns = Array.isArray(st.noCityTurns) ? st.noCityTurns.slice() : new Array(n).fill(0);
+  // Pad arrays to N if save had fewer players
+  while (Game.incomeMult.length < n) Game.incomeMult.push(1);
+  while (Game.noUnitTurns.length < n) Game.noUnitTurns.push(0);
+  while (Game.noCityTurns.length < n) Game.noCityTurns.push(0);
+  // Restore board
   if (st.customTerrain && Array.isArray(st.customTerrain)) {
     Board.setDims(st.rows, st.cols);
     Game.terrain = st.customTerrain.map(row => row.slice());
     Game.customTerrain = true;
   } else {
-    Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID).terrain;
+    Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID, st.playerCount || 2).terrain;
     Game.customTerrain = false;
   }
-  // Territory grid (old saves predate this: rebuild from the deployment zones).
   Game.territory = deserializeTerritory(Board.ROWS, Board.COLS, st.territory);
   Game.turn = st.turn || 0;
   Game.round = st.round || 1;
-  Game.economy = (st.economy || [ECONOMY.start, ECONOMY.start]).slice();
+  Game.economy = (st.economy || new Array(n).fill(ECONOMY.start)).slice();
+  while (Game.economy.length < n) Game.economy.push(ECONOMY.start);
   Game.cities = (st.cities || []).map((c) => ({ ...c }));
   Game.villages = (st.villages || []).map((v) => ({ ...v }));
   if (Game.customTerrain) {
@@ -634,20 +755,22 @@ function loadIntoGame(st) {
   }
   Game.structures = (st.structures || []).map((s) => ({ ...s }));
   Game.units = (st.units || []).map(migrateUnit);
-  Game.upgrades = [ { ...(st.upgrades && st.upgrades[0]) }, { ...(st.upgrades && st.upgrades[1]) } ];
-  Game.ecoUpgrades = [ { ...(st.ecoUpgrades && st.ecoUpgrades[0]) }, { ...(st.ecoUpgrades && st.ecoUpgrades[1]) } ];
-  Game.unlocked = [
-    { infantry: true, ...(st.unlocked && st.unlocked[0]) },
-    { infantry: true, ...(st.unlocked && st.unlocked[1]) },
-  ];
-  // Template libraries (default to the starting Infantry template if missing).
-  Game.templates = [
-    (st.templates && st.templates[0] && st.templates[0].length) ? st.templates[0].map(cloneTemplate) : defaultTemplates(),
-    (st.templates && st.templates[1] && st.templates[1].length) ? st.templates[1].map(cloneTemplate) : defaultTemplates(),
-  ];
-  for (let p = 0; p < 2; p++) {
+  Game.upgrades = Array.from({ length: n }, (_, i) => ({ ...(st.upgrades && st.upgrades[i]) }));
+  Game.ecoUpgrades = Array.from({ length: n }, (_, i) => ({ ...(st.ecoUpgrades && st.ecoUpgrades[i]) }));
+  Game.unlocked = Array.from({ length: n }, (_, i) => ({ infantry: true, ...(st.unlocked && st.unlocked[i]) }));
+  Game.templates = Array.from({ length: n }, (_, i) =>
+    (st.templates && st.templates[i] && st.templates[i].length) ? st.templates[i].map(cloneTemplate) : defaultTemplates()
+  );
+  for (let p = 0; p < n; p++) {
     if (!Game.templates[p].some(t => t.isHq)) Game.templates[p].push(makeHqTemplate());
   }
+  // Diplomacy and damage
+  Game.eliminated = new Set(st.eliminated || []);
+  Game.diplomacy = (st.diplomacy && st.diplomacy.length === n) ? st.diplomacy.map(r => r.slice()) : initDiplomacy(n);
+  Game.damageDealt = (st.damageDealt && st.damageDealt.length === n) ? st.damageDealt.map(r => r.slice()) : initDamageDealt(n);
+  Game.aiStrategy = (st.aiStrategy || new Array(n).fill(null)).slice();
+  while (Game.aiStrategy.length < n) Game.aiStrategy.push(null);
+
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
   Game.winner = null;
@@ -655,11 +778,9 @@ function loadIntoGame(st) {
   clearSelection();
   checkWinner();
 
-  // Units bought in the shop arrive as "to place"; the player deploys them.
-  // Entries are {templateId, owner}; legacy {type} entries are dropped.
   Game.toPlace = (st.toPlace || []).filter((s) => s && s.templateId);
   for (const sp of st.pendingSpawns || []) if (sp && sp.templateId) Game.toPlace.push({ templateId: sp.templateId, owner: sp.owner });
-  persist(); // flush pendingSpawns into toPlace
+  persist();
 }
 
 // ---------------------------------------------------------------------------
@@ -841,7 +962,12 @@ function doAttack(attackers, tr, tc) {
   // Survivors have attacked: mark acted and halve remaining MOV (can still move).
   for (const u of acting) { u.acted = true; u.moved = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
 
-  const foe = 1 - Game.turn;
+  const foe = defenders.length ? defenders[0].owner : (acting.length ? acting[0].owner : 0);
+
+  // Track damage dealt for peace deals
+  if (Game.damageDealt && Game.damageDealt[Game.turn]) {
+    Game.damageDealt[Game.turn][foe] = (Game.damageDealt[Game.turn][foe] || 0) + dmgToDef;
+  }
 
   // Note any terrain buff/debuff the attackers' own tile imposed on them.
   const mods = [], seen = new Set();
@@ -886,40 +1012,115 @@ function doAttack(attackers, tr, tc) {
 // streaks: a side with zero units (or zero owned cities) has its counter bumped,
 // otherwise it resets. Call exactly once per turn transition (see advanceTo).
 function updateEliminationStreaks() {
-  const units = [0, 0], cities = [0, 0];
-  for (const u of Game.units) units[u.owner]++;
-  for (const ci of Game.cities) if (ci.owner === 0 || ci.owner === 1) cities[ci.owner]++;
-  for (let p = 0; p < 2; p++) {
-    Game.noUnitTurns[p] = units[p] === 0 ? Game.noUnitTurns[p] + 1 : 0;
-    Game.noCityTurns[p] = cities[p] === 0 ? Game.noCityTurns[p] + 1 : 0;
+  const n = Game.playerCount || 2;
+  const units = new Array(n).fill(0), cities = new Array(n).fill(0);
+  for (const u of Game.units) if (u.owner < n) units[u.owner]++;
+  for (const ci of Game.cities) if (ci.owner != null && ci.owner < n) cities[ci.owner]++;
+  for (let p = 0; p < n; p++) {
+    if (Game.eliminated.has(p)) continue;
+    Game.noUnitTurns[p] = units[p] === 0 ? (Game.noUnitTurns[p] || 0) + 1 : 0;
+    Game.noCityTurns[p] = cities[p] === 0 ? (Game.noCityTurns[p] || 0) + 1 : 0;
   }
 }
 
-// A side loses only after being fully eliminated — no units, or no owned cities —
-// for LOSE_TURNS consecutive turns (streaks maintained by updateEliminationStreaks).
-// This lets a wiped-out side reinforce before the loss locks in.
+function eliminatePlayer(p) {
+  if (Game.eliminated.has(p)) return;
+  Game.eliminated.add(p);
+  // Peace deal: redistribute eliminated player's cities/villages to attackers
+  const attackers = [];
+  for (let i = 0; i < (Game.playerCount || 2); i++) {
+    if (i === p || Game.eliminated.has(i)) continue;
+    const dmg = (Game.damageDealt && Game.damageDealt[i] && Game.damageDealt[i][p]) || 0;
+    if (dmg > 0) attackers.push({ id: i, dmg });
+  }
+  const totalDmg = attackers.reduce((s, a) => s + a.dmg, 0);
+  const sites = Game.cities.concat(Game.villages || []).filter(s => s.owner === p);
+  if (sites.length && attackers.length) {
+    // Score sites: cities worth 2, villages worth 1
+    const scored = sites.map(s => ({ s, score: Game.terrain[s.r] && Game.terrain[s.r][s.c] === 'city' ? 2 : 1 }));
+    scored.sort((a, b) => b.score - a.score);
+    // Distribute proportionally by damage dealt
+    let distributed = 0;
+    for (const site of scored) {
+      const target = attackers.reduce((best, a) => {
+        const share = a.dmg / totalDmg;
+        const owned = sites.filter(ss => ss.s.owner === a.id).length;
+        const deficit = share * scored.length - owned;
+        return deficit > (best ? best.deficit : -Infinity) ? { ...a, deficit } : best;
+        }, null);
+      if (target) { site.s.owner = target.id; distributed++; }
+    }
+    UI.log(`☮️ Peace deal: ${PLAYERS[p].name} eliminated — ${distributed} site(s) redistributed.`);
+  } else if (sites.length) {
+    for (const s of sites) s.owner = null;
+    UI.log(`${PLAYERS[p].name} eliminated — territories became neutral.`);
+  } else {
+    UI.log(`${PLAYERS[p].name} has been eliminated.`);
+  }
+  // Remove eliminated player's remaining units
+  for (const u of Game.units.filter(u => u.owner === p)) {
+    removeFromStack(u);
+  }
+  Game.units = Game.units.filter(u => u.owner !== p);
+  // Show peace deal via UI if available
+  if (window.showPeaceDeal) {
+    const title = `☮️ ${PLAYERS[p].name} Eliminated`;
+    let body = '';
+    if (attackers.length) {
+      body = attackers.map(a => `<div class="pd-row"><span style="color:${PLAYERS[a.id].color}">${PLAYERS[a.id].name}</span><span>Damage: ${a.dmg} · ${sites.filter(ss => ss.owner === a.id).length} site(s) gained</span></div>`).join('');
+    } else {
+      body = '<div style="color:#9aa4ad">No attacker claims — territory became neutral.</div>';
+    }
+    window.showPeaceDeal(title, body);
+  }
+}
+
 function checkWinner() {
   if (Game.winner !== null) return;
-  // HQ destruction: instant loss
-  for (let p = 0; p < 2; p++) {
+  const n = Game.playerCount || 2;
+  // HQ destruction: instant elimination
+  for (let p = 0; p < n; p++) {
+    if (Game.eliminated.has(p)) continue;
     const hadHq = (Game.templates[p] || []).some(t => t.isHq);
     if (hadHq && !Game.units.some(u => u.owner === p && isHqUnit(u))) {
-      Game.winner = 1 - p;
+      eliminatePlayer(p);
       Game.winReason = `${PLAYERS[p].name} lost their HQ`;
-      return;
     }
   }
-  for (let p = 0; p < 2; p++) {
-    if (Game.noUnitTurns[p] >= LOSE_TURNS) {
-      Game.winner = 1 - p;
+  // Delayed elimination (units / cities)
+  for (let p = 0; p < n; p++) {
+    if (Game.eliminated.has(p)) continue;
+    if ((Game.noUnitTurns[p] || 0) >= LOSE_TURNS) {
+      eliminatePlayer(p);
       Game.winReason = `${PLAYERS[p].name} lost all units`;
-      return;
-    }
-    if (Game.noCityTurns[p] >= LOSE_CITY_TURNS) {
-      Game.winner = 1 - p;
+    } else if ((Game.noCityTurns[p] || 0) >= LOSE_CITY_TURNS) {
+      eliminatePlayer(p);
       Game.winReason = `${PLAYERS[p].name} lost all cities`;
-      return;
     }
+  }
+  // Check if only 1 player (or allied bloc) remains
+  const alive = [];
+  for (let i = 0; i < n; i++) if (!Game.eliminated.has(i)) alive.push(i);
+  if (alive.length <= 1) {
+    Game.winner = alive[0] != null ? alive[0] : 0;
+    return;
+  }
+  // Check if all alive players are allied with each other
+  let allAllied = true;
+  for (let i = 0; i < alive.length && allAllied; i++) {
+    for (let j = i + 1; j < alive.length && allAllied; j++) {
+      if (!isAlly(alive[i], alive[j])) allAllied = false;
+    }
+  }
+  if (allAllied) {
+    // Find the strongest allied player as "winner"
+    let best = alive[0], bestUnits = 0;
+    for (const p of alive) {
+      const cnt = Game.units.filter(u => u.owner === p).length;
+      if (cnt > bestUnits) { bestUnits = cnt; best = p; }
+    }
+    Game.winner = best;
+    Game.winReason = `${alive.map(p => PLAYERS[p].name).join(' & ')} alliance victory`;
   }
 }
 
@@ -930,8 +1131,9 @@ function canRefitUnit(u) {
   if (u.owner !== Game.turn || Game.winner !== null) return false;
   if (inPlacement()) return false;
   if (isHqUnit(u)) return false;
-  const enemy = 1 - u.owner;
-  if (Rules.surroundedBy(Game.territory, u.r, u.c, enemy)) return false;
+  // Check if surrounded by any enemy territory
+  const enemies = getEnemies(u.owner);
+  if (enemies.some(e => Rules.surroundedBy(Game.territory, u.r, u.c, e))) return false;
   const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
   const supplyHubs = Game.structures.filter((s) => s.type === 'supply');
   return nearOwnedSite(u.r, u.c, Game.cities, u.owner, range.city) ||
@@ -1344,7 +1546,13 @@ function doCoordinatedAttack(allAttackers, groups, tr, tc) {
     if (Game.units.includes(u)) { u.acted = true; u.moved = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
   }
 
-  const foe = 1 - Game.turn;
+  const foe = defenders.length ? defenders[0].owner : Game.turn;
+
+  // Track damage dealt for peace deals
+  if (Game.damageDealt && Game.damageDealt[Game.turn]) {
+    Game.damageDealt[Game.turn][foe] = (Game.damageDealt[Game.turn][foe] || 0) + dmgToDef;
+  }
+
   const stkCount = groups.length > 1 ? ` (${groups.length} stacks)` : '';
   UI.log(`${PLAYERS[Game.turn].name}${stkCount} (${allAttackers.length}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back split). ` +
@@ -1398,26 +1606,28 @@ function startTurn(player) {
 // Hand the turn to `player`, paying their income first. Drives the AI in PvE.
 function advanceTo(player) {
   if (Game.winner !== null) return;
-  // One turn has just completed: update elimination streaks and settle any loss
-  // before the next side plays (a side wiped out for LOSE_TURNS straight turns).
   updateEliminationStreaks();
   checkWinner();
   if (Game.winner !== null) { persist(); UI.refresh(); Render.render(); return; }
-  if (player === 0) Game.round++; // returning to Country1 completes a round
+  // Skip eliminated players
+  while (Game.eliminated.has(player)) player = nextPlayer(player);
+  if (player === firstSurvivingPlayer()) Game.round++;
   grantIncome(player);
   startTurn(player);
   persist();
   UI.refresh();
   Render.render();
-  Render.autoZoom(); // small boards: keep the board filling the viewport
-  if (Game.mode === 'pve' && player === Game.aiPlayer) window.runAiTurn();
+  Render.autoZoom();
+  // AI turn: in PvE mode, all non-human players are AI
+  const isAi = Game.mode === 'pve' && player !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
+  if (isAi) window.runAiTurn();
 }
 
 function nextRound() {
   if (Game.winner !== null) return;
   if (inPlacement()) { UI.log('Deploy your bought units first.'); UI.refresh(); return; }
   if (Game.orderQueue.length) executeOrders();
-  advanceTo(1 - Game.turn);
+  advanceTo(nextPlayer(Game.turn));
 }
 
 // ---------------------------------------------------------------------------
@@ -1468,10 +1678,11 @@ function boot() {
     const mode = intent.mode || 'pvp';
     const start = intent.start === 1 ? 1 : 0;
     const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
+    const pc = intent.playerCount || 2;
     if (intent.customMap) {
-      st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty);
+      st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty, pc, intent.playerNames);
     } else {
-      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart);
+      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames);
     }
     SaveState.save(st);
   } else {
@@ -1480,10 +1691,12 @@ function boot() {
   }
   loadIntoGame(st);
   Render.resize();
-  Render.autoZoom(); // small boards: fill the viewport (also after buy/upgrade returns here)
+  Render.autoZoom();
   UI.refresh();
   // If the AI is set to move first, let it take its opening turn immediately.
-  if (Game.mode === 'pve' && Game.winner === null && Game.turn === Game.aiPlayer) window.runAiTurn();
+  const isAi = Game.mode === 'pve' && Game.winner === null &&
+    Game.turn !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
+  if (isAi) window.runAiTurn();
 }
 
 window.addEventListener('resize', () => Render.resize());
@@ -1544,3 +1757,10 @@ window._placeAt = placeAt;
 window._addOrder = addOrder;
 window._getPath = getPath;
 window._bestAdjacentForAttack = bestAdjacentForAttack;
+// Diplomacy helpers for ai.js and diplomacy.html
+window.isAtWar = isAtWar;
+window.isAlly = isAlly;
+window.setDiplomacy = setDiplomacy;
+window.getEnemies = getEnemies;
+window.getAllies = getAllies;
+window.nextPlayer = nextPlayer;

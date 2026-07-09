@@ -77,26 +77,13 @@
         <div class="tool-row">
           <label>Owner</label>
           <select id="unitOwner">
-            <option value="0">🔵 Country1</option>
-            <option value="1">🔴 Country2</option>
           </select>
         </div>
         <div style="font-size:.7rem; color:#7e8893; margin-top:4px;">Click hex to place (max 17 per tile)</div>
       </div>
       <div>
         <h3>Gold</h3>
-        <div class="gold-row">
-          <span style="color:#00acc1">Country1</span>
-          <span class="val" id="goldBlue">100</span>
-          <button onclick="addGold(0,100)">+100</button>
-          <button onclick="addGold(0,1000)">+1k</button>
-        </div>
-        <div class="gold-row" style="margin-top:6px;">
-          <span style="color:#e53935">Country2</span>
-          <span class="val" id="goldRed">100</span>
-          <button onclick="addGold(1,100)">+100</button>
-          <button onclick="addGold(1,1000)">+1k</button>
-        </div>
+        <div id="goldControls"></div>
       </div>
       <div>
         <h3>Info</h3>
@@ -121,7 +108,8 @@
     const cities = [];
     const villages = [];
     const units = [];
-    const economy = [100, 100];
+    const economy = [];
+    for (let i = 0; i < PLAYERS.length; i++) economy.push(100);
     let nextUnitId = 1;
 
     let editMode = 'terrain';
@@ -466,15 +454,33 @@
 
     window.addGold = function(player, amount) {
       economy[player] += amount;
-      document.getElementById(player === 0 ? 'goldBlue' : 'goldRed').textContent = economy[player];
+      const el = document.getElementById('gold' + player);
+      if (el) el.textContent = economy[player];
     };
 
     function updateInfo() {
-      const uBlue = units.filter(u => u.owner === 0).length;
-      const uRed = units.filter(u => u.owner === 1).length;
+      const counts = PLAYERS.map((_, i) => Game.units ? Game.units.filter(u => u.owner === i).length : units.filter(u => u.owner === i).length);
+      const label = counts.map((c, i) => `${PLAYERS[i].name}: ${c}`).join(' · ');
       document.getElementById('mapInfo').textContent =
-        `${ROWS}×${COLS} · ${cities.length} cities · ${villages.length} villages · Units: ${uBlue}B / ${uRed}R`;
+        `${ROWS}×${COLS} · ${cities.length} cities · ${villages.length} villages · ${label}`;
     }
+
+    // Dynamic owner dropdown + gold controls
+    (function() {
+      const ownerSel = document.getElementById('unitOwner');
+      const goldDiv = document.getElementById('goldControls');
+      let ownerHtml = '', goldHtml = '';
+      for (let i = 0; i < PLAYERS.length; i++) {
+        ownerHtml += `<option value="${i}" style="color:${PLAYERS[i].color}">${PLAYERS[i].name}</option>`;
+        goldHtml += `<div class="gold-row" style="margin-top:${i ? '6px' : '0'}">` +
+          `<span style="color:${PLAYERS[i].color}">${PLAYERS[i].name}</span>` +
+          `<span class="val" id="gold${i}">${economy[i]}</span>` +
+          `<button onclick="addGold(${i},100)">+100</button>` +
+          `<button onclick="addGold(${i},1000)">+1k</button></div>`;
+      }
+      ownerSel.innerHTML = ownerHtml;
+      goldDiv.innerHTML = goldHtml;
+    })();
 
     // --- Save ---
     document.getElementById('saveBtn').addEventListener('click', () => {

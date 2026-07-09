@@ -166,7 +166,7 @@ window.Render = (function () {
         const owner = territory && territory[r] ? territory[r][c] : null;
 
         // Territory fill (outer hex)
-        if (owner === 0 || owner === 1) {
+        if (owner != null && owner >= 0 && PLAYERS[owner]) {
           ctx.globalAlpha = 0.7;
           ctx.fillStyle = PLAYERS[owner].color;
         } else {
@@ -198,8 +198,7 @@ window.Render = (function () {
       for (let r = r0; r < r1; r++) {
         for (let c = c0; c < c1; c++) {
           const own = territory[r] ? territory[r][c] : null;
-          if (own !== 0 && own !== 1) continue;
-          const opp = own === 0 ? 1 : 0;
+          if (own == null) continue;
           const dirs = (r & 1) ? Rules.DIRS_ODD : Rules.DIRS_EVEN;
           const center = hexCenter(r, c, size);
           const sx = center.x - cam.x, sy = center.y - cam.y;
@@ -212,7 +211,7 @@ window.Render = (function () {
                 nr === 0 || nr === ROWS - 1 || nc === 0 || nc === COLS - 1) continue;
             // Skip confrontation lines on water tiles
             if (G.terrain[r][c] === 'water' || G.terrain[nr][nc] === 'water') continue;
-            if (territory[nr] && territory[nr][nc] === opp) {
+            if (territory[nr] && territory[nr][nc] != null && territory[nr][nc] !== own) {
               // Draw the shared edge
               const a1 = Math.PI / 3 * i - Math.PI / 6;
               const a2 = Math.PI / 3 * ((i + 1) % 6) - Math.PI / 6;
@@ -230,8 +229,9 @@ window.Render = (function () {
     // During placement, brighten the current player's zone
     if (placing) {
       const me = G.turn;
-      const zc0 = me === 0 ? 0 : COLS - ZONE;
-      const zc1 = me === 0 ? ZONE : COLS;
+      const n = PLAYERS.length;
+      const zc0 = Math.floor(me * COLS / n);
+      const zc1 = Math.floor((me + 1) * COLS / n);
       for (let r = r0; r < r1; r++) {
         for (let c = Math.max(c0, zc0); c < Math.min(c1, zc1); c++) {
           if (G.terrain[r][c] === 'water') continue;

@@ -155,18 +155,16 @@ window.Algorithms = (function () {
     }
   }
 
-  // --- 4. CITIES: per player, clustered toward each side's 30% width mark ----
-  function placeCities(t, rng, rows, cols) {
+  // --- 4. CITIES: per player, clustered in each player's column band ----------
+  function placeCities(t, rng, rows, cols, playerCount) {
+    const n = playerCount || 2;
     const cities = [];
     const occupied = new Set();
-    const perSide = citiesPerSide(rows, cols); // scales with board area (17 at 100x100)
-    // Cluster each side's cities around the column 30% of the way in from THEIR
-    // own edge (Country1 ~0.30·W, Country2 ~0.70·W), leaving the center for neutral cities.
+    const perSide = citiesPerSide(rows, cols);
     const half = Math.max(1, Math.round(cols * 0.12));
-    const c1Mid = Math.round(0.30 * (cols - 1));
-    const c2Mid = Math.round(0.70 * (cols - 1));
     const clampC = (c) => Math.max(1, Math.min(cols - 2, c));
-    const placeBand = (owner, mid) => {
+    for (let owner = 0; owner < n; owner++) {
+      const mid = Math.round((2 * owner + 1) / (2 * n) * (cols - 1));
       const cMin = clampC(mid - half), cMax = clampC(mid + half);
       let placed = 0, attempts = 0;
       while (placed < perSide && attempts < 20000) {
@@ -174,38 +172,39 @@ window.Algorithms = (function () {
         const r = randInt(rng, 1, rows - 2);
         const c = randInt(rng, cMin, cMax);
         const k = r + ',' + c;
-        if (t[r][c] !== 'plains' || occupied.has(k)) continue; // avoid water & trees
+        if (t[r][c] !== 'plains' || occupied.has(k)) continue;
         t[r][c] = 'city';
         occupied.add(k);
         cities.push({ r, c, owner });
         placed++;
       }
-      return occupied;
-    };
-    placeBand(0, c1Mid);   // Country1 / left cluster
-    placeBand(1, c2Mid);    // Country2 / right cluster
+    }
     return { cities, occupied };
   }
 
-  // --- 4b. NEUTRAL CITIES: unowned cities in a central band, fought over ------
-  function placeNeutralCities(t, rng, rows, cols, occupied) {
+  // --- 4b. NEUTRAL CITIES: unowned cities between player clusters ------
+  function placeNeutralCities(t, rng, rows, cols, occupied, playerCount) {
+    const n = playerCount || 2;
     const cities = [];
     const count = neutralCount(rows, cols);
-    const half = Math.max(2, Math.round(cols * 0.12)); // central ~0.38–0.62·W
-    const mid = Math.round((cols - 1) / 2);
-    const cMin = Math.max(1, mid - half), cMax = Math.min(cols - 2, mid + half);
-    let placed = 0, attempts = 0;
-    const cap = count * 200 + 500;
-    while (placed < count && attempts < cap) {
-      attempts++;
-      const r = randInt(rng, 1, rows - 2);
-      const c = randInt(rng, cMin, cMax);
-      const k = r + ',' + c;
-      if (t[r][c] !== 'plains' || occupied.has(k)) continue;
-      t[r][c] = 'city';
-      occupied.add(k);
-      cities.push({ r, c, owner: null }); // neutral until captured
-      placed++;
+    const perGap = Math.max(1, Math.round(count / n));
+    for (let g = 0; g < n; g++) {
+      const gapMid = Math.round((g + 1) / n * (cols - 1));
+      const half = Math.max(2, Math.round(cols * 0.08));
+      const cMin = Math.max(1, gapMid - half), cMax = Math.min(cols - 2, gapMid + half);
+      let placed = 0, attempts = 0;
+      const cap = perGap * 200 + 500;
+      while (placed < perGap && attempts < cap) {
+        attempts++;
+        const r = randInt(rng, 1, rows - 2);
+        const c = randInt(rng, cMin, cMax);
+        const k = r + ',' + c;
+        if (t[r][c] !== 'plains' || occupied.has(k)) continue;
+        t[r][c] = 'city';
+        occupied.add(k);
+        cities.push({ r, c, owner: null });
+        placed++;
+      }
     }
     return cities;
   }
@@ -242,7 +241,7 @@ window.Algorithms = (function () {
   }
 
   // --- top-level: build a full map from a seed + dimensions -----------------
-  function generateMap(seed, rows, cols) {
+  function generateMap(seed, rows, cols, playerCount) {
     rows = clampDim(rows == null ? GRID : rows);
     cols = clampDim(cols == null ? GRID : cols);
     const inB = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols;
@@ -252,10 +251,9 @@ window.Algorithms = (function () {
     const lakes = generateLakes(t, rng, Math.max(1, Math.round(randInt(rng, 3, 6) * scale)), rows, cols, inB);
     generateRivers(t, rng, lakes, Math.max(1, Math.round(randInt(rng, 3, 5) * scale)), rows, cols, inB);
     generateForests(t, rng, Math.max(2, Math.round(randInt(rng, 18, 28) * scale)), rows, cols);
-    const { cities, occupied } = placeCities(t, rng, rows, cols);
-    const neutral = placeNeutralCities(t, rng, rows, cols, occupied);
+    const { cities, occupied } = placeCities(t, rng, rows, cols, playerCount);
+    const neutral = placeNeutralCities(t, rng, rows, cols, occupied, playerCount);
     for (const nc of neutral) cities.push(nc);
-    // Villages cluster around every city (0–6 each) — see generateVillages.
     const villages = generateVillages(t, rng, cities, rows, cols, inB);
     return { terrain: t, cities, villages };
   }

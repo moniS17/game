@@ -12,10 +12,11 @@
 // Helpers — queries the AI uses to evaluate the board
 // ---------------------------------------------------------------------------
 
-function nearestEnemyTile(r, c, owner) {
+function nearestEnemyTile(r, c, me) {
   let best = null, bestD = Infinity;
   for (const [k, s] of Game.unitAt) {
-    if (!s.length || s[0].owner === owner) continue;
+    if (!s.length || s[0].owner === me) continue;
+    if (!window.isAtWar(me, s[0].owner)) continue;
     const [er, ec] = k.split(',').map(Number);
     const d = Rules.hexDist(er, ec, r, c);
     if (d < bestD) { bestD = d; best = { r: er, c: ec }; }
@@ -31,6 +32,7 @@ function nearestUnownedCity(r, c, me) {
   let best = null, bestD = Infinity;
   for (const ci of Game.cities) {
     if (ci.owner === me) continue;
+    if (ci.owner != null && !window.isAtWar(me, ci.owner)) continue;
     const d = Rules.hexDist(ci.r, ci.c, r, c);
     if (d < bestD) { bestD = d; best = { r: ci.r, c: ci.c }; }
   }
@@ -41,6 +43,7 @@ function nearestUnownedCityOrVillage(r, c, me) {
   let best = null, bestD = Infinity;
   for (const s of Game.cities.concat(Game.villages)) {
     if (s.owner === me) continue;
+    if (s.owner != null && !window.isAtWar(me, s.owner)) continue;
     const d = Rules.hexDist(s.r, s.c, r, c);
     if (d < bestD) { bestD = d; best = { r: s.r, c: s.c }; }
   }
@@ -52,12 +55,22 @@ function isDefensiveTerrain(r, c) {
   return t === 'city' || t === 'village' || t === 'forest' || t === 'water';
 }
 
-function aiCountNeighborUnits(r, c, owner) {
+function aiCountNeighborEnemyUnits(r, c, me) {
   let count = 0;
   for (const [nr, nc] of Rules.neighbors(r, c)) {
     if (!Board.inBounds(nr, nc)) continue;
     const s = window._stackAt(nr, nc);
-    for (const u of s) if (u.owner === owner) count++;
+    for (const u of s) if (u.owner !== me && window.isAtWar(me, u.owner)) count++;
+  }
+  return count;
+}
+
+function aiCountNeighborFriendlyUnits(r, c, me) {
+  let count = 0;
+  for (const [nr, nc] of Rules.neighbors(r, c)) {
+    if (!Board.inBounds(nr, nc)) continue;
+    const s = window._stackAt(nr, nc);
+    for (const u of s) if (u.owner === me) count++;
   }
   return count;
 }
@@ -67,10 +80,10 @@ function aiMyCityCount(me) {
 }
 
 function aiLargestEnemyCluster(me) {
-  const enemy = 1 - me;
   let best = null, bestSize = 0;
   for (const [k, s] of Game.unitAt) {
-    if (!s.length || s[0].owner !== enemy) continue;
+    if (!s.length || s[0].owner === me) continue;
+    if (!window.isAtWar(me, s[0].owner)) continue;
     if (s.length > bestSize) {
       bestSize = s.length;
       const [r, c] = k.split(',').map(Number);
@@ -84,9 +97,24 @@ function aiUnitCount(owner) {
   return Game.units.filter(u => u.owner === owner).length;
 }
 
-function aiStackCount(owner) {
+function aiEnemyUnitCount(me) {
+  let count = 0;
+  for (const u of Game.units) {
+    if (u.owner !== me && window.isAtWar(me, u.owner)) count++;
+  }
+  return count;
+}
+
+function aiStackCount(me, enemyOnly) {
   let n = 0;
-  for (const [, s] of Game.unitAt) if (s.length && s[0].owner === owner) n++;
+  for (const [, s] of Game.unitAt) {
+    if (!s.length) continue;
+    if (enemyOnly) {
+      if (s[0].owner !== me && window.isAtWar(me, s[0].owner)) n++;
+    } else {
+      if (s[0].owner === me) n++;
+    }
+  }
   return n;
 }
 
@@ -100,13 +128,12 @@ function aiInSupplyRange(r, c, owner) {
 
 function aiEnemyHasTanks(me) {
   for (const u of Game.units) {
-    if (u.owner === me) continue;
+    if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
     if ((u.parts || []).some(p => p.type === 'tank' && p.count > 0)) return true;
   }
   return false;
 }
 
-// Terrain-aware total ATK of a stack standing on (r,c).
 function aiStackAtkOn(stack, r, c) {
   const terr = Game.terrain[r][c];
   let s = 0;
@@ -114,17 +141,14 @@ function aiStackAtkOn(stack, r, c) {
   return s;
 }
 
-// Raw total ATK (no terrain).
 function aiStackAtk(stack) {
   return stack.reduce((s, u) => s + Rules.unitAttack(u), 0);
 }
 
-// Total HP of a stack.
 function aiStackHp(stack) {
   return stack.reduce((s, u) => s + u.hp, 0);
 }
 
-// Find the largest friendly stack tile (by unit count), excluding HQ-only tiles.
 function aiBiggestFriendlyStack(me) {
   let best = null, bestCount = 0;
   for (const [k, s] of Game.unitAt) {
@@ -139,11 +163,10 @@ function aiBiggestFriendlyStack(me) {
   return best;
 }
 
-// Nearest enemy distance to a tile.
 function aiNearestEnemyDist(r, c, me) {
   let best = Infinity;
   for (const u of Game.units) {
-    if (u.owner === me) continue;
+    if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
     const d = Rules.hexDist(u.r, u.c, r, c);
     if (d < best) best = d;
   }
@@ -155,11 +178,11 @@ function aiNearestEnemyDist(r, c, me) {
 // ---------------------------------------------------------------------------
 
 function aiBestTarget(r, c, me) {
-  const enemy = 1 - me;
   let best = null, bestScore = -Infinity;
 
   for (const [k, s] of Game.unitAt) {
     if (!s.length || s[0].owner === me) continue;
+    if (!window.isAtWar(me, s[0].owner)) continue;
     const [er, ec] = k.split(',').map(Number);
     const dist = Rules.hexDist(er, ec, r, c);
     if (dist === 0) continue;
@@ -176,10 +199,12 @@ function aiBestTarget(r, c, me) {
 // ---------------------------------------------------------------------------
 
 function aiThreatRow(me) {
-  let best = null, bestC = me === 1 ? -1 : Board.COLS;
+  let best = null, bestD = Infinity;
+  const myMid = Math.floor((Math.floor(me * Board.COLS / PLAYERS.length) + Math.floor((me + 1) * Board.COLS / PLAYERS.length)) / 2);
   for (const u of Game.units) {
-    if (u.owner === me) continue;
-    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
+    if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
+    const d = Math.abs(u.c - myMid);
+    if (d < bestD) { bestD = d; best = u.r; }
   }
   return best == null ? Math.floor(Board.ROWS / 2) : best;
 }
@@ -252,19 +277,24 @@ function aiResearchTech(me) {
 }
 
 function aiEnemyTankRow(me) {
-  let best = null, bestC = me === 1 ? -1 : Board.COLS;
+  let best = null, bestD = Infinity;
+  const myMid = Math.floor((Math.floor(me * Board.COLS / PLAYERS.length) + Math.floor((me + 1) * Board.COLS / PLAYERS.length)) / 2);
   for (const u of Game.units) {
-    if (u.owner === me) continue;
+    if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
     if (!(u.parts || []).some(p => p.type === 'tank' && p.count > 0)) continue;
-    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
+    const d = Math.abs(u.c - myMid);
+    if (d < bestD) { bestD = d; best = u.r; }
   }
   return best;
 }
 
 function aiDeployUnits(me, specs) {
   if (!specs.length) return 0;
-  const cols = Board.COLS, rows = Board.ROWS, zone = Board.zone();
-  const frontCol = me === 1 ? cols - zone : zone - 1;
+  const cols = Board.COLS, rows = Board.ROWS;
+  const n = PLAYERS.length;
+  const zoneStart = Math.floor(me * cols / n);
+  const zoneEnd = Math.floor((me + 1) * cols / n);
+  const frontCol = me < n / 2 ? zoneEnd - 1 : zoneStart;
   const targetRow = aiThreatRow(me);
   const tankRow = aiEnemyTankRow(me);
   const noCities = aiHasNoCities(me);
@@ -326,22 +356,20 @@ function aiSpendAndReinforce(me) {
 // HQ protection — decide whether to flee to edge or escort with largest stack
 // ---------------------------------------------------------------------------
 
-function aiProtectHq(hqUnit, me, enemy) {
+function aiProtectHq(hqUnit, me) {
   if (!hqUnit || hqUnit.movesLeft <= 0) return;
 
   const nearestEnDist = aiNearestEnemyDist(hqUnit.r, hqUnit.c, me);
   const bigStack = aiBiggestFriendlyStack(me);
-  const edgeCol = me === 0 ? 0 : Board.COLS - 1;
+  const n = PLAYERS.length;
+  const zoneStart = Math.floor(me * Board.COLS / n);
+  const zoneEnd = Math.floor((me + 1) * Board.COLS / n);
+  const edgeCol = me < n / 2 ? zoneStart : zoneEnd - 1;
 
-  // Decide strategy: escort (move toward biggest stack) or flee (move to edge).
-  // Escort when: biggest stack is large (>=4) and closer than the nearest enemy,
-  // or HQ is already near the edge and the stack is reasonably close.
   let strategy = 'flee';
   if (bigStack && bigStack.count >= 4) {
     const distToStack = Rules.hexDist(hqUnit.r, hqUnit.c, bigStack.r, bigStack.c);
     const stackEnemyDist = aiNearestEnemyDist(bigStack.r, bigStack.c, me);
-    // Escort if the stack is safer than the HQ's current position, or within
-    // reach and has enough troops to protect.
     if (distToStack <= nearestEnDist && stackEnemyDist > 2) {
       strategy = 'escort';
     } else if (distToStack <= 3 && bigStack.count >= 6) {
@@ -355,11 +383,11 @@ function aiProtectHq(hqUnit, me, enemy) {
   let bestKey = null, bestScore = -Infinity;
   for (const kk of Game.reachable.keys()) {
     const [rr, cc] = kk.split(',').map(Number);
-    const enemyAdj = aiCountNeighborUnits(rr, cc, enemy);
-    const friendNear = aiCountNeighborUnits(rr, cc, me);
+    const enemyAdj = aiCountNeighborEnemyUnits(rr, cc, me);
+    const friendNear = aiCountNeighborFriendlyUnits(rr, cc, me);
     let enemy2 = 0, enemy3 = 0;
     for (const u of Game.units) {
-      if (u.owner === me) continue;
+      if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
       const d = Rules.hexDist(u.r, u.c, rr, cc);
       if (d <= 2) enemy2++;
       if (d <= 3) enemy3++;
@@ -367,11 +395,9 @@ function aiProtectHq(hqUnit, me, enemy) {
 
     let score;
     if (strategy === 'escort' && bigStack) {
-      // Prefer tiles closer to the biggest friendly stack.
       const distToStack = Rules.hexDist(rr, cc, bigStack.r, bigStack.c);
       score = -distToStack * 4 - enemyAdj * 20 - enemy2 * 12 - enemy3 * 4 + friendNear * 5;
     } else {
-      // Flee: prefer tiles closer to own edge.
       const edgeDist = Math.abs(cc - edgeCol);
       const edgeW = urgent ? 1 : 3;
       score = -edgeDist * edgeW - enemyAdj * 20 - enemy2 * 15 - enemy3 * 5 + friendNear * 3;
@@ -389,55 +415,43 @@ function aiProtectHq(hqUnit, me, enemy) {
 // Attack decision — terrain-aware force comparison with numeric thresholds
 // ---------------------------------------------------------------------------
 
-// Compute terrain-aware force ratio and decide whether to attack.
-// hpRatio thresholds: 2x = always attack, 1.75x/1.5x/1.25x progressively
-// lower the required forceRatio.
-function aiShouldAttack(group, r, c, defStack, tr, tc, aggressive) {
+function aiShouldAttack(group, r, c, defStack, tr, tc, aggressive, strategy) {
   const atkTerr = Game.terrain[r][c];
   const defTerr = Game.terrain[tr][tc];
-
-  // Terrain-aware ATK: how much damage we actually deal from our tile.
   const myAtk = aiStackAtkOn(group, r, c);
   const myHp = aiStackHp(group);
   const defAtk = aiStackAtkOn(defStack, tr, tc);
   const defHp = aiStackHp(defStack);
-
-  // Defender's terrain defense reduces our effective damage.
   const defDef = 1 - (TERRAIN[defTerr].defense || 0);
   const effectiveAtkDmg = myAtk * defDef;
-
-  // Force ratio: our effective damage * our HP vs their effective damage * their HP.
   const forceRatio = (effectiveAtkDmg * myHp) / Math.max(1, defAtk * defHp);
-
-  // HP ratio: simple numeric advantage.
   const hpRatio = myHp / Math.max(1, defHp);
 
-  // 2x HP advantage: attack no matter what.
   if (hpRatio >= 2.0) return true;
 
-  // Aggressive mode (global numeric superiority): attack unless suicidal.
-  if (aggressive) return forceRatio >= 0.3;
+  // Strategy adjustments
+  if (strategy === 'attack') {
+    if (aggressive) return forceRatio >= 0.2;
+    return forceRatio >= 0.4;
+  }
+  if (strategy === 'defend') {
+    if (hpRatio >= 1.75) return forceRatio >= 0.6;
+    if (hpRatio >= 1.5) return forceRatio >= 0.8;
+    return forceRatio >= 1.5;
+  }
 
-  // Numeric advantage lowers the threshold for attacking.
-  // 1.75x HP -> need forceRatio >= 0.4
-  // 1.50x HP -> need forceRatio >= 0.55
-  // 1.25x HP -> need forceRatio >= 0.65
-  // Otherwise use terrain-based thresholds.
+  if (aggressive) return forceRatio >= 0.3;
   if (hpRatio >= 1.75) return forceRatio >= 0.4;
   if (hpRatio >= 1.5)  return forceRatio >= 0.55;
   if (hpRatio >= 1.25) return forceRatio >= 0.65;
 
-  // No numeric advantage: terrain determines caution.
   const enemyOnDefensive = defTerr === 'city' || defTerr === 'village' ||
                            defTerr === 'forest' || defTerr === 'water';
   if (enemyOnDefensive) return forceRatio >= 2.0;
   return forceRatio >= 0.7;
 }
 
-// Check if there's a reachable enemy stack we outnumber 2x in HP — if so,
-// move to attack it regardless of other considerations.
 function aiFindOverwhelmTarget(group, r, c, me) {
-  const enemy = 1 - me;
   const myHp = aiStackHp(group);
   Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
 
@@ -445,7 +459,7 @@ function aiFindOverwhelmTarget(group, r, c, me) {
   for (const [nr, nc] of Rules.neighbors(r, c)) {
     if (!Board.inBounds(nr, nc)) continue;
     const s = window._stackAt(nr, nc);
-    if (!s.length || s[0].owner !== enemy) continue;
+    if (!s.length || s[0].owner === me || !window.isAtWar(me, s[0].owner)) continue;
     const eHp = aiStackHp(s);
     const ratio = myHp / Math.max(1, eHp);
     if (ratio >= 2.0 && ratio > bestRatio) {
@@ -455,14 +469,12 @@ function aiFindOverwhelmTarget(group, r, c, me) {
   }
   if (best) return best;
 
-  // Check tiles within movement range (not just adjacent).
   for (const kk of Game.reachable.keys()) {
     const [rr, cc] = kk.split(',').map(Number);
-    // Check if this tile is adjacent to an enemy we overwhelm.
     for (const [nr, nc] of Rules.neighbors(rr, cc)) {
       if (!Board.inBounds(nr, nc)) continue;
       const s = window._stackAt(nr, nc);
-      if (!s.length || s[0].owner !== enemy) continue;
+      if (!s.length || s[0].owner === me || !window.isAtWar(me, s[0].owner)) continue;
       const eHp = aiStackHp(s);
       const ratio = myHp / Math.max(1, eHp);
       if (ratio >= 2.0 && ratio > bestRatio) {
@@ -478,48 +490,47 @@ function aiFindOverwhelmTarget(group, r, c, me) {
 // Main AI loop — move and fight
 // ---------------------------------------------------------------------------
 
-function runAiFor(me) {
+function runAiFor(me, strategy) {
+  strategy = strategy || Game.aiStrategy[me] || 'balanced';
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
 
   const noCities = aiHasNoCities(me);
   const fewCities = aiMyCityCount(me) < 5;
-  const enemy = 1 - me;
 
   const myUnits = aiUnitCount(me);
-  const enemyUnits = aiUnitCount(enemy);
-  const aggressive = myUnits > enemyUnits * 1.4;
+  const enemyUnits = aiEnemyUnitCount(me);
+  const aggressive = strategy === 'attack' || myUnits > enemyUnits * 1.4;
 
-  const playerStacks = aiStackCount(enemy);
-  const playerSpreading = playerStacks >= 5;
-  const shouldConcentrate = !playerSpreading && playerStacks <= 3;
+  const enemyStacks = aiStackCount(me, true);
+  const playerSpreading = enemyStacks >= 5;
+  const shouldConcentrate = !playerSpreading && enemyStacks <= 3;
 
   for (const k0 of tiles) {
     let [r, c] = k0.split(',').map(Number);
     let group = window._stackAt(r, c).filter(u => u.owner === me);
     if (!group.length) continue;
 
-    // --- HQ protection: flee to edge or escort with biggest stack ---
     const hqInGroup = group.find(u => window.isHqUnit(u));
     if (hqInGroup && hqInGroup.movesLeft > 0) {
-      aiProtectHq(hqInGroup, me, enemy);
+      aiProtectHq(hqInGroup, me);
       group = window._stackAt(r, c).filter(u => u.owner === me);
       if (!group.length) continue;
     }
 
     const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
 
-    // --- Healing: rest in supply range when low HP ---
     if (avgHpRatio < 0.5 && aiInSupplyRange(r, c, me)) continue;
 
-    const nearbyEnemies = aiCountNeighborUnits(r, c, enemy);
-    const nearbyFriendlies = aiCountNeighborUnits(r, c, me);
+    const nearbyEnemies = aiCountNeighborEnemyUnits(r, c, me);
+    const nearbyFriendlies = aiCountNeighborFriendlyUnits(r, c, me);
 
-    // --- Overwhelm check: if we outnumber a reachable enemy 2x, attack it ---
+    // Defend strategy: stay on defensive terrain if possible
+    if (strategy === 'defend' && isDefensiveTerrain(r, c) && nearbyEnemies === 0) continue;
+
     const overwhelm = aiFindOverwhelmTarget(group, r, c, me);
     if (overwhelm) {
       if (overwhelm.staging) {
-        // Move to staging tile, then attack.
         Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
         if (Game.reachable.has(Board.key(overwhelm.staging.r, overwhelm.staging.c))) {
           window._moveGroup(group, overwhelm.staging.r, overwhelm.staging.c);
@@ -530,20 +541,18 @@ function runAiFor(me) {
           window._doAttack(group, overwhelm.target.r, overwhelm.target.c);
         }
       } else {
-        // Already adjacent.
         window._doAttack(group, overwhelm.r, overwhelm.c);
       }
       continue;
     }
 
-    // --- Retreat: outnumbered, seek defensive terrain ---
     if (!aggressive && nearbyEnemies > nearbyFriendlies + group.length) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
       let bestRetreat = null, bestRD = Infinity;
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
         if (!isDefensiveTerrain(rr, cc)) continue;
-        const enemyNear = aiCountNeighborUnits(rr, cc, enemy);
+        const enemyNear = aiCountNeighborEnemyUnits(rr, cc, me);
         const d = enemyNear * 100 - Rules.hexDist(rr, cc, r, c);
         if (d < bestRD) { bestRD = d; bestRetreat = [rr, cc]; }
       }
@@ -551,7 +560,7 @@ function runAiFor(me) {
         let bestD2 = Infinity;
         for (const kk of Game.reachable.keys()) {
           const [rr, cc] = kk.split(',').map(Number);
-          const en = aiCountNeighborUnits(rr, cc, enemy);
+          const en = aiCountNeighborEnemyUnits(rr, cc, me);
           if (en < bestD2) { bestD2 = en; bestRetreat = [rr, cc]; }
         }
       }
@@ -561,7 +570,6 @@ function runAiFor(me) {
       continue;
     }
 
-    // --- Target selection: prioritise weak targets and cities ---
     let target;
     if (noCities || fewCities) {
       target = nearestUnownedCityOrVillage(r, c, me) || aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
@@ -572,7 +580,6 @@ function runAiFor(me) {
     }
     if (!target) break;
 
-    // --- Move toward target ---
     if (!Rules.isHexNeighbor(r, c, target.r, target.c)) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
 
@@ -605,14 +612,12 @@ function runAiFor(me) {
       }
     }
 
-    // --- Attack decision: terrain-aware force comparison with numeric thresholds ---
     if (target && group.length && Rules.isHexNeighbor(r, c, target.r, target.c)) {
       const defStack = window._stackAt(target.r, target.c);
-      if (defStack.length && defStack[0].owner !== me) {
-        if (aiShouldAttack(group, r, c, defStack, target.r, target.c, aggressive)) {
+      if (defStack.length && defStack[0].owner !== me && window.isAtWar(me, defStack[0].owner)) {
+        if (aiShouldAttack(group, r, c, defStack, target.r, target.c, aggressive, strategy)) {
           window._doAttack(group, target.r, target.c);
         } else if (!isDefensiveTerrain(r, c)) {
-          // Can't win: find a defensive tile to hold instead.
           Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
           let bestDef = null, bestDD = Infinity;
           for (const kk of Game.reachable.keys()) {
@@ -631,12 +636,92 @@ function runAiFor(me) {
 }
 
 // ---------------------------------------------------------------------------
+// AI Diplomacy — auto-manage relationships for N>2 games
+// ---------------------------------------------------------------------------
+
+function aiDiplomacy(me) {
+  if (PLAYERS.length <= 2) return;
+  const enemies = window.getEnemies(me);
+  const allies = window.getAllies(me);
+  const myUnits = aiUnitCount(me);
+
+  // Find strongest and weakest enemies
+  let strongestEnemy = null, strongestCount = 0;
+  let weakestEnemy = null, weakestCount = Infinity;
+  for (const e of enemies) {
+    const c = aiUnitCount(e);
+    if (c > strongestCount) { strongestCount = c; strongestEnemy = e; }
+    if (c < weakestCount) { weakestCount = c; weakestEnemy = e; }
+  }
+
+  // Try to ally with weak neighbors against strong threats
+  for (let p = 0; p < PLAYERS.length; p++) {
+    if (p === me || Game.eliminated.has(p)) continue;
+    const rel = Game.diplomacy[me][p];
+    const theirUnits = aiUnitCount(p);
+
+    if (rel === 'war' && enemies.length > 1 && theirUnits < myUnits * 0.7) {
+      // Propose peace with weak enemies when fighting multiple fronts
+      window.setDiplomacy(me, p, 'peace');
+      UI.log(`${PLAYERS[me].name} proposes peace with ${PLAYERS[p].name}.`);
+    } else if (rel === 'peace' && strongestEnemy !== null && strongestCount > myUnits * 1.5) {
+      // Ally against a dominant threat
+      if (p !== strongestEnemy && theirUnits >= myUnits * 0.5) {
+        window.setDiplomacy(me, p, 'alliance');
+        UI.log(`${PLAYERS[me].name} forms alliance with ${PLAYERS[p].name} against ${PLAYERS[strongestEnemy].name}.`);
+      }
+    } else if (rel === 'alliance' && enemies.length === 0) {
+      // Break alliance when no enemies remain (we're the last alliance bloc)
+      window.setDiplomacy(me, p, 'war');
+      UI.log(`${PLAYERS[me].name} breaks alliance with ${PLAYERS[p].name}!`);
+    }
+  }
+
+  // If we have no enemies, declare war on the weakest non-ally
+  if (window.getEnemies(me).length === 0) {
+    let target = null, targetUnits = Infinity;
+    for (let p = 0; p < PLAYERS.length; p++) {
+      if (p === me || Game.eliminated.has(p)) continue;
+      const c = aiUnitCount(p);
+      if (c < targetUnits) { targetUnits = c; target = p; }
+    }
+    if (target !== null) {
+      window.setDiplomacy(me, target, 'war');
+      UI.log(`${PLAYERS[me].name} declares war on ${PLAYERS[target].name}!`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gold transfer — AI sends gold to weaker allies
+// ---------------------------------------------------------------------------
+
+function aiSendGold(me) {
+  const allies = window.getAllies(me);
+  if (!allies.length) return;
+  const surplus = Game.economy[me] - 100;
+  if (surplus <= 0) return;
+  for (const ally of allies) {
+    if (Game.economy[ally] < Game.economy[me] * 0.5) {
+      const gift = Math.min(Math.floor(surplus * 0.2), 50);
+      if (gift > 0) {
+        Game.economy[me] -= gift;
+        Game.economy[ally] += gift;
+        UI.log(`${PLAYERS[me].name} sends ${gift} gold to ${PLAYERS[ally].name}.`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Turn drivers — called by game.js
 // ---------------------------------------------------------------------------
 
 function runAiTurn() {
-  const me = Game.aiPlayer;
+  const me = Game.turn;
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
+  aiDiplomacy(me);
+  aiSendGold(me);
   runAiFor(me);
   if (Game.winner === null) aiSpendAndReinforce(me);
   Game.reachable = new Map();
@@ -644,25 +729,25 @@ function runAiTurn() {
   UI.refresh();
   Render.render();
   if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  window._advanceTo(1 - me);
+  window._advanceTo(window.nextPlayer(me));
 }
 
-function runAiTakeover() {
+function runAiTakeover(strategy) {
   if (Game.winner !== null) return;
   if (window.inPlacement()) { UI.log('Deploy your units first.'); UI.refresh(); return; }
   if (Game.orderQueue.length) window.clearAllOrders();
   const me = Game.turn;
+  if (strategy) Game.aiStrategy[me] = strategy;
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
-  runAiFor(me);
+  runAiFor(me, strategy || Game.aiStrategy[me] || 'balanced');
   if (Game.winner === null) aiSpendAndReinforce(me);
   Game.reachable = new Map();
   window._persist();
   UI.refresh();
   Render.render();
   if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  window._advanceTo(1 - me);
+  window._advanceTo(window.nextPlayer(me));
 }
 
-// Expose to game.js and index.html
 window.runAiTurn = runAiTurn;
 window.runAiTakeover = runAiTakeover;

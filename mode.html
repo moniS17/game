@@ -147,6 +147,30 @@
     }
     .spawn-check input { width: 1.05rem; height: 1.05rem; cursor: pointer; }
     .spawn .note { font-size: .62rem; color: #6b727a; margin-top: .3rem; }
+    /* Country setup */
+    .countries { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+    .countries h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
+    .countries .count-row { display: flex; align-items: center; gap: .7rem; justify-content: center; margin-bottom: .5rem; }
+    .countries input[type="number"] {
+      width: 4rem; padding: .55rem; font-size: 1rem; text-align: center; color: #e6e6e6;
+      background: #0f1216; border: 1px solid #3a3f45; border-radius: 6px;
+    }
+    .countries input[type="range"] {
+      flex: 1; min-width: 60px; height: 6px; -webkit-appearance: none; appearance: none;
+      background: #3a3f45; border-radius: 3px; outline: none; cursor: pointer;
+    }
+    .countries input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #3a5bd9; cursor: pointer;
+    }
+    .country-list { margin-top: .5rem; }
+    .country-item { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; }
+    .country-swatch { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; }
+    .country-item input[type="text"] {
+      flex: 1; padding: .35rem .5rem; font-size: .85rem; color: #e6e6e6;
+      background: #0f1216; border: 1px solid #3a3f45; border-radius: 4px;
+    }
+    .country-item input[type="text"]:focus { outline: none; border-color: #3a5bd9; }
   </style>
 </head>
 <body>
@@ -186,7 +210,16 @@
       <div class="note" id="spawnNote">Units placed at random tiles in each side's spawn zone.</div>
     </div>
 
-    <div class="opt">
+    <div class="countries" id="countrySetup">
+      <h2>Countries (2–8)</h2>
+      <div class="count-row">
+        <input type="number" id="countryCountInput" min="2" max="8" step="1" value="2" inputmode="numeric" />
+        <input type="range" id="countryCountSlider" min="2" max="8" step="1" value="2" />
+      </div>
+      <div class="country-list" id="countryList"></div>
+    </div>
+
+    <div class="opt" id="firstMoveOpt">
       <h2>First move</h2>
       <div class="seg" id="firstSeg">
         <button type="button" data-v="0" class="on">🔵 Country1</button>
@@ -194,7 +227,7 @@
       </div>
     </div>
 
-    <div class="opt">
+    <div class="opt" id="sideOpt">
       <h2>You play (vs AI)</h2>
       <div class="seg" id="sideSeg">
         <button type="button" data-v="0" class="on">🔵 Country1</button>
@@ -232,6 +265,7 @@
   </div>
 
   <script src="algorithms.js"></script>
+  <script src="units.js"></script>
   <script src="state.js"></script>
   <script>
     const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
@@ -308,6 +342,48 @@
     syncStartUnits();
     syncNote();
 
+    // --- Country count ---
+    const ccInput = document.getElementById('countryCountInput');
+    const ccSlider = document.getElementById('countryCountSlider');
+    const countryList = document.getElementById('countryList');
+    const sideOpt = document.getElementById('sideOpt');
+    const firstMoveOpt = document.getElementById('firstMoveOpt');
+
+    function renderCountryList() {
+      const n = Math.max(2, Math.min(8, parseInt(ccInput.value) || 2));
+      let html = '';
+      for (let i = 0; i < n; i++) {
+        const color = PLAYER_COLORS[i];
+        const name = 'Country' + (i + 1);
+        html += `<div class="country-item">` +
+          `<span class="country-swatch" style="background:${color}"></span>` +
+          `<input type="text" class="country-name" data-i="${i}" value="${name}" maxlength="20" />` +
+          (i === 0 ? '<span style="font-size:.7rem;color:#9aa4ad;">(You)</span>' : '') +
+          `</div>`;
+      }
+      countryList.innerHTML = html;
+      // Hide "You play" and "First move" if N>2
+      if (n > 2) {
+        sideOpt.style.display = 'none';
+        firstMoveOpt.style.display = 'none';
+      } else {
+        sideOpt.style.display = '';
+        firstMoveOpt.style.display = '';
+      }
+    }
+    ccInput.addEventListener('input', () => {
+      let v = Math.floor(Number(ccInput.value));
+      if (v < 2) ccInput.value = '2';
+      else if (v > 8) ccInput.value = '8';
+      ccSlider.value = ccInput.value;
+      renderCountryList();
+    });
+    ccSlider.addEventListener('input', () => {
+      ccInput.value = ccSlider.value;
+      renderCountryList();
+    });
+    renderCountryList();
+
     // Segmented Country1/Country2 pickers: track the selected value, highlight the choice.
     function wireSeg(id) {
       const seg = document.getElementById(id);
@@ -329,12 +405,24 @@
         errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
         return false;
       }
+      const playerCount = Math.max(2, Math.min(8, parseInt(ccInput.value) || 2));
+      const playerNames = [];
+      document.querySelectorAll('.country-name').forEach(el => {
+        playerNames.push(el.value.trim() || ('Country' + (parseInt(el.dataset.i) + 1)));
+      });
       const intentObj = { action: 'new', mode, rows, cols,
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
         creative: document.getElementById('creativeChk').checked,
         startUnits: Math.max(0, Math.floor(Number(startInput.value)) || 0),
-        randomStart: randomChk.checked };
+        randomStart: randomChk.checked,
+        playerCount: playerCount,
+        playerNames: playerNames };
+      if (playerCount > 2) {
+        intentObj.mode = 'pve';
+        intentObj.human = 0;
+        intentObj.start = 0;
+      }
       if (loadedMap) intentObj.customMap = loadedMap;
       SaveState.setIntent(intentObj);
       window.location.href = 'index.html';
