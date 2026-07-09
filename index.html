@@ -205,6 +205,8 @@
       <button id="refitBtn" class="ghost" style="display:none; margin-top:8px;">&#9881; Refit</button>
       <button id="splitBtn" class="ghost" style="display:none; margin-top:8px;">✂ Split</button>
       <button id="buildBtn" class="ghost" style="display:none; margin-top:8px;">🏗 Build</button>
+      <button id="rallyBtn" style="display:none; margin-top:8px; background:#b8860b;">📯 Rally</button>
+      <div id="rallyHint" class="hint" style="display:none; color:#f5c542;">Click a tile to rally all units toward it.</div>
     </div>
 
     <div class="panel">
@@ -585,6 +587,21 @@
           splitBtn.style.display = showSplit ? '' : 'none';
         }
 
+        const rallyBtn = document.getElementById('rallyBtn');
+        if (rallyBtn) {
+          const showRally = Game.winner === null &&
+            !(window.inPlacement && window.inPlacement()) &&
+            Game.selUnits.length > 0 &&
+            Game.selUnits.some(u => window.isHqUnit && window.isHqUnit(u) && u.owner === Game.turn);
+          rallyBtn.style.display = showRally ? '' : 'none';
+          if (!showRally || !window._rallyMode) {
+            rallyMode = false;
+            window._rallyMode = false;
+            document.getElementById('rallyHint').style.display = 'none';
+            if (rallyBtn) rallyBtn.style.background = '#b8860b';
+          }
+        }
+
         const combineBtn = document.getElementById('combineBtn');
         if (combineBtn) {
           const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
@@ -667,6 +684,7 @@
       const body = document.getElementById('refitModalBody');
       let rows = '';
       for (const tmpl of templates) {
+        if (tmpl.isHq) continue;
         if (!templateSize(tmpl)) continue;
         const comp = templateComp(tmpl);
         if (Object.keys(comp).some((t) => !isUnlocked(Game.turn, t))) continue;
@@ -744,6 +762,14 @@
         showUnitTemplate(u);
         enterSplitMode(u);
       }
+    });
+
+    let rallyMode = false;
+    document.getElementById('rallyBtn').addEventListener('click', () => {
+      rallyMode = !rallyMode;
+      window._rallyMode = rallyMode;
+      document.getElementById('rallyHint').style.display = rallyMode ? '' : 'none';
+      document.getElementById('rallyBtn').style.background = rallyMode ? '#d4a017' : '#b8860b';
     });
     document.getElementById('buildModalClose').addEventListener('click', () => {
       document.getElementById('buildModal').style.display = 'none';

@@ -107,8 +107,26 @@ function unlockType(owner, type) {
   Game.economy[owner] -= cost;
   Game.unlocked[owner] = Game.unlocked[owner] || {};
   Game.unlocked[owner][type] = true;
+  upgradeHqTemplate(owner, type);
   persist();
   return true;
+}
+
+function upgradeHqTemplate(owner, type) {
+  const hqTmpl = (Game.templates[owner] || []).find(t => t.isHq);
+  if (!hqTmpl) return;
+  const empty = hqTmpl.cells.indexOf(null);
+  if (empty >= 0) hqTmpl.cells[empty] = type;
+  const hqUnit = Game.units.find(u => u.owner === owner && isHqUnit(u));
+  if (hqUnit) {
+    const s = templateStats(owner, hqTmpl);
+    hqUnit.parts = s.parts;
+    const ratio = hqUnit.maxHp > 0 ? hqUnit.hp / hqUnit.maxHp : 1;
+    hqUnit.maxHp = s.maxHp;
+    hqUnit.hp = Math.max(1, Math.round(s.maxHp * ratio));
+    hqUnit.mov = s.mov;
+    hqUnit.type = s.primary;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +204,16 @@ function defaultTemplates() {
 }
 function findTemplate(owner, id) {
   return (Game.templates[owner] || []).find((t) => t.id === id) || null;
+}
+
+function makeHqTemplate() {
+  const cells = new Array(TEMPLATE_CELLS).fill(null);
+  cells[0] = 'infantry';
+  return { id: 'hq', name: 'HQ', cells, isHq: true };
+}
+
+function isHqUnit(u) {
+  return u && u.templateId === 'hq';
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +391,7 @@ function serialize() {
   if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
   return out;
 }
-function cloneTemplate(t) { return { id: t.id, name: t.name, cells: (t.cells || []).slice() }; }
+function cloneTemplate(t) { const c = { id: t.id, name: t.name, cells: (t.cells || []).slice() }; if (t.isHq) c.isHq = true; return c; }
 
 // Normalize a saved unit into the composite shape. New saves already have
 // `parts`; a legacy single-type unit is turned into a 1-subunit unit.
@@ -389,6 +417,8 @@ function persist() { SaveState.save(serialize()); }
 function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart) {
   const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID);
   const templates = [defaultTemplates(), defaultTemplates()];
+  templates[0].push(makeHqTemplate());
+  templates[1].push(makeHqTemplate());
   const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
   const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
@@ -429,6 +459,8 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     else if (diff === 'hard') incomeMult[ai] = 1.7;
   }
   const templates = [defaultTemplates(), defaultTemplates()];
+  templates[0].push(makeHqTemplate());
+  templates[1].push(makeHqTemplate());
   const allUnlocked = {};
   for (const k in PIECES) allUnlocked[k] = true;
   const cities = (customMap.cities || []).map(c => ({ ...c }));
@@ -535,6 +567,24 @@ function buildInitialArmies(terrain, templates, count, randomStart, seed) {
       }
     }
   }
+  // Place 1 HQ per side near the center of their deployment zone.
+  for (let owner = 0; owner < 2; owner++) {
+    const hqTmpl = templates[owner].find(t => t.isHq) || makeHqTemplate();
+    const spawnCol = owner === 0 ? Math.floor(zone / 2) : cols - Math.floor(zone / 2) - 1;
+    const midRow = Math.floor(rows / 2);
+    let placed = false;
+    for (let dr = 0; dr <= rows; dr++) {
+      for (const rr of [midRow + dr, midRow - dr]) {
+        if (rr < 0 || rr >= rows || !dry(rr, spawnCol)) continue;
+        const s = units.filter(u => u.r === rr && u.c === spawnCol);
+        if (s.length >= stackLimit) continue;
+        const hq = makeUnitFromTemplate(owner, hqTmpl, rr, spawnCol, { acted: false });
+        if (hq) { units.push(hq); placed = true; }
+        break;
+      }
+      if (placed) break;
+    }
+  }
   return units;
 }
 
@@ -593,6 +643,9 @@ function loadIntoGame(st) {
     (st.templates && st.templates[0] && st.templates[0].length) ? st.templates[0].map(cloneTemplate) : defaultTemplates(),
     (st.templates && st.templates[1] && st.templates[1].length) ? st.templates[1].map(cloneTemplate) : defaultTemplates(),
   ];
+  for (let p = 0; p < 2; p++) {
+    if (!Game.templates[p].some(t => t.isHq)) Game.templates[p].push(makeHqTemplate());
+  }
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
   Game.winner = null;
@@ -828,6 +881,15 @@ function updateEliminationStreaks() {
 // This lets a wiped-out side reinforce before the loss locks in.
 function checkWinner() {
   if (Game.winner !== null) return;
+  // HQ destruction: instant loss
+  for (let p = 0; p < 2; p++) {
+    const hadHq = (Game.templates[p] || []).some(t => t.isHq);
+    if (hadHq && !Game.units.some(u => u.owner === p && isHqUnit(u))) {
+      Game.winner = 1 - p;
+      Game.winReason = `${PLAYERS[p].name} lost their HQ`;
+      return;
+    }
+  }
   for (let p = 0; p < 2; p++) {
     if (Game.noUnitTurns[p] >= LOSE_TURNS) {
       Game.winner = 1 - p;
@@ -848,6 +910,7 @@ function checkWinner() {
 function canRefitUnit(u) {
   if (u.owner !== Game.turn || Game.winner !== null) return false;
   if (inPlacement()) return false;
+  if (isHqUnit(u)) return false;
   const enemy = 1 - u.owner;
   if (Rules.surroundedBy(Game.territory, u.r, u.c, enemy)) return false;
   const range = (unitHasType(u, 'cavalry') || unitHasType(u, 'tank')) ? REGEN.heavyRange : REGEN.range;
@@ -1767,10 +1830,51 @@ function runAiFor(me) {
 }
 
 // ---------------------------------------------------------------------------
+// HQ Rally: move all friendly units toward a target tile
+// ---------------------------------------------------------------------------
+function rallyAllUnits(targetR, targetC) {
+  const me = Game.turn;
+  const tiles = [];
+  for (const [k, s] of Game.unitAt) {
+    if (s.length && s[0].owner === me) tiles.push(k);
+  }
+  let moved = 0;
+  for (const k0 of tiles) {
+    const [r, c] = k0.split(',').map(Number);
+    const group = stackAt(r, c).filter(u => u.owner === me && u.movesLeft > 0 && !isHqUnit(u));
+    if (!group.length) continue;
+    Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
+    let best = null, bestD = Rules.hexDist(r, c, targetR, targetC);
+    for (const kk of Game.reachable.keys()) {
+      const [rr, cc] = kk.split(',').map(Number);
+      if (Board.isWater(Game.terrain, rr, cc)) continue;
+      const d = Rules.hexDist(rr, cc, targetR, targetC);
+      if (d < bestD) { bestD = d; best = [rr, cc]; }
+    }
+    if (best) {
+      moveGroup(group, best[0], best[1]);
+      moved++;
+    }
+  }
+  Game.reachable = new Map();
+  if (moved) UI.log(`HQ rallied ${moved} stack(s) toward (${targetR},${targetC}).`);
+  persist();
+  return moved;
+}
+
+// ---------------------------------------------------------------------------
 // Input — shared tap handling for mouse clicks and touch taps
 // ---------------------------------------------------------------------------
 function handleTapAt(r, c) {
   if (Game.winner !== null || !inBounds(r, c)) return;
+
+  // Rally mode: HQ ordered all units to converge on this tile.
+  if (window._rallyMode) {
+    window._rallyMode = false;
+    rallyAllUnits(r, c);
+    UI.refresh(); Render.render();
+    return;
+  }
 
   if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); Render.autoZoom(); return; }
 
@@ -1958,6 +2062,8 @@ window.totalSubunits = totalSubunits;
 window.canCombineUnits = canCombineUnits;
 window.combineUnits = combineUnits;
 window.selectTile = selectTile;
+window.isHqUnit = isHqUnit;
+window.rallyAllUnits = rallyAllUnits;
 window.executeOrders = executeOrders;
 window.clearAllOrders = clearAllOrders;
 window.committedUnitIds = committedUnitIds;

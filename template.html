@@ -152,6 +152,7 @@
       const lib = document.getElementById("lib");
       lib.innerHTML = "";
       for (const t of save.templates[me]) {
+        if (t.isHq) continue;
         const chip = document.createElement("div");
         chip.className = "chip" + (t.id === selId ? " active" : "");
         chip.innerHTML = `${t.name} <span style="color:#9aa4ad">${GOLD_ICON}${statsOf(t.cells).cost}</span>`;

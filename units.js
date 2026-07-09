@@ -49,6 +49,11 @@ window.PIECES = {
     name: 'Tank', code: 't', art: 'assets/tank.svg',
     hp: 30, attack: 30, movement_speed: 6, cost: 100,
   },
+  hq: {
+    // Headquarters: unique command unit (1 per side). Rally ability.
+    name: 'HQ', code: 'H', art: null,
+    hp: 20, attack: 5, movement_speed: 3, cost: 0,
+  },
 };
 
 // Terrain combat modifiers — how well each unit type FIGHTS while standing ON a
@@ -69,6 +74,7 @@ window.TERRAIN_COMBAT = {
   cannon:    { village: 1.2, forest: 0.9, water: 0.5 },
   motorized: { forest: 0.9, water: 0.5 },
   infantry:  { city: 1.05, forest: 1.05, water: 0.65 },
+  hq:        { water: 0.5 },
 };
 
 // Unit-vs-unit combat modifiers — how well an ATTACKER of one type fights a
