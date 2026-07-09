@@ -105,7 +105,7 @@
     .map-item .del-btn { background: #6b3030; color: #fff; }
     .loaded-badge { font-size: .75rem; color: #7cb342; font-weight: 600; margin-bottom: .4rem; }
 
-    /* Segmented Blue/Red pickers */
+    /* Segmented Country1/Country2 pickers */
     .opt { margin-bottom: 1rem; text-align: left; }
     .opt h2 { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .45rem; }
     .opt .note { font-size: .62rem; color: #6b727a; margin-top: .3rem; }
@@ -188,16 +188,16 @@
     <div class="opt">
       <h2>First move</h2>
       <div class="seg" id="firstSeg">
-        <button type="button" data-v="0" class="on">🔵 Blue</button>
-        <button type="button" data-v="1">🔴 Red</button>
+        <button type="button" data-v="0" class="on">🔵 Country1</button>
+        <button type="button" data-v="1">🔴 Country2</button>
       </div>
     </div>
 
     <div class="opt">
       <h2>You play (vs AI)</h2>
       <div class="seg" id="sideSeg">
-        <button type="button" data-v="0" class="on">🔵 Blue</button>
-        <button type="button" data-v="1">🔴 Red</button>
+        <button type="button" data-v="0" class="on">🔵 Country1</button>
+        <button type="button" data-v="1">🔴 Country2</button>
       </div>
       <div class="note">Only applies to Player vs AI — the AI takes the other side.</div>
     </div>
@@ -307,7 +307,7 @@
     syncStartUnits();
     syncNote();
 
-    // Segmented Blue/Red pickers: track the selected value, highlight the choice.
+    // Segmented Country1/Country2 pickers: track the selected value, highlight the choice.
     function wireSeg(id) {
       const seg = document.getElementById(id);
       seg.addEventListener('click', (e) => {

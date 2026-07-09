@@ -239,7 +239,7 @@ function rebuildUnitAt() {
   for (const u of Game.units) addToStack(u);
 }
 
-// Placement-zone test for a column (Blue left 17, Red right 17).
+// Placement-zone test for a column (Country1 left 17, Country2 right 17).
 function inZone(owner, c) { return owner === 0 ? c < ZONE() : c >= COLS() - ZONE(); }
 
 // ---------------------------------------------------------------------------
@@ -1367,7 +1367,7 @@ function advanceTo(player) {
   updateEliminationStreaks();
   checkWinner();
   if (Game.winner !== null) { persist(); UI.refresh(); Render.render(); return; }
-  if (player === 0) Game.round++; // returning to Blue completes a round
+  if (player === 0) Game.round++; // returning to Country1 completes a round
   grantIncome(player);
   startTurn(player);
   persist();
@@ -1717,18 +1717,37 @@ function runAiFor(me) {
     let group = stackAt(r, c).filter((u) => u.owner === me);
     if (!group.length) continue;
 
-    // HQ protection: move HQ toward the friendly board edge and away from enemies.
+    // HQ protection: move HQ away from enemies and toward the friendly board edge.
     const hqInGroup = group.find(u => isHqUnit(u));
     if (hqInGroup && hqInGroup.movesLeft > 0) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, [hqInGroup]);
       const edgeCol = me === 0 ? 0 : Board.COLS - 1;
+      // Check if any enemy is dangerously close (within 3 hexes) — triggers urgent flee.
+      let nearestEnemyDist = Infinity;
+      for (const u of Game.units) {
+        if (u.owner === me) continue;
+        const d = Rules.hexDist(u.r, u.c, hqInGroup.r, hqInGroup.c);
+        if (d < nearestEnemyDist) nearestEnemyDist = d;
+      }
+      const urgent = nearestEnemyDist <= 3;
       let bestKey = null, bestScore = -Infinity;
       for (const kk of Game.reachable.keys()) {
         const [rr, cc] = kk.split(',').map(Number);
         const edgeDist = Math.abs(cc - edgeCol);
-        const enemyNear = aiCountNeighborUnits(rr, cc, enemy);
+        const enemyAdj = aiCountNeighborUnits(rr, cc, enemy);
         const friendNear = aiCountNeighborUnits(rr, cc, me);
-        const score = -edgeDist * 3 - enemyNear * 10 + friendNear * 2;
+        // Count enemies within 2 and 3 hexes for broader threat awareness.
+        let enemy2 = 0, enemy3 = 0;
+        for (const u of Game.units) {
+          if (u.owner === me) continue;
+          const d = Rules.hexDist(u.r, u.c, rr, cc);
+          if (d <= 2) enemy2++;
+          if (d <= 3) enemy3++;
+        }
+        // Score: flee from enemies, prefer friendly edge, like friendly neighbors.
+        // When urgent (enemy very close), enemy avoidance dominates.
+        const edgeW = urgent ? 1 : 3;
+        const score = -edgeDist * edgeW - enemyAdj * 20 - enemy2 * 15 - enemy3 * 5 + friendNear * 3;
         if (score > bestScore) { bestScore = score; bestKey = [rr, cc]; }
       }
       if (bestKey && (bestKey[0] !== r || bestKey[1] !== c)) {
@@ -1860,7 +1879,7 @@ function rallyAllUnits(targetR, targetC) {
   for (const [k, s] of Game.unitAt) {
     if (s.length && s[0].owner === me) tiles.push(k);
   }
-  let moved = 0;
+  let removed = 0;
   for (const k0 of tiles) {
     const [r, c] = k0.split(',').map(Number);
     const group = stackAt(r, c).filter(u => u.owner === me && u.movesLeft > 0 && !isHqUnit(u));
@@ -1875,13 +1894,18 @@ function rallyAllUnits(targetR, targetC) {
     }
     if (best) {
       moveGroup(group, best[0], best[1]);
-      moved++;
+    }
+    // Remove all non-HQ units in the group from the game
+    for (const u of group) {
+      removeFromStack(u);
+      Game.units = Game.units.filter(x => x !== u);
+      removed++;
     }
   }
   Game.reachable = new Map();
-  if (moved) UI.log(`HQ rallied ${moved} stack(s) toward (${targetR},${targetC}).`);
+  if (removed) UI.log(`HQ disbanded ${removed} unit(s) marching toward (${targetR},${targetC}).`);
   persist();
-  return moved;
+  return removed;
 }
 
 // ---------------------------------------------------------------------------

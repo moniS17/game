@@ -95,8 +95,8 @@ window.UNIT_COMBAT = {
 };
 
 // Players. Player 0 starts on the LEFT, player 1 on the RIGHT.
-window.PLAYERS = [  { name: 'Blue', side: 'left',  color: '#3E2723' },
-  { name: 'Red',  side: 'right', color: '#e53935' },
+window.PLAYERS = [  { name: 'Country1', side: 'left',  color: '#3E2723' },
+  { name: 'Country2',  side: 'right', color: '#e53935' },
 ];
 
 // Economy tuning (applied by rules.js). Gold amounts are scaled ×10 (see PIECES).
@@ -134,9 +134,9 @@ window.UPGRADES = {
 // per step (baseCost * 2^stepsBought), like UPGRADES. Passive (flat, every round)
 // is the dearest, then per-owned-city, then per-owned-village (cheapest).
 window.ECO_UPGRADES = {
-  passive: { label: 'Passive income', desc: 'gold every round',    gain: 10, baseCost: 300 },
-  city:    { label: 'City income',    desc: 'per owned city',      gain: 10, baseCost: 200 },
-  village: { label: 'Village income', desc: 'per owned village',   gain: 10, baseCost: 120 },
+  passive: { label: 'Passive income', desc: 'gold every round',    gain: 10, baseCost: 200 },
+  city:    { label: 'City income',    desc: 'per owned city',      gain: 10, baseCost: 100 },
+  village: { label: 'Village income', desc: 'per owned village',   gain: 10, baseCost: 220 },
 };
 
 // Tech tree — gold cost to UNLOCK each unit type for the current game (see

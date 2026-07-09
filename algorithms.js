@@ -161,10 +161,10 @@ window.Algorithms = (function () {
     const occupied = new Set();
     const perSide = citiesPerSide(rows, cols); // scales with board area (17 at 100x100)
     // Cluster each side's cities around the column 30% of the way in from THEIR
-    // own edge (Blue ~0.30·W, Red ~0.70·W), leaving the center for neutral cities.
+    // own edge (Country1 ~0.30·W, Country2 ~0.70·W), leaving the center for neutral cities.
     const half = Math.max(1, Math.round(cols * 0.12));
-    const blueMid = Math.round(0.30 * (cols - 1));
-    const redMid = Math.round(0.70 * (cols - 1));
+    const c1Mid = Math.round(0.30 * (cols - 1));
+    const c2Mid = Math.round(0.70 * (cols - 1));
     const clampC = (c) => Math.max(1, Math.min(cols - 2, c));
     const placeBand = (owner, mid) => {
       const cMin = clampC(mid - half), cMax = clampC(mid + half);
@@ -182,8 +182,8 @@ window.Algorithms = (function () {
       }
       return occupied;
     };
-    placeBand(0, blueMid);   // Blue / left cluster
-    placeBand(1, redMid);    // Red / right cluster
+    placeBand(0, c1Mid);   // Country1 / left cluster
+    placeBand(1, c2Mid);    // Country2 / right cluster
     return { cities, occupied };
   }
 

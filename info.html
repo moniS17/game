@@ -136,7 +136,7 @@
       `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
       `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
       `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
-      `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Blue; those in the <b>right third</b> start owned by Red. The middle third remains neutral.</li>`;
+      `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Country1; those in the <b>right third</b> start owned by Country2. The middle third remains neutral.</li>`;
 
     // --- PvE difficulty ---
     const diffPanel = document.createElement("div");
@@ -240,7 +240,7 @@
       `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
       `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot. Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Math.round(Rules.COMBAT.river_attack_penalty * 100)}%</span> river penalty.</li>` +
       `<li><b>Forest</b> costs ${TERRAIN.forest.move_cost} to enter and gives <span class="buff">${Math.round(TERRAIN.forest.defense * 100)}% defense</span>.</li>` +
-      `<li>Deploy bought regiments anywhere in your own deployment zone (Blue = left, Red = right).</li>`;
+      `<li>Deploy bought regiments anywhere in your own deployment zone (Country1 = left, Country2 = right).</li>`;
 
     // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
