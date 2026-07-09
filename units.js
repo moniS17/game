@@ -11,7 +11,7 @@
  *
  * SCALE: hp, attack, cost and every GOLD amount are kept as WHOLE numbers scaled
  * ×10 (not floats), so percentage modifiers — terrain/matchup combat multipliers
- * and the PvE difficulty income buffs — round to meaningful whole values instead
+ * and the PvE difficulty income multipliers — round to meaningful whole values instead
  * of vanishing (e.g. +10% of 20 gold = +2, where +10% of 2 would round to 0).
  * Movement is NOT scaled: it carries no percentage modifiers and shares the
  * terrain move-cost scale in board.js.

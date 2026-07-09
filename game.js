@@ -392,23 +392,23 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
   const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
-  // PvE difficulty tunes gold income: easy gives the human +10%, hard gives the
-  // AI +17%, normal leaves both at 1×. Percentages land on whole gold thanks to
-  // the ×10-scaled economy (see units.js).
+  // PvE difficulty tunes AI gold: AI starts with 170 gold and its per-round
+  // income is scaled by difficulty — hard 1.7×, normal 1×, easy 0.17×.
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const incomeMult = [1, 1];
   if (ai !== null) {
-    const human = ai === 0 ? 1 : 0;
-    if (diff === 'easy') incomeMult[human] = 1.10;
-    else if (diff === 'hard') incomeMult[ai] = 1.17;
+    if (diff === 'easy') incomeMult[ai] = 0.17;
+    else if (diff === 'hard') incomeMult[ai] = 1.7;
   }
+  const startGold = [ECONOMY.start, ECONOMY.start];
+  if (ai !== null) startGold[ai] = 170;
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
     noUnitTurns: [0, 0], noCityTurns: [0, 0],
-    economy: [ECONOMY.start, ECONOMY.start],
+    economy: startGold,
     territory: buildInitialTerritory(Board.ROWS, Board.COLS)
       .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
     cities, villages: villages || [], structures: [], units, toPlace: [], upgrades: [{}, {}],
@@ -425,9 +425,8 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
   const incomeMult = [1, 1];
   if (ai !== null) {
-    const human = ai === 0 ? 1 : 0;
-    if (diff === 'easy') incomeMult[human] = 1.10;
-    else if (diff === 'hard') incomeMult[ai] = 1.17;
+    if (diff === 'easy') incomeMult[ai] = 0.17;
+    else if (diff === 'hard') incomeMult[ai] = 1.7;
   }
   const templates = [defaultTemplates(), defaultTemplates()];
   const allUnlocked = {};
@@ -458,7 +457,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
     noUnitTurns: [0, 0], noCityTurns: [0, 0],
-    economy: (customMap.economy || [ECONOMY.start, ECONOMY.start]).slice(),
+    economy: (() => { const e = (customMap.economy || [ECONOMY.start, ECONOMY.start]).slice(); if (ai !== null) e[ai] = Math.max(e[ai], 170); return e; })(),
     territory: buildInitialTerritory(rows, cols)
       .map((row) => row.map((v) => (v === 0 ? '0' : v === 1 ? '1' : '.')).join('')),
     cities, villages,
@@ -1379,6 +1378,20 @@ function aiMyCityCount(me) {
   return Game.cities.filter(ci => ci.owner === me).length;
 }
 
+function aiLargestEnemyCluster(me) {
+  const enemy = 1 - me;
+  let best = null, bestSize = 0;
+  for (const [k, s] of Game.unitAt) {
+    if (!s.length || s[0].owner !== enemy) continue;
+    if (s.length > bestSize) {
+      bestSize = s.length;
+      const [r, c] = k.split(',').map(Number);
+      best = { r, c };
+    }
+  }
+  return best;
+}
+
 // The AI (Game.aiPlayer) spends its gold on reinforcements and deploys them in
 // its own zone, aimed at the row where the enemy has pushed closest to the AI's
 // home edge. Called after the AI's existing units have already moved this turn,
@@ -1605,6 +1618,16 @@ function runAiTakeover() {
   advanceTo(1 - me);
 }
 
+function aiUnitCount(owner) {
+  return Game.units.filter(u => u.owner === owner).length;
+}
+
+function aiStackCount(owner) {
+  let n = 0;
+  for (const [, s] of Game.unitAt) if (s.length && s[0].owner === owner) n++;
+  return n;
+}
+
 function runAiFor(me) {
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
@@ -1612,6 +1635,20 @@ function runAiFor(me) {
   const noCities = aiHasNoCities(me);
   const fewCities = aiMyCityCount(me) < 5;
   const enemy = 1 - me;
+
+  // Aggression: if AI has significantly more units than the player, attack
+  // even into defensive terrain. Threshold: AI units > player units * 1.4.
+  const myUnits = aiUnitCount(me);
+  const enemyUnits = aiUnitCount(enemy);
+  const aggressive = myUnits > enemyUnits * 1.4;
+
+  // Adaptive formation: if the player spreads out (many stacks), AI spreads
+  // too (each stack seeks its own target independently). If the player has
+  // few concentrated stacks, AI concentrates toward the nearest enemy cluster.
+  const playerStacks = aiStackCount(enemy);
+  const aiStacks = aiStackCount(me);
+  const playerSpreading = playerStacks >= 5;
+  const shouldConcentrate = !playerSpreading && playerStacks <= 3;
 
   for (const k0 of tiles) {
     let [r, c] = k0.split(',').map(Number);
@@ -1629,7 +1666,8 @@ function runAiFor(me) {
 
     // RETREAT: if surrounded by more enemies than allies, retreat to a
     // defensive tile (city/water/village/forest) for the defense buff.
-    if (nearbyEnemies > nearbyFriendlies + group.length) {
+    // Skip retreat when aggressive (numeric superiority).
+    if (!aggressive && nearbyEnemies > nearbyFriendlies + group.length) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
       let bestRetreat = null, bestRD = Infinity;
       for (const kk of Game.reachable.keys()) {
@@ -1655,9 +1693,13 @@ function runAiFor(me) {
     }
 
     // TARGET: early game or no cities → capture cities/villages for income.
+    // When concentrating (player has few stacks), converge on the largest
+    // enemy cluster instead of each stack's nearest enemy.
     let target;
     if (noCities || fewCities) {
       target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
+    } else if (shouldConcentrate) {
+      target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
     } else {
       target = nearestEnemyTile(r, c, me);
     }
@@ -1687,19 +1729,22 @@ function runAiFor(me) {
         group = stackAt(r, c).filter((u) => u.owner === me);
         if (noCities || fewCities) {
           target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
+        } else if (shouldConcentrate) {
+          target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
         } else {
           target = nearestEnemyTile(r, c, me);
         }
       }
     }
 
-    // ATTACK decision: don't attack enemies on strong defensive tiles.
+    // ATTACK decision: aggressive AI attacks regardless of enemy terrain;
+    // otherwise don't attack enemies on strong defensive tiles.
     if (target && group.length && Rules.isHexNeighbor(r, c, target.r, target.c)) {
       const enemyTerrain = Game.terrain[target.r][target.c];
       const enemyOnDefensive = enemyTerrain === 'city' || enemyTerrain === 'village' ||
                                enemyTerrain === 'forest' || enemyTerrain === 'water';
 
-      if (enemyOnDefensive) {
+      if (enemyOnDefensive && !aggressive) {
         // Enemy is in a strong position. Find own defensive tile and hold,
         // or retreat if we're on open ground.
         if (!isDefensiveTerrain(r, c)) {

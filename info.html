@@ -123,6 +123,24 @@
       `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
       `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Blue; those in the <b>right third</b> start owned by Red. The middle third remains neutral.</li>`;
 
+    // --- PvE difficulty ---
+    const diffPanel = document.createElement("div");
+    diffPanel.className = "panel";
+    const diffTitle = document.createElement("h2");
+    diffTitle.textContent = "PvE Difficulty";
+    const incomeSection = document.getElementById("incomeRules").parentNode;
+    incomeSection.after(diffPanel);
+    incomeSection.after(diffTitle);
+    diffPanel.innerHTML =
+      `<ul>` +
+      `<li>In PvE, the AI starts with <b>170 gold</b> (player starts with ${ECONOMY.start}).</li>` +
+      `<li><b>Hard</b>: AI earns <span class="buff">1.7×</span> income per round — 70% more gold from all sources.</li>` +
+      `<li><b>Normal</b>: AI earns <b>1×</b> income — same rate as the player.</li>` +
+      `<li><b>Easy</b>: AI earns <span class="debuff">0.17×</span> income — only 17% of normal gold.</li>` +
+      `<li><b>Aggression</b>: when the AI has <b>~40% more units</b> than the player, it plays aggressively — attacking into defended positions (cities, forests, villages) instead of holding back.</li>` +
+      `<li><b>Adaptation</b>: the AI mirrors the player's formation — if the player <b>spreads out</b> (5+ stacks), the AI spreads to match; if the player <b>concentrates</b> into few stacks (≤3), the AI converges on the largest enemy group.</li>` +
+      `</ul>`;
+
     // --- Healing & supply ---
     document.getElementById("healRules").innerHTML =
       `<li><b>Resting heals</b>: a unit that <b>does not move</b> on its turn recovers HP at the start of its next one. Within supply range of an <b>owned city</b> (${REGEN.range.city} tiles) or <b>village</b> (${REGEN.range.village} tile), it regains <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> of max HP.</li>` +
