@@ -155,6 +155,9 @@
       `<li><b>Easy</b>: AI earns <span class="debuff">0.17×</span> income — only 17% of normal gold.</li>` +
       `<li><b>Aggression</b>: when the AI has <b>~40% more units</b> than the player, it plays aggressively — attacking into defended positions (cities, forests, villages) instead of holding back.</li>` +
       `<li><b>Adaptation</b>: the AI mirrors the player's formation — if the player <b>spreads out</b> (5+ stacks), the AI spreads to match; if the player <b>concentrates</b> into few stacks (≤3), the AI converges on the largest enemy group.</li>` +
+      `<li><b>HQ escort</b>: the AI protects its HQ by choosing between two strategies — <b>flee</b> toward its own edge when enemies are close and no escort is available, or <b>escort</b> by moving the HQ toward its largest friendly stack (≥4 regiments) for protection when the stack is nearby and in a safe area.</li>` +
+      `<li><b>Terrain-aware combat</b>: the AI evaluates attacks using <b>terrain-modified ATK</b> — e.g. tanks on plains hit harder, tanks in forests hit softer — and factors in the defender's <b>terrain defense</b> when deciding whether to engage.</li>` +
+      `<li><b>Numeric superiority</b>: the AI becomes more willing to attack when it has a <b>HP advantage</b> over the target. At <b>1.25×</b> HP it lowers its caution threshold; at <b>1.5×</b> and <b>1.75×</b> it becomes increasingly aggressive. At <b>2× HP</b> advantage, the AI attacks <b>unconditionally</b> — even across difficult terrain or into fortified positions.</li>` +
       `</ul>`;
 
     // --- Healing & supply ---
