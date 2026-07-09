@@ -346,6 +346,23 @@ window.Render = (function () {
           if (at.r >= r0 && at.r < r1 && at.c >= c0 && at.c < c1) {
             const ac = hexCenter(at.r, at.c, size);
             const ax = ac.x - cam.x, ay = ac.y - cam.y;
+            // Red arrow from last path tile to attack target
+            const lastP = path[path.length - 1];
+            const lc = hexCenter(lastP.r, lastP.c, size);
+            const lx = lc.x - cam.x, ly = lc.y - cam.y;
+            ctx.strokeStyle = '#f44336';
+            ctx.fillStyle = '#f44336';
+            ctx.lineWidth = Math.max(2, size * 0.1);
+            ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(ax, ay); ctx.stroke();
+            const adx = ax - lx, ady = ay - ly;
+            const alen = Math.sqrt(adx * adx + ady * ady) || 1;
+            const aux = adx / alen, auy = ady / alen;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - aux * arrowLen * 1.3 - auy * arrowLen * 0.6, ay - auy * arrowLen * 1.3 + aux * arrowLen * 0.6);
+            ctx.lineTo(ax - aux * arrowLen * 1.3 + auy * arrowLen * 0.6, ay - auy * arrowLen * 1.3 - aux * arrowLen * 0.6);
+            ctx.closePath(); ctx.fill();
+            // Dashed red hex outline
             ctx.strokeStyle = '#f44336';
             ctx.lineWidth = Math.max(2, size * 0.12);
             ctx.setLineDash([size * 0.15, size * 0.1]);

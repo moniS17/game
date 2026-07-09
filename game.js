@@ -837,7 +837,7 @@ function doAttack(attackers, tr, tc) {
   const atkKilled = applyDamage(acting, dmgToAtk);     // shifts dead off `acting`
 
   // Survivors have attacked: mark acted and halve remaining MOV (can still move).
-  for (const u of acting) { u.acted = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
+  for (const u of acting) { u.acted = true; u.moved = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
 
   const foe = 1 - Game.turn;
 
@@ -860,6 +860,23 @@ function doAttack(attackers, tr, tc) {
   UI.log(`${PLAYERS[Game.turn].name} (${acting.length + atkKilled}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back). ` +
     `Destroyed ${defKilled} / lost ${atkKilled}.${terrainNote}${fortNote}${surrNote}`);
+
+  // Capture: surviving attackers move onto the target tile if cleared
+  const remainingDef = stackAt(tr, tc).filter(u => u.owner === foe);
+  if (!remainingDef.length) {
+    const survivors = acting.filter(u => Game.units.includes(u));
+    const toEnter = survivors.length > Rules.STACK_LIMIT
+      ? survivors.sort((a, b) => b.hp - a.hp).slice(0, Rules.STACK_LIMIT) : survivors;
+    for (const u of toEnter) {
+      removeFromStack(u);
+      u.r = tr; u.c = tc;
+      addToStack(u);
+    }
+    claimTile(tr, tc, Game.turn);
+    captureIfCity(tr, tc, Game.turn);
+    captureIfStructure(tr, tc, Game.turn);
+  }
+
   checkWinner();
 }
 
@@ -1322,7 +1339,7 @@ function doCoordinatedAttack(allAttackers, groups, tr, tc) {
   }
 
   for (const u of allAttackers) {
-    if (Game.units.includes(u)) { u.acted = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
+    if (Game.units.includes(u)) { u.acted = true; u.moved = true; u.movesLeft = Math.floor(u.movesLeft / 2); }
   }
 
   const foe = 1 - Game.turn;
@@ -1330,6 +1347,23 @@ function doCoordinatedAttack(allAttackers, groups, tr, tc) {
   UI.log(`${PLAYERS[Game.turn].name}${stkCount} (${allAttackers.length}) struck ` +
     `${PLAYERS[foe].name} for ${dmgToDef} (took ${dmgToAtk} back split). ` +
     `Destroyed ${defKilled} / lost ${atkKilled}.`);
+
+  // Capture: surviving attackers move onto the target tile if cleared
+  const remainingDef = stackAt(tr, tc).filter(u => u.owner === foe);
+  if (!remainingDef.length) {
+    const survivors = allAttackers.filter(u => Game.units.includes(u));
+    const toEnter = survivors.length > Rules.STACK_LIMIT
+      ? survivors.sort((a, b) => b.hp - a.hp).slice(0, Rules.STACK_LIMIT) : survivors;
+    for (const u of toEnter) {
+      removeFromStack(u);
+      u.r = tr; u.c = tc;
+      addToStack(u);
+    }
+    claimTile(tr, tc, Game.turn);
+    captureIfCity(tr, tc, Game.turn);
+    captureIfStructure(tr, tc, Game.turn);
+  }
+
   checkWinner();
 }
 
