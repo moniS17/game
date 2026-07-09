@@ -1,5 +1,5 @@
 /*
- * game.js — game state, turns, economy, AI, persistence and input wiring.
+ * game.js — game state, turns, economy, persistence, and boot.
  *
  * This is the orchestrator. It owns the live Game state and connects the
  * separated modules:
@@ -9,6 +9,8 @@
  *   rules.js      - movement & combat rules (no rules live here)
  *   render.js     - all canvas drawing
  *   state.js      - localStorage persistence
+ *   ai.js         - PvE artificial intelligence
+ *   input.js      - mouse/touch input handling
  * The page (index.html) provides the UI object.
  *
  * STACKING MODEL
@@ -1408,7 +1410,7 @@ function advanceTo(player) {
   UI.refresh();
   Render.render();
   Render.autoZoom(); // small boards: keep the board filling the viewport
-  if (Game.mode === 'pve' && player === Game.aiPlayer) runAiTurn();
+  if (Game.mode === 'pve' && player === Game.aiPlayer) window.runAiTurn();
 }
 
 function nextRound() {
@@ -1416,492 +1418,6 @@ function nextRound() {
   if (inPlacement()) { UI.log('Deploy your bought units first.'); UI.refresh(); return; }
   if (Game.orderQueue.length) executeOrders();
   advanceTo(1 - Game.turn);
-}
-
-// ---------------------------------------------------------------------------
-// PvE AI: strategic movement, retreat when outnumbered, avoid attacking
-// enemies in strong defensive positions.
-// ---------------------------------------------------------------------------
-function nearestEnemyTile(r, c, owner) {
-  let best = null, bestD = Infinity;
-  for (const [k, s] of Game.unitAt) {
-    if (!s.length || s[0].owner === owner) continue;
-    const [er, ec] = k.split(',').map(Number);
-    const d = Rules.hexDist(er, ec, r, c);
-    if (d < bestD) { bestD = d; best = { r: er, c: ec }; }
-  }
-  return best;
-}
-
-function aiHasNoCities(me) {
-  return !Game.cities.some(ci => ci.owner === me);
-}
-
-function nearestUnownedCity(r, c, me) {
-  let best = null, bestD = Infinity;
-  for (const ci of Game.cities) {
-    if (ci.owner === me) continue;
-    const d = Rules.hexDist(ci.r, ci.c, r, c);
-    if (d < bestD) { bestD = d; best = { r: ci.r, c: ci.c }; }
-  }
-  return best;
-}
-
-function nearestUnownedCityOrVillage(r, c, me) {
-  let best = null, bestD = Infinity;
-  for (const s of Game.cities.concat(Game.villages)) {
-    if (s.owner === me) continue;
-    const d = Rules.hexDist(s.r, s.c, r, c);
-    if (d < bestD) { bestD = d; best = { r: s.r, c: s.c }; }
-  }
-  return best;
-}
-
-function isDefensiveTerrain(r, c) {
-  const t = Game.terrain[r][c];
-  return t === 'city' || t === 'village' || t === 'forest' || t === 'water';
-}
-
-function aiCountNeighborUnits(r, c, owner) {
-  let count = 0;
-  for (const [nr, nc] of Rules.neighbors(r, c)) {
-    if (!inBounds(nr, nc)) continue;
-    const s = stackAt(nr, nc);
-    for (const u of s) if (u.owner === owner) count++;
-  }
-  return count;
-}
-
-function aiMyCityCount(me) {
-  return Game.cities.filter(ci => ci.owner === me).length;
-}
-
-function aiLargestEnemyCluster(me) {
-  const enemy = 1 - me;
-  let best = null, bestSize = 0;
-  for (const [k, s] of Game.unitAt) {
-    if (!s.length || s[0].owner !== enemy) continue;
-    if (s.length > bestSize) {
-      bestSize = s.length;
-      const [r, c] = k.split(',').map(Number);
-      best = { r, c };
-    }
-  }
-  return best;
-}
-
-// The AI (Game.aiPlayer) spends its gold on reinforcements and deploys them in
-// its own zone, aimed at the row where the enemy has pushed closest to the AI's
-// home edge. Called after the AI's existing units have already moved this turn,
-// so a freshly-arrived (0-move) unit never freezes a shared stack's movement.
-
-// Row where the enemy is nearest to `me`'s home edge (its most advanced threat).
-// me=1 defends the RIGHT edge (largest column), me=0 the LEFT (smallest column).
-function aiThreatRow(me) {
-  let best = null, bestC = me === 1 ? -1 : COLS();
-  for (const u of Game.units) {
-    if (u.owner === me) continue;
-    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
-  }
-  return best == null ? Math.floor(ROWS() / 2) : best;
-}
-
-// Build a synthetic (single-type) template from a comp map, for AI/ad-hoc units.
-function compTemplate(name, comp) {
-  const cells = new Array(TEMPLATE_CELLS).fill(null);
-  let i = 0;
-  for (const type in comp) for (let k = 0; k < comp[type] && i < TEMPLATE_CELLS; k++) cells[i++] = type;
-  return { id: 'adhoc', name, cells };
-}
-
-// Greedily spend the AI's gold on UNLOCKED units, packaged into battalions.
-// Early game (few cities): focus on cheap infantry to capture cities fast.
-// When the enemy fields tanks and cannon is unlocked, the AI spends roughly
-// half its budget on cannon battalions to counter them.
-// Returns unit specs [{type, size}]. Mirrors the buy page's cost model.
-function aiBuyUnits(me) {
-  const roster = Object.keys(PIECES)
-    .filter((t) => isUnlocked(me, t))
-    .sort((a, b) => PIECES[a].cost - PIECES[b].cost);
-  if (!roster.length) return [];
-  const cheapest = PIECES[roster[0]].cost;
-  const units = [];
-  let budget = Game.economy[me];
-
-  // Early game: build small infantry battalions for fast city capture.
-  const myCities = aiMyCityCount(me);
-  if (myCities < 5 && isUnlocked(me, 'infantry')) {
-    const infCost = PIECES.infantry.cost;
-    const earlyBudget = Math.floor(budget * 0.85);
-    let spent = 0;
-    while (spent + infCost <= earlyBudget && units.length < 100) {
-      const size = Math.min(4, Math.floor((earlyBudget - spent) / infCost));
-      if (size < 1) break;
-      let n = 0;
-      while (n < size && spent + infCost <= earlyBudget) { spent += infCost; n++; }
-      units.push({ type: 'infantry', size: n });
-    }
-    budget -= spent;
-  }
-
-  // Counter-tanks: if enemy has tanks and cannon is unlocked, dedicate ~half
-  // remaining budget to cannon battalions.
-  const enemyTanks = aiEnemyHasTanks(me);
-  if (enemyTanks && isUnlocked(me, 'cannon')) {
-    const cannonCost = PIECES.cannon.cost;
-    const cannonBudget = Math.floor(budget / 2);
-    let spent = 0;
-    while (spent + cannonCost <= cannonBudget && units.length < 100) {
-      const size = Math.max(1, Math.min(4, Math.floor((cannonBudget - spent) / cannonCost / 2) || 1));
-      let n = 0;
-      while (n < size && spent + cannonCost <= cannonBudget) { spent += cannonCost; n++; }
-      units.push({ type: 'cannon', size: n });
-    }
-    budget -= spent;
-  }
-
-  // Guard the loop so a runaway can never spin (budget strictly decreases).
-  while (budget >= cheapest && units.length < 100) {
-    const affordable = roster.filter((t) => PIECES[t].cost <= budget);
-    const type = affordable[units.length % affordable.length];
-    const cost = PIECES[type].cost;
-    const size = Math.max(1, Math.min(4, Math.floor(budget / cost / 3) || 1));
-    let n = 0;
-    while (n < size && budget >= cost) { budget -= cost; n++; }
-    units.push({ type, size: n });
-  }
-  Game.economy[me] = budget;
-  return units;
-}
-
-// The AI only researches new unit types when it has a large gold surplus
-// (3× the tech cost), keeping most gold for infantry production.
-function aiResearchTech(me) {
-  if (typeof TECH === 'undefined') return;
-  if (aiEnemyHasTanks(me) && !isUnlocked(me, 'cannon')) {
-    if (Game.economy[me] >= TECH.cannon * 3) { unlockType(me, 'cannon'); return; }
-  }
-  const locked = Object.keys(TECH)
-    .filter((t) => !isUnlocked(me, t))
-    .sort((a, b) => TECH[a] - TECH[b]);
-  for (const t of locked) {
-    if (Game.economy[me] >= TECH[t] * 3) { unlockType(me, t); break; }
-  }
-}
-
-// Row of the nearest enemy tank to `me`'s home edge (for cannon deployment).
-function aiEnemyTankRow(me) {
-  let best = null, bestC = me === 1 ? -1 : COLS();
-  for (const u of Game.units) {
-    if (u.owner === me) continue;
-    if (!(u.parts || []).some((p) => p.type === 'tank' && p.count > 0)) continue;
-    if (me === 1 ? u.c > bestC : u.c < bestC) { bestC = u.c; best = u.r; }
-  }
-  return best;
-}
-
-// Deploy AI unit specs into `me`'s zone, one unit per tile-slot, filling tiles
-// closest to (threatRow, front column) first and spilling outward. Cannon units
-// are deployed near enemy tanks when possible.
-function aiDeployUnits(me, specs) {
-  if (!specs.length) return 0;
-  const cols = COLS(), rows = ROWS(), zone = ZONE();
-  const frontCol = me === 1 ? cols - zone : zone - 1;
-  const targetRow = aiThreatRow(me);
-  const tankRow = aiEnemyTankRow(me);
-  const noCities = aiHasNoCities(me);
-
-  // Build candidate list for a given target row.
-  function buildCands(tRow) {
-    const cands = [];
-    for (let c = 0; c < cols; c++) {
-      if (!inZone(me, c)) continue;
-      for (let r = 0; r < rows; r++) {
-        if (Game.terrain[r][c] === 'water') continue;
-        const s = stackAt(r, c);
-        if (s.length && s[0].owner !== me) continue;
-        cands.push({ r, c, d: Rules.hexDist(r, c, tRow, frontCol), isCity: Game.terrain[r][c] === 'city' });
-      }
-    }
-    if (noCities) {
-      cands.sort((a, b) => (b.isCity - a.isCity) || (a.d - b.d));
-    } else {
-      cands.sort((a, b) => a.d - b.d);
-    }
-    return cands;
-  }
-
-  const defaultCands = buildCands(targetRow);
-  const cannonCands = tankRow != null ? buildCands(tankRow) : defaultCands;
-
-  let placed = 0;
-  for (const spec of specs) {
-    if (!spec.size) continue;
-    const pool = spec.type === 'cannon' ? cannonCands : defaultCands;
-    const dest = pool.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT)
-              || defaultCands.find((cand) => stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
-    if (!dest) break;
-    const tmpl = compTemplate(PIECES[spec.type].name, { [spec.type]: spec.size });
-    const u = makeUnitFromTemplate(me, tmpl, dest.r, dest.c, { acted: true, movesLeft: 0 });
-    if (!u) continue;
-    Game.units.push(u);
-    addToStack(u);
-    placed++;
-  }
-  // Refund any units that couldn't fit (zone saturated).
-  for (let i = placed; i < specs.length; i++) Game.economy[me] += PIECES[specs[i].type].cost * specs[i].size;
-  return placed;
-}
-
-function aiSpendAndReinforce(me) {
-  if (Game.economy[me] < 1) return;
-  aiResearchTech(me); // occasionally unlock a new unit before spending
-  const specs = aiBuyUnits(me);
-  const placed = aiDeployUnits(me, specs);
-  if (placed) {
-    const counts = {};
-    for (let i = 0; i < placed; i++) counts[specs[i].type] = (counts[specs[i].type] || 0) + specs[i].size;
-    const names = Object.keys(counts).map((t) => `${PIECES[t].name} ×${counts[t]}`);
-    UI.log(`${PLAYERS[me].name} reinforced with ${names.join(', ')}.`);
-  }
-}
-
-// Is (r,c) within supply range for `owner`? (cities, villages, supply hubs)
-function aiInSupplyRange(r, c, owner) {
-  const range = REGEN.heavyRange; // use heavy range (largest) for conservative check
-  const supplyHubs = Game.structures.filter((s) => s.type === 'supply');
-  return nearOwnedSite(r, c, Game.cities, owner, range.city) ||
-         nearOwnedSite(r, c, Game.villages, owner, range.village) ||
-         nearOwnedSite(r, c, supplyHubs, owner, range.village);
-}
-
-// Does the enemy field any tanks? Used to prioritise cannon purchases.
-function aiEnemyHasTanks(me) {
-  for (const u of Game.units) {
-    if (u.owner === me) continue;
-    if ((u.parts || []).some((p) => p.type === 'tank' && p.count > 0)) return true;
-  }
-  return false;
-}
-
-function runAiTurn() {
-  const me = Game.aiPlayer;
-  const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
-  runAiFor(me);
-  if (Game.winner === null) aiSpendAndReinforce(me);
-  Game.reachable = new Map();
-  persist();
-  UI.refresh();
-  Render.render();
-  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  advanceTo(1 - me);
-}
-
-// AI takeover: let the AI play the current human player's turn
-function runAiTakeover() {
-  if (Game.winner !== null) return;
-  if (inPlacement()) { UI.log('Deploy your units first.'); UI.refresh(); return; }
-  if (Game.orderQueue.length) clearAllOrders();
-  const me = Game.turn;
-  const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
-  runAiFor(me);
-  if (Game.winner === null) aiSpendAndReinforce(me);
-  Game.reachable = new Map();
-  persist();
-  UI.refresh();
-  Render.render();
-  if (window.UI && UI.showEnemyMoves) UI.showEnemyMoves(UI.entries.slice(logStart));
-  advanceTo(1 - me);
-}
-
-function aiUnitCount(owner) {
-  return Game.units.filter(u => u.owner === owner).length;
-}
-
-function aiStackCount(owner) {
-  let n = 0;
-  for (const [, s] of Game.unitAt) if (s.length && s[0].owner === owner) n++;
-  return n;
-}
-
-function runAiFor(me) {
-  const tiles = [];
-  for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
-
-  const noCities = aiHasNoCities(me);
-  const fewCities = aiMyCityCount(me) < 5;
-  const enemy = 1 - me;
-
-  // Aggression: if AI has significantly more units than the player, attack
-  // even into defensive terrain. Threshold: AI units > player units * 1.4.
-  const myUnits = aiUnitCount(me);
-  const enemyUnits = aiUnitCount(enemy);
-  const aggressive = myUnits > enemyUnits * 1.4;
-
-  // Adaptive formation: if the player spreads out (many stacks), AI spreads
-  // too (each stack seeks its own target independently). If the player has
-  // few concentrated stacks, AI concentrates toward the nearest enemy cluster.
-  const playerStacks = aiStackCount(enemy);
-  const aiStacks = aiStackCount(me);
-  const playerSpreading = playerStacks >= 5;
-  const shouldConcentrate = !playerSpreading && playerStacks <= 3;
-
-  for (const k0 of tiles) {
-    let [r, c] = k0.split(',').map(Number);
-    let group = stackAt(r, c).filter((u) => u.owner === me);
-    if (!group.length) continue;
-
-    // HQ protection: move HQ away from enemies and toward the friendly board edge.
-    const hqInGroup = group.find(u => isHqUnit(u));
-    if (hqInGroup && hqInGroup.movesLeft > 0) {
-      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, [hqInGroup]);
-      const edgeCol = me === 0 ? 0 : Board.COLS - 1;
-      // Check if any enemy is dangerously close (within 3 hexes) — triggers urgent flee.
-      let nearestEnemyDist = Infinity;
-      for (const u of Game.units) {
-        if (u.owner === me) continue;
-        const d = Rules.hexDist(u.r, u.c, hqInGroup.r, hqInGroup.c);
-        if (d < nearestEnemyDist) nearestEnemyDist = d;
-      }
-      const urgent = nearestEnemyDist <= 3;
-      let bestKey = null, bestScore = -Infinity;
-      for (const kk of Game.reachable.keys()) {
-        const [rr, cc] = kk.split(',').map(Number);
-        const edgeDist = Math.abs(cc - edgeCol);
-        const enemyAdj = aiCountNeighborUnits(rr, cc, enemy);
-        const friendNear = aiCountNeighborUnits(rr, cc, me);
-        // Count enemies within 2 and 3 hexes for broader threat awareness.
-        let enemy2 = 0, enemy3 = 0;
-        for (const u of Game.units) {
-          if (u.owner === me) continue;
-          const d = Rules.hexDist(u.r, u.c, rr, cc);
-          if (d <= 2) enemy2++;
-          if (d <= 3) enemy3++;
-        }
-        // Score: flee from enemies, prefer friendly edge, like friendly neighbors.
-        // When urgent (enemy very close), enemy avoidance dominates.
-        const edgeW = urgent ? 1 : 3;
-        const score = -edgeDist * edgeW - enemyAdj * 20 - enemy2 * 15 - enemy3 * 5 + friendNear * 3;
-        if (score > bestScore) { bestScore = score; bestKey = [rr, cc]; }
-      }
-      if (bestKey && (bestKey[0] !== r || bestKey[1] !== c)) {
-        moveGroup([hqInGroup], bestKey[0], bestKey[1]);
-      }
-      group = stackAt(r, c).filter((u) => u.owner === me);
-      if (!group.length) continue;
-    }
-
-    const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
-
-    // Healing hold: below 50% HP in supply range, rest to heal.
-    if (avgHpRatio < 0.5 && aiInSupplyRange(r, c, me)) continue;
-
-    // Count nearby enemy vs friendly units for retreat decision.
-    const nearbyEnemies = aiCountNeighborUnits(r, c, enemy);
-    const nearbyFriendlies = aiCountNeighborUnits(r, c, me);
-
-    // RETREAT: if surrounded by more enemies than allies, retreat to a
-    // defensive tile (city/water/village/forest) for the defense buff.
-    // Skip retreat when aggressive (numeric superiority).
-    if (!aggressive && nearbyEnemies > nearbyFriendlies + group.length) {
-      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
-      let bestRetreat = null, bestRD = Infinity;
-      for (const kk of Game.reachable.keys()) {
-        const [rr, cc] = kk.split(',').map(Number);
-        if (!isDefensiveTerrain(rr, cc)) continue;
-        const enemyNear = aiCountNeighborUnits(rr, cc, enemy);
-        const d = enemyNear * 100 - Rules.hexDist(rr, cc, r, c);
-        if (d < bestRD) { bestRD = d; bestRetreat = [rr, cc]; }
-      }
-      if (!bestRetreat) {
-        // No defensive tile reachable: just move to the tile with fewest adjacent enemies.
-        let bestD2 = Infinity;
-        for (const kk of Game.reachable.keys()) {
-          const [rr, cc] = kk.split(',').map(Number);
-          const en = aiCountNeighborUnits(rr, cc, enemy);
-          if (en < bestD2) { bestD2 = en; bestRetreat = [rr, cc]; }
-        }
-      }
-      if (bestRetreat) {
-        moveGroup(group, bestRetreat[0], bestRetreat[1]);
-      }
-      continue;
-    }
-
-    // TARGET: early game or no cities → capture cities/villages for income.
-    // When concentrating (player has few stacks), converge on the largest
-    // enemy cluster instead of each stack's nearest enemy.
-    let target;
-    if (noCities || fewCities) {
-      target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
-    } else if (shouldConcentrate) {
-      target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
-    } else {
-      target = nearestEnemyTile(r, c, me);
-    }
-    if (!target) break;
-
-    if (!Rules.isHexNeighbor(r, c, target.r, target.c)) {
-      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
-
-      const wounded = avgHpRatio < 0.7;
-      let best = null, bestD = Rules.hexDist(r, c, target.r, target.c);
-      let targetSupply = null, bestSD = Infinity;
-      let targetDry = null, bestDryD = Rules.hexDist(r, c, target.r, target.c);
-      for (const kk of Game.reachable.keys()) {
-        const [rr, cc] = kk.split(',').map(Number);
-        const d = Rules.hexDist(rr, cc, target.r, target.c);
-        if (d < bestD) { bestD = d; best = [rr, cc]; }
-        if (wounded && aiInSupplyRange(rr, cc, me) && d < bestSD) { bestSD = d; targetSupply = [rr, cc]; }
-        if (!Board.isWater(Game.terrain, rr, cc) && d < bestDryD) { bestDryD = d; targetDry = [rr, cc]; }
-      }
-      if (best && Board.isWater(Game.terrain, best[0], best[1]) && targetDry) {
-        best = targetDry;
-      }
-      const chosen = (wounded && targetSupply) ? targetSupply : best;
-      if (chosen) {
-        moveGroup(group, chosen[0], chosen[1]);
-        r = chosen[0]; c = chosen[1];
-        group = stackAt(r, c).filter((u) => u.owner === me);
-        if (noCities || fewCities) {
-          target = nearestUnownedCityOrVillage(r, c, me) || nearestEnemyTile(r, c, me);
-        } else if (shouldConcentrate) {
-          target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
-        } else {
-          target = nearestEnemyTile(r, c, me);
-        }
-      }
-    }
-
-    // ATTACK decision: aggressive AI attacks regardless of enemy terrain;
-    // otherwise don't attack enemies on strong defensive tiles.
-    if (target && group.length && Rules.isHexNeighbor(r, c, target.r, target.c)) {
-      const enemyTerrain = Game.terrain[target.r][target.c];
-      const enemyOnDefensive = enemyTerrain === 'city' || enemyTerrain === 'village' ||
-                               enemyTerrain === 'forest' || enemyTerrain === 'water';
-
-      if (enemyOnDefensive && !aggressive) {
-        // Enemy is in a strong position. Find own defensive tile and hold,
-        // or retreat if we're on open ground.
-        if (!isDefensiveTerrain(r, c)) {
-          Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
-          let bestDef = null, bestDD = Infinity;
-          for (const kk of Game.reachable.keys()) {
-            const [rr, cc] = kk.split(',').map(Number);
-            if (!isDefensiveTerrain(rr, cc)) continue;
-            const d = Rules.hexDist(rr, cc, target.r, target.c);
-            if (d < bestDD) { bestDD = d; bestDef = [rr, cc]; }
-          }
-          if (bestDef) {
-            moveGroup(group, bestDef[0], bestDef[1]);
-          }
-        }
-        // Hold position on our defensive tile — don't attack.
-      } else {
-        doAttack(group, target.r, target.c);
-      }
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1943,148 +1459,6 @@ function rallyAllUnits(targetR, targetC) {
 }
 
 // ---------------------------------------------------------------------------
-// Input — shared tap handling for mouse clicks and touch taps
-// ---------------------------------------------------------------------------
-function handleTapAt(r, c) {
-  if (Game.winner !== null || !inBounds(r, c)) return;
-
-  // Rally mode: HQ ordered all units to converge on this tile.
-  if (window._rallyMode) {
-    window._rallyMode = false;
-    rallyAllUnits(r, c);
-    UI.refresh(); Render.render();
-    return;
-  }
-
-  if (inPlacement()) { placeAt(r, c); UI.refresh(); Render.render(); Render.autoZoom(); return; }
-
-  const tileStack = stackAt(r, c);
-  const committed = committedUnitIds();
-  const movers = Game.selUnits.filter(u => u.owner === Game.turn && !committed.has(u.id));
-
-  if (Game.selTile && movers.length) {
-    const group = movers.filter(u => u.movesLeft > 0);
-    const selR = Game.selTile.r, selC = Game.selTile.c;
-
-    // ATTACK: tapped an enemy-held tile
-    if (tileStack.length && tileStack[0].owner !== Game.turn && group.length) {
-      if (Rules.isHexNeighbor(selR, selC, r, c)) {
-        const path = [{ r: selR, c: selC }];
-        addOrder(group, { r: selR, c: selC }, { r: selR, c: selC }, path, true, { r, c });
-        UI.refresh(); Render.render();
-        return;
-      }
-      const adj = bestAdjacentForAttack(r, c, Game.reachable, Game.unitAt, Game.turn, group.length);
-      if (adj) {
-        const startBudget = Math.min(...group.map(u => u.movesLeft));
-        const path = getPath(selR, selC, adj.r, adj.c, startBudget);
-        addOrder(group, { r: selR, c: selC }, adj, path, true, { r, c });
-        UI.refresh(); Render.render();
-        return;
-      }
-    }
-
-    // MOVE: tapped a reachable empty/friendly tile
-    if (Game.reachable.has(key(r, c)) && (!tileStack.length || tileStack[0].owner === Game.turn) && group.length) {
-      const startBudget = Math.min(...group.map(u => u.movesLeft));
-      const path = getPath(selR, selC, r, c, startBudget);
-      addOrder(group, { r: selR, c: selC }, { r, c }, path, false, null);
-      UI.refresh(); Render.render();
-      return;
-    }
-  }
-
-  selectTile(r, c);
-  UI.refresh(); Render.render();
-}
-
-function zoomAt(clientX, clientY, factor) {
-  const cam = Render.cam;
-  const rect = Render.canvas.getBoundingClientRect();
-  const mx = clientX - rect.left, my = clientY - rect.top;
-  // World pixel under cursor
-  const wpx = cam.x + mx, wpy = cam.y + my;
-  // Fractional position within the board (0..1)
-  const S3 = Math.sqrt(3);
-  const bw = S3 * cam.cell * (Board.COLS + 0.5);
-  const bh = 1.5 * cam.cell * (Board.ROWS - 1) + 2 * cam.cell;
-  const fx = wpx / bw, fy = wpy / bh;
-  const old = cam.cell;
-  cam.cell = Math.round(Math.max(Render.MIN_CELL, Math.min(Render.MAX_CELL, cam.cell * factor)));
-  if (cam.cell !== old) {
-    const nbw = S3 * cam.cell * (Board.COLS + 0.5);
-    const nbh = 1.5 * cam.cell * (Board.ROWS - 1) + 2 * cam.cell;
-    cam.x = fx * nbw - mx;
-    cam.y = fy * nbh - my;
-    Render.clamp(); Render.render();
-  }
-}
-
-function wireInput() {
-  const cv = Render.canvas;
-  const cam = Render.cam;
-
-  // ---- mouse: drag to pan, click to act, wheel to zoom ----
-  let dragging = false, dragMoved = false, lastX = 0, lastY = 0;
-  cv.addEventListener('mousedown', (e) => { dragging = true; dragMoved = false; lastX = e.clientX; lastY = e.clientY; });
-  window.addEventListener('mouseup', () => { dragging = false; });
-  window.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const dx = e.clientX - lastX, dy = e.clientY - lastY;
-    if (Math.abs(dx) + Math.abs(dy) > 3) dragMoved = true;
-    cam.x -= dx; cam.y -= dy; lastX = e.clientX; lastY = e.clientY;
-    Render.clamp(); Render.render();
-  });
-  cv.addEventListener('click', (e) => {
-    if (dragMoved) return;
-    const { r, c } = Render.cellFromPoint(e.clientX, e.clientY);
-    handleTapAt(r, c);
-  });
-  cv.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 0.87);
-  }, { passive: false });
-
-  // ---- touch (Android/mobile): one finger pans + taps, two fingers pinch-zoom ----
-  let touchPan = null, pinch = null, tap = null;
-  const dist = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
-                                 e.touches[0].clientY - e.touches[1].clientY);
-  cv.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
-      const t = e.touches[0];
-      touchPan = { x: t.clientX, y: t.clientY };
-      tap = { x: t.clientX, y: t.clientY, moved: false };
-      pinch = null;
-    } else if (e.touches.length === 2) {
-      pinch = { d: dist(e), cx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-                cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
-      touchPan = null; tap = null;
-    }
-  }, { passive: false });
-  cv.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && touchPan) {
-      const t = e.touches[0];
-      const dx = t.clientX - touchPan.x, dy = t.clientY - touchPan.y;
-      if (tap && Math.abs(dx) + Math.abs(dy) > 6) tap.moved = true;
-      cam.x -= dx; cam.y -= dy; touchPan = { x: t.clientX, y: t.clientY };
-      Render.clamp(); Render.render();
-    } else if (e.touches.length === 2 && pinch) {
-      const d = dist(e);
-      if (pinch.d > 0) zoomAt(pinch.cx, pinch.cy, d / pinch.d);
-      pinch.d = d;
-    }
-  }, { passive: false });
-  cv.addEventListener('touchend', (e) => {
-    if (tap && !tap.moved && e.touches.length === 0) {
-      const { r, c } = Render.cellFromPoint(tap.x, tap.y);
-      handleTapAt(r, c);
-    }
-    touchPan = null; pinch = null; tap = null;
-  }, { passive: false });
-}
-
-// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 function boot() {
@@ -2109,14 +1483,14 @@ function boot() {
   Render.autoZoom(); // small boards: fill the viewport (also after buy/upgrade returns here)
   UI.refresh();
   // If the AI is set to move first, let it take its opening turn immediately.
-  if (Game.mode === 'pve' && Game.winner === null && Game.turn === Game.aiPlayer) runAiTurn();
+  if (Game.mode === 'pve' && Game.winner === null && Game.turn === Game.aiPlayer) window.runAiTurn();
 }
 
 window.addEventListener('resize', () => Render.resize());
-wireInput();
+wireInput(); // from input.js
 boot();
 
-// expose for the page buttons / sidebar controls
+// Expose for the page buttons / sidebar controls
 window.Game = Game;
 window.nextRound = nextRound;
 window.inPlacement = inPlacement;
@@ -2147,7 +1521,6 @@ window.rallyAllUnits = rallyAllUnits;
 window.executeOrders = executeOrders;
 window.clearAllOrders = clearAllOrders;
 window.committedUnitIds = committedUnitIds;
-window.runAiTakeover = runAiTakeover;
 // Creative-mode cheat: hand the current player a pile of gold.
 window.creativeGrant = function () {
   if (!Game.creative || Game.winner !== null) return;
@@ -2156,3 +1529,18 @@ window.creativeGrant = function () {
   UI.refresh();
 };
 window.startNewGame = (mode) => { SaveState.setIntent({ action: 'new', mode }); location.reload(); };
+
+// Internal helpers exposed for ai.js and input.js
+window._stackAt = stackAt;
+window._moveGroup = moveGroup;
+window._doAttack = doAttack;
+window._addToStack = addToStack;
+window._makeUnit = makeUnitFromTemplate;
+window._persist = persist;
+window._advanceTo = advanceTo;
+window._nearOwnedSite = nearOwnedSite;
+window._inZone = inZone;
+window._placeAt = placeAt;
+window._addOrder = addOrder;
+window._getPath = getPath;
+window._bestAdjacentForAttack = bestAdjacentForAttack;
