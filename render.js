@@ -384,14 +384,37 @@ window.Render = (function () {
   const SUBS = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
   function toSub(n) { return String(n).split('').map((d) => SUBS[+d]).join(''); }
 
+  function drawStar(cx, cy, r, points) {
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const rad = (i % 2 === 0) ? r : r * 0.45;
+      const angle = Math.PI / points * i - Math.PI / 2;
+      const vx = cx + rad * Math.cos(angle);
+      const vy = cy + rad * Math.sin(angle);
+      if (i === 0) ctx.moveTo(vx, vy);
+      else ctx.lineTo(vx, vy);
+    }
+    ctx.closePath();
+  }
+
   function drawStack(G, stack, r, c, size, detailed, innerSize) {
     const u = stack[stack.length - 1];
     const center = hexCenter(r, c, size);
     const sx = center.x - cam.x - innerSize * 0.08, sy = center.y - cam.y;
     const def = PIECES[u.type];
     const color = PLAYERS[u.owner].color;
+    const isHq = window.isHqUnit && window.isHqUnit(u);
 
-    if (detailed && images[u.type] && images[u.type].complete) {
+    if (isHq) {
+      ctx.globalAlpha = 0.75; ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.48, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, innerSize * 0.06);
+      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.48, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      drawStar(sx, sy, innerSize * 0.3, 5);
+      ctx.fill();
+    } else if (detailed && images[u.type] && images[u.type].complete) {
       ctx.globalAlpha = 0.6; ctx.fillStyle = color;
       ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.7;

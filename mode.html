@@ -18,6 +18,12 @@
       background: #23282e; padding: 2.5rem 2rem; border-radius: 14px; width: 100%;
       max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,.5); text-align: center;
     }
+    @media (min-width: 600px) {
+      .menu { max-width: 560px; }
+      .btn-row { display: flex; gap: .7rem; flex-wrap: wrap; }
+      .btn-row button { flex: 1 1 45%; min-width: 200px; }
+      .diff .btn-row button { min-width: 160px; }
+    }
     h1 { font-size: 1.8rem; margin-bottom: .3rem; }
     .sub { color: #9aa4ad; font-size: .85rem; margin-bottom: 1.8rem; }
     button {
@@ -115,6 +121,18 @@
       background: #0f1216; border: 1px solid #3a3f45; border-radius: 6px;
     }
     .spawn input[type="number"]:focus { outline: none; border-color: #3a5bd9; }
+    .spawn input[type="range"] {
+      flex: 1; min-width: 60px; height: 6px; -webkit-appearance: none; appearance: none;
+      background: #3a3f45; border-radius: 3px; outline: none; cursor: pointer;
+    }
+    .spawn input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+      background: #3a5bd9; cursor: pointer;
+    }
+    .spawn input[type="range"]::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%; border: none;
+      background: #3a5bd9; cursor: pointer;
+    }
     .spawn .max-label { font-size: .7rem; color: #6b727a; }
     .spawn-check {
       display: flex; align-items: center; gap: .5rem;
@@ -154,6 +172,7 @@
       <h2>Starting units (per side)</h2>
       <div class="units-row">
         <input type="number" id="startUnitsInput" min="0" max="102" step="1" value="1" inputmode="numeric" />
+        <input type="range" id="startUnitsSlider" min="0" max="102" step="1" value="1" />
         <span class="max-label" id="startUnitsMaxLabel">max 102</span>
       </div>
       <label class="spawn-check"><input type="checkbox" id="randomStartChk" checked /> 🎲 Random start locations</label>
@@ -185,16 +204,20 @@
       <div class="map-list" id="mapList"></div>
     </div>
     <div id="modeBtns">
-      <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
-      <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
+      <div class="btn-row">
+        <button class="pvp" id="pvpBtn">🧑‍🤝‍🧑 Start — Player vs Player</button>
+        <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
+      </div>
       <button class="back" id="backBtn">← Back to menu</button>
     </div>
 
     <div class="diff" id="diffPanel" style="display:none;">
       <h2>Choose difficulty</h2>
-      <button class="pve easy"   data-d="easy"><span>🟢 Easy<br><small>You earn +10% gold</small></span></button>
-      <button class="pve normal" data-d="normal"><span>🟡 Normal<br><small>No bonuses — a fair fight</small></span></button>
-      <button class="pve hard"   data-d="hard"><span>🔴 Hard<br><small>The AI earns +17% gold</small></span></button>
+      <div class="btn-row">
+        <button class="pve easy"   data-d="easy"><span>🟢 Easy<br><small>You earn +10% gold</small></span></button>
+        <button class="pve normal" data-d="normal"><span>🟡 Normal<br><small>No bonuses — a fair fight</small></span></button>
+        <button class="pve hard"   data-d="hard"><span>🔴 Hard<br><small>The AI earns +17% gold</small></span></button>
+      </div>
       <button class="back" id="diffBackBtn">← Change opponent</button>
     </div>
 
@@ -240,6 +263,7 @@
 
     // Starting units input — max = 3 * board height
     const startInput = document.getElementById('startUnitsInput');
+    const startSlider = document.getElementById('startUnitsSlider');
     const startMaxLabel = document.getElementById('startUnitsMaxLabel');
     const randomChk = document.getElementById('randomStartChk');
     const spawnNote = document.getElementById('spawnNote');
@@ -251,8 +275,10 @@
     function syncStartUnits() {
       const mx = calcMaxUnits();
       startInput.max = String(mx);
+      startSlider.max = String(mx);
       startMaxLabel.textContent = 'max ' + mx;
       if (Number(startInput.value) > mx) startInput.value = String(mx);
+      startSlider.value = startInput.value;
     }
     function syncNote() {
       spawnNote.textContent = randomChk.checked
@@ -264,6 +290,10 @@
       let v = Math.floor(Number(startInput.value));
       if (v < 0) startInput.value = '0';
       else if (v > mx) startInput.value = String(mx);
+      startSlider.value = startInput.value;
+    });
+    startSlider.addEventListener('input', () => {
+      startInput.value = startSlider.value;
     });
     widthInput.addEventListener('input', syncStartUnits);
     heightInput.addEventListener('input', syncStartUnits);

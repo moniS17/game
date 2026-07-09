@@ -18,6 +18,11 @@
       background: #23282e; padding: 2.5rem 2rem; border-radius: 14px; width: 100%;
       max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,.5); text-align: center;
     }
+    @media (min-width: 600px) {
+      .menu { max-width: 520px; }
+      .btn-row { display: flex; gap: .9rem; }
+      .btn-row button { flex: 1; }
+    }
     h1 { font-size: 1.8rem; margin-bottom: .3rem; }
     .sub { color: #9aa4ad; font-size: .85rem; margin-bottom: 1.8rem; }
     .greeting { color: #7cb342; font-size: .85rem; margin-bottom: 1.4rem; }
@@ -36,8 +41,10 @@
 <body>
   <div class="menu">
     <div class="greeting" id="greeting"></div>
-    <button class="new"  id="newBtn">🗺️ Start new map</button>
-    <button class="cont" id="contBtn">▶️ Continue</button>
+    <div class="btn-row">
+      <button class="new"  id="newBtn">🗺️ Start new map</button>
+      <button class="cont" id="contBtn">▶️ Continue</button>
+    </div>
   </div>
 
   <script src="state.js"></script>
@@ -46,7 +53,13 @@
     document.getElementById("greeting").textContent = "hello: " + user;
 
     const contBtn = document.getElementById("contBtn");
+    const save = SaveState.load();
+    const hasEnded = save && save.winner !== undefined && save.winner !== null;
     contBtn.disabled = !SaveState.exists();
+    if (hasEnded) {
+      contBtn.innerHTML = "🏁 Last game ended";
+      contBtn.disabled = true;
+    }
 
     // New map: go pick the opponent, board size and Creative mode.
     document.getElementById("newBtn").addEventListener("click", () => {

@@ -63,6 +63,12 @@
       #boardActions { bottom: 8px; padding: 6px 10px; }
       .board-btn { padding: 7px 12px; font-size: .82rem; }
     }
+    /* Wider desktop: sidebar gets roomier, action buttons go 2-per-row */
+    @media (min-width: 1000px) {
+      #sidebar { width: 340px; }
+      .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .btn-grid button { margin-top: 0; }
+    }
     h1 { font-size: 1.15rem; }
     h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #9aa4ad; margin-bottom: 6px; }
     .panel { background: #2b3138; border-radius: 8px; padding: 12px; }
@@ -226,10 +232,12 @@
       <div class="stat-row"><span>Cities (Blue / Red)</span><span id="cityCount">0 / 0</span></div>
       <div class="stat-row"><span>Villages (Blue / Red)</span><span id="villageCount">0 / 0</span></div>
 
-      <button class="shop" id="buyBtn">🛒 Buy units</button>
-      <button id="templateBtn">▦ Templates</button>
-      <button id="techBtn">⚗️ Tech &amp; upgrades</button>
-      <button id="nextRoundBtn">Next round ▶</button>
+      <div class="btn-grid">
+        <button class="shop" id="buyBtn">🛒 Buy units</button>
+        <button id="templateBtn">▦ Templates</button>
+        <button id="techBtn">⚗️ Tech &amp; upgrades</button>
+        <button id="nextRoundBtn">Next round ▶</button>
+      </div>
 
       <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer; margin-top:4px;">
         <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
@@ -237,8 +245,10 @@
       </label>
       <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
 
-      <button class="ghost" id="infoBtn">📖 Field manual</button>
-      <button class="ghost" id="menuBtn">Main menu</button>
+      <div class="btn-grid">
+        <button class="ghost" id="infoBtn">📖 Field manual</button>
+        <button class="ghost" id="menuBtn">Main menu</button>
+      </div>
     </div>
 
     <div class="panel" id="placePanel" style="display:none; border:1px solid #b8a23a;">
