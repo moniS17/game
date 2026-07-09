@@ -1434,7 +1434,7 @@ function aiBuyUnits(me) {
   const myCities = aiMyCityCount(me);
   if (myCities < 5 && isUnlocked(me, 'infantry')) {
     const infCost = PIECES.infantry.cost;
-    const earlyBudget = Math.floor(budget * 0.7);
+    const earlyBudget = Math.floor(budget * 0.85);
     let spent = 0;
     while (spent + infCost <= earlyBudget && units.length < 100) {
       const size = Math.min(4, Math.floor((earlyBudget - spent) / infCost));
@@ -1476,20 +1476,18 @@ function aiBuyUnits(me) {
   return units;
 }
 
-// The AI researches the cheapest still-locked unit it can comfortably afford,
-// so over time it fields more than just infantry. Prioritises cannon when enemy
-// has tanks. Keeps a reserve for buying.
+// The AI only researches new unit types when it has a large gold surplus
+// (3× the tech cost), keeping most gold for infantry production.
 function aiResearchTech(me) {
   if (typeof TECH === 'undefined') return;
-  // If enemy has tanks and cannon is still locked, rush cannon research.
   if (aiEnemyHasTanks(me) && !isUnlocked(me, 'cannon')) {
-    if (Game.economy[me] >= TECH.cannon + PIECES.cannon.cost) { unlockType(me, 'cannon'); return; }
+    if (Game.economy[me] >= TECH.cannon * 3) { unlockType(me, 'cannon'); return; }
   }
   const locked = Object.keys(TECH)
     .filter((t) => !isUnlocked(me, t))
     .sort((a, b) => TECH[a] - TECH[b]);
   for (const t of locked) {
-    if (Game.economy[me] >= TECH[t] + PIECES[t].cost) { unlockType(me, t); break; }
+    if (Game.economy[me] >= TECH[t] * 3) { unlockType(me, t); break; }
   }
 }
 

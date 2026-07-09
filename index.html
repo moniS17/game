@@ -21,11 +21,12 @@
 
     /* Top-of-page overlay: the units standing on the tapped tile, each figure with HP above it. */
     #tileList {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-      max-height: 45%; overflow-y: auto;
-      background: rgba(21,24,28,0.93); border-bottom: 1px solid #3a3f45;
-      padding: 8px 12px; display: none; flex-direction: column; gap: 6px;
-      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+      position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 50;
+      max-height: 45%; max-width: 90vw; overflow-y: auto;
+      background: rgba(21,24,28,0.93); border: 1px solid #3a3f45; border-radius: 10px;
+      padding: 8px 14px; display: none; flex-direction: column; gap: 6px;
+      -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+      width: auto;
     }
     #tileList .tl-head {
       font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
@@ -202,6 +203,7 @@
       <button id="combineBtn" class="ghost small" style="display:none; margin-bottom:8px;">⊕ Combine</button>
       <div id="selInfo" class="muted">Click a tile to select its units.</div>
       <button id="refitBtn" class="ghost" style="display:none; margin-top:8px;">&#9881; Refit</button>
+      <button id="splitBtn" class="ghost" style="display:none; margin-top:8px;">✂ Split</button>
       <button id="buildBtn" class="ghost" style="display:none; margin-top:8px;">🏗 Build</button>
     </div>
 
@@ -223,24 +225,23 @@
       <div class="stat-row"><span>Villages (Blue / Red)</span><span id="villageCount">0 / 0</span></div>
 
       <button class="shop" id="buyBtn">🛒 Buy units</button>
-      <button id="templateBtn">▦ Battalions</button>
-      <button id="techBtn">🔭 Tech &amp; upgrades</button>
+      <button id="templateBtn">▦ Templates</button>
+      <button id="techBtn">⚗️ Tech &amp; upgrades</button>
       <button id="nextRoundBtn">Next round ▶</button>
+
+      <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer; margin-top:4px;">
+        <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
+        Combat log
+      </label>
+      <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
+
       <button class="ghost" id="infoBtn">📖 Field manual</button>
       <button class="ghost" id="menuBtn">Main menu</button>
     </div>
 
     <div class="panel" id="placePanel" style="display:none; border:1px solid #b8a23a;">
-      <h2>Deploy units</h2>
+      <h2>Deploy regiments</h2>
       <div id="placeInfo"></div>
-    </div>
-
-    <div class="panel">
-      <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer;">
-        <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
-        Combat log
-      </label>
-      <p class="hint" style="margin-top:6px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
     </div>
   </aside>
 
@@ -575,6 +576,15 @@
           buildBtn.style.display = showBuild ? '' : 'none';
         }
 
+        const splitBtn = document.getElementById('splitBtn');
+        if (splitBtn) {
+          const showSplit = Game.winner === null &&
+            !(window.inPlacement && window.inPlacement()) &&
+            Game.selTile && Game.selUnits.length === 1 &&
+            window.canSplitUnit && window.canSplitUnit(Game.selUnits[0]);
+          splitBtn.style.display = showSplit ? '' : 'none';
+        }
+
         const combineBtn = document.getElementById('combineBtn');
         if (combineBtn) {
           const stack = Game.selTile ? stackAtTile(Game.selTile) : [];
@@ -728,6 +738,13 @@
       document.getElementById('buildModal').style.display = 'flex';
     }
     document.getElementById('buildBtn').addEventListener('click', showBuildModal);
+    document.getElementById('splitBtn').addEventListener('click', () => {
+      if (Game.selUnits.length === 1 && window.canSplitUnit && window.canSplitUnit(Game.selUnits[0])) {
+        const u = Game.selUnits[0];
+        showUnitTemplate(u);
+        enterSplitMode(u);
+      }
+    });
     document.getElementById('buildModalClose').addEventListener('click', () => {
       document.getElementById('buildModal').style.display = 'none';
     });

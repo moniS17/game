@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
-  <title>Battlegrid — Battalion Designer</title>
+  <title>Battlegrid — Regiment Designer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -74,33 +74,33 @@
 </head>
 <body>
   <div class="wrap">
-    <header><h1>▦ Battalion Designer</h1></header>
+    <header><h1>▦ Regiment Designer</h1></header>
     <div class="who" id="who"></div>
 
-    <h2>Your battalions</h2>
+    <h2>Your templates</h2>
     <div class="lib" id="lib"></div>
 
     <div class="editor" id="editor">
       <div class="nameRow">
-        <input id="nameInput" type="text" maxlength="24" placeholder="Battalion name" />
+        <input id="nameInput" type="text" maxlength="24" placeholder="Template name" />
         <button class="del" id="delBtn">Delete</button>
       </div>
       <div class="row">
         <div class="grid5" id="grid"></div>
         <div class="side">
-          <h2 style="margin-top:0">Units (click to paint)</h2>
+          <h2 style="margin-top:0">Battalions (click to paint)</h2>
           <div class="palette" id="palette"></div>
           <div class="stats" id="stats"></div>
-          <div class="hint">Locked units are researched in the <a href="tech.html">Tech tree</a>.
-            A battalion holds up to 25 units (5×5).</div>
+          <div class="hint">Locked battalions are researched in the <a href="tech.html">Tech tree</a>.
+            A template holds up to 25 battalions (5×5).</div>
         </div>
       </div>
     </div>
 
     <div class="bar">
       <a class="battle" href="index.html">⬅ Battle</a>
-      <a class="buy" href="buy.html">🛒 Buy units</a>
-      <a class="tech" href="tech.html">🔭 Tech tree</a>
+      <a class="buy" href="buy.html">🛒 Buy regiments</a>
+      <a class="tech" href="tech.html">⚗️ Tech tree</a>
     </div>
   </div>
 
@@ -123,7 +123,7 @@
     }
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — design reusable blueprints; buy units built from them on the Buy page.";
+      PLAYERS[me].name + " — design reusable blueprints; buy regiments built from them on the Buy page.";
 
     const isUnlocked = (t) => t === "infantry" || !!save.unlocked[me][t];
     const steps = (t, s) => (save.upgrades[me] && save.upgrades[me][t] && save.upgrades[me][t][s]) || 0;
@@ -163,7 +163,7 @@
       add.textContent = "+ New";
       add.addEventListener("click", () => {
         const id = "t" + Date.now().toString(36);
-        save.templates[me].push({ id, name: "Battalion " + (save.templates[me].length + 1), cells: new Array(CAP).fill(null) });
+        save.templates[me].push({ id, name: "Template " + (save.templates[me].length + 1), cells: new Array(CAP).fill(null) });
         selId = id; commit(); render();
       });
       lib.appendChild(add);
@@ -210,7 +210,7 @@
     function renderStats() {
       const s = statsOf(cur().cells);
       document.getElementById("stats").innerHTML =
-        `<span class="k">Units</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
+        `<span class="k">Battalions</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
         `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
     }
 
@@ -222,11 +222,11 @@
     function render() { renderLib(); renderName(); renderGrid(); renderPalette(); renderStats(); }
 
     document.getElementById("nameInput").addEventListener("input", (e) => {
-      cur().name = e.target.value || "Battalion"; commit(); renderLib();
+      cur().name = e.target.value || "Template"; commit(); renderLib();
     });
     document.getElementById("delBtn").addEventListener("click", () => {
       const arr = save.templates[me];
-      if (arr.length <= 1) { alert("Keep at least one battalion."); return; }
+      if (arr.length <= 1) { alert("Keep at least one template."); return; }
       const i = arr.findIndex((t) => t.id === selId);
       arr.splice(i, 1); selId = arr[0].id; commit(); render();
     });

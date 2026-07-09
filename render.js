@@ -281,7 +281,7 @@ window.Render = (function () {
       if (r < r0 || r >= r1 || c < c0 || c >= c1) continue;
       const center = hexCenter(r, c, size);
       const sx = center.x - cam.x, sy = center.y - cam.y;
-      ctx.fillStyle = 'rgba(255,255,0,0.35)';
+      ctx.fillStyle = 'rgba(255,255,0,0.55)';
       hexPath(sx, sy, innerSize);
       ctx.fill();
     }
@@ -371,7 +371,10 @@ window.Render = (function () {
       const u = G.selTile;
       const center = hexCenter(u.r, u.c, size);
       const sx = center.x - cam.x, sy = center.y - cam.y;
-      ctx.strokeStyle = '#ffeb3b'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(255,235,59,0.35)';
+      hexPath(sx, sy, innerSize);
+      ctx.fill();
+      ctx.strokeStyle = '#fff176'; ctx.lineWidth = 3;
       hexPath(sx, sy, innerSize * 0.9);
       ctx.stroke();
       ctx.lineWidth = 1;
