@@ -70,6 +70,17 @@
     .bar { margin: 22px 0 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
     .bar a.battle { background: #3a5bd9; } .bar a.buy { background: #2e7d46; } .bar a.tech { background: #6a4bd9; }
+    @media (max-width: 400px) {
+      body { padding: 14px; }
+      h1 { font-size: 1.1rem; }
+      .grid5 { width: 180px; }
+      .cell { font-size: .82rem; }
+      .brush { min-width: 52px; padding: .4rem; }
+    }
+    @media (min-width: 700px) {
+      .bar { flex-wrap: wrap; }
+      .bar a { flex: 1 1 auto; min-width: 120px; }
+    }
   </style>
 </head>
 <body>

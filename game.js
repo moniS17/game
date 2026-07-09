@@ -967,6 +967,7 @@ function totalSubunits(u) {
 function canSplitUnit(u) {
   if (u.owner !== Game.turn || Game.winner !== null) return false;
   if (inPlacement()) return false;
+  if (isHqUnit(u)) return false;
   if (totalSubunits(u) < 2) return false;
   const room = Rules.STACK_LIMIT - stackAt(u.r, u.c).length;
   return room > 0;
@@ -1715,6 +1716,27 @@ function runAiFor(me) {
     let [r, c] = k0.split(',').map(Number);
     let group = stackAt(r, c).filter((u) => u.owner === me);
     if (!group.length) continue;
+
+    // HQ protection: move HQ toward the friendly board edge and away from enemies.
+    const hqInGroup = group.find(u => isHqUnit(u));
+    if (hqInGroup && hqInGroup.movesLeft > 0) {
+      Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, [hqInGroup]);
+      const edgeCol = me === 0 ? 0 : Board.COLS - 1;
+      let bestKey = null, bestScore = -Infinity;
+      for (const kk of Game.reachable.keys()) {
+        const [rr, cc] = kk.split(',').map(Number);
+        const edgeDist = Math.abs(cc - edgeCol);
+        const enemyNear = aiCountNeighborUnits(rr, cc, enemy);
+        const friendNear = aiCountNeighborUnits(rr, cc, me);
+        const score = -edgeDist * 3 - enemyNear * 10 + friendNear * 2;
+        if (score > bestScore) { bestScore = score; bestKey = [rr, cc]; }
+      }
+      if (bestKey && (bestKey[0] !== r || bestKey[1] !== c)) {
+        moveGroup([hqInGroup], bestKey[0], bestKey[1]);
+      }
+      group = stackAt(r, c).filter((u) => u.owner === me);
+      if (!group.length) continue;
+    }
 
     const avgHpRatio = group.reduce((s, u) => s + u.hp / u.maxHp, 0) / group.length;
 

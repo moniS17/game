@@ -452,6 +452,20 @@ window.Render = (function () {
       ctx.fillStyle = '#000'; ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = '#4caf50'; ctx.fillRect(bx, by, bw * (u.hp / u.maxHp), 3);
     }
+
+    // ATK / HP labels on tile
+    if (innerSize >= 16) {
+      const totalHp = stack.reduce((a, u) => a + u.hp, 0);
+      const totalAtk = stack.reduce((a, u) => a + Rules.unitAttack(u), 0);
+      const fontSize = Math.max(7, Math.floor(innerSize * 0.3));
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      ctx.fillStyle = '#ffeb3b';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText(totalAtk, sx - innerSize * 0.44, sy - innerSize * 0.44);
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(totalHp, sx - innerSize * 0.44, sy + innerSize * 0.48);
+      ctx.textAlign = 'center';
+    }
   }
 
   preload();

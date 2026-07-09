@@ -63,6 +63,12 @@
     .bar { max-width: 900px; margin: 22px auto 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
     .bar a.battle { background: #3a5bd9; } .bar a.tmpl { background: #2e7d46; }
+    @media (max-width: 400px) {
+      body { padding: 14px; }
+      h1 { font-size: 1.1rem; }
+      .card { padding: 12px; }
+      .ups button { padding: .45rem .55rem; font-size: .78rem; }
+    }
     .note { max-width: 900px; margin: 14px auto 0; font-size: .78rem; color: #7e8893; }
   </style>
 </head>
@@ -219,7 +225,7 @@
       renderEcon();
       grid.innerHTML = "";
       // Infantry first, then by unlock cost.
-      const types = Object.keys(PIECES).sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));
+      const types = Object.keys(PIECES).filter(k => k !== 'hq').sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));
       for (const k of types) {
         const d = PIECES[k];
         const cost = TECH[k] || 0;
