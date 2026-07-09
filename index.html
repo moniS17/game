@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script>if(!localStorage.getItem("battlegrid.user"))location.replace("login.html");</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -107,7 +108,17 @@
     }
     button:hover { background: #2f49b0; }
     button.shop { background: #2e7d46; } button.shop:hover { background: #266b3b; }
+    button.tech-btn { background: #7b1fa2; } button.tech-btn:hover { background: #6a1b9a; }
+    button.tmpl-btn { background: #0277bd; } button.tmpl-btn:hover { background: #01579b; }
     button.ghost { background: #444c55; } button.ghost:hover { background: #525c66; }
+    .shop-row { display: flex; gap: 6px; margin-top: 8px; }
+    .shop-row button { flex: 1; margin-top: 0; padding: 8px 4px; font-size: .82rem; white-space: nowrap; }
+    .log-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+    .next-round-btn {
+      width: auto; margin: 0; padding: 5px 12px; font-size: .78rem; font-weight: 700;
+      background: #6b3030; border-radius: 6px; white-space: nowrap; flex-shrink: 0;
+    }
+    .next-round-btn:hover { background: #833838; }
     /* header row: a panel title with a control (e.g. button) tucked to its right */
     .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .panel-head h2 { margin: 0; }
@@ -246,17 +257,19 @@
       <div class="stat-row"><span>Cities (Country1 / Country2)</span><span id="cityCount">0 / 0</span></div>
       <div class="stat-row"><span>Villages (Country1 / Country2)</span><span id="villageCount">0 / 0</span></div>
 
-      <div class="btn-grid">
-        <button class="shop" id="buyBtn">🛒 Buy units</button>
-        <button id="templateBtn">▦ Templates</button>
-        <button id="techBtn">⚗️ Tech &amp; upgrades</button>
-        <button id="nextRoundBtn" class="danger">Next round ▶</button>
+      <div class="shop-row">
+        <button class="shop" id="buyBtn">🛒 Buy</button>
+        <button class="tech-btn" id="techBtn">⚗️ Tech</button>
+        <button class="tmpl-btn" id="templateBtn">▦ Template</button>
       </div>
 
-      <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer; margin-top:4px;">
-        <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
-        Combat log
-      </label>
+      <div class="log-row">
+        <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer;">
+          <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
+          Combat log
+        </label>
+        <button id="nextRoundBtn" class="next-round-btn">Next ▶</button>
+      </div>
       <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
 
       <div class="btn-grid">
@@ -569,6 +582,10 @@
         if (executeBtn) {
           executeBtn.disabled = qLen === 0;
           executeBtn.classList.toggle('attack', hasAttack);
+          const icon = document.getElementById('executeBtnIcon');
+          const label = document.getElementById('executeBtnLabel');
+          if (icon) icon.textContent = hasAttack ? '⚔️' : '🚩';
+          if (label) label.textContent = hasAttack ? 'Attack' : 'Move';
         }
         const orderBadge = document.getElementById('orderCount');
         if (orderBadge) {
