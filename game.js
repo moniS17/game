@@ -110,7 +110,6 @@ function unlockType(owner, type) {
   Game.economy[owner] -= cost;
   Game.unlocked[owner] = Game.unlocked[owner] || {};
   Game.unlocked[owner][type] = true;
-  upgradeHqTemplate(owner, type);
   persist();
   return true;
 }

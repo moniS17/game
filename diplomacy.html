@@ -59,7 +59,7 @@
   <script src="rules.js"></script>
   <script src="state.js"></script>
   <script>
-    const save = SaveState.loadGame();
+    const save = SaveState.load();
     if (!save) { window.location.href = 'index.html'; }
 
     // Reconstruct minimal game state for diplomacy reads
@@ -132,7 +132,7 @@
           } else {
             setRel(me, p, act);
           }
-          SaveState.saveGame(save);
+          SaveState.save(save);
           render();
         });
       });

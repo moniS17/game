@@ -71,6 +71,27 @@
       .ups button { padding: .45rem .55rem; font-size: .78rem; }
     }
     .note { max-width: 900px; margin: 14px auto 0; font-size: .78rem; color: #7e8893; }
+    /* HQ Garrison */
+    .hq-section { max-width: 900px; margin: 0 auto 18px; }
+    .hq-card { background: #2b3138; border-radius: 10px; padding: 16px; }
+    .hq-card .hq-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .hq-card .hq-star { width: 40px; height: 40px; background: #1b1f23; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; }
+    .hq-card .hq-title { font-size: 1rem; font-weight: 700; }
+    .hq-card .hq-sub { font-size: .78rem; color: #9aa4ad; }
+    .hq-comp { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .hq-comp .hq-chip { background: #1b1f23; border-radius: 5px; padding: 4px 10px; font-size: .82rem; font-weight: 600; }
+    .hq-actions { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #3a3f45; padding-top: 10px; }
+    .hq-row { display: flex; align-items: center; gap: 8px; }
+    .hq-row .hq-label { font-size: .85rem; font-weight: 600; min-width: 90px; }
+    .hq-row button {
+      padding: 5px 10px; border: none; border-radius: 5px; font-size: .78rem; font-weight: 600; cursor: pointer; color: #fff;
+    }
+    .hq-row button.hq-add { background: #2e7d46; }
+    .hq-row button.hq-add:hover:not(:disabled) { background: #256b3b; }
+    .hq-row button.hq-rem { background: #c62828; }
+    .hq-row button.hq-rem:hover:not(:disabled) { background: #a52020; }
+    .hq-row button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .hq-stats { font-size: .82rem; color: #9aa4ad; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -83,10 +104,13 @@
   <div class="sec"><img src="assets/gold.svg" alt="" style="width:1.1em;height:1.1em;vertical-align:-0.2em"> Economy</div>
   <div class="econ" id="econ"></div>
 
+  <div class="sec">⭐ HQ Garrison</div>
+  <div class="hq-section" id="hqSection"></div>
+
   <div class="sec">⚗️ Battalions</div>
   <div class="grid" id="grid"></div>
   <div class="note">Only <b>Infantry</b> is unlocked at the start. Research a battalion type to place it in your
-    <a href="template.html" style="color:#8ea2ff">templates</a>; then <b>click an unlocked type</b> to buy
+    <a href="template.html" style="color:#8ea2ff">templates</a> and add it to your <b>HQ Garrison</b>; then <b>click an unlocked type</b> to buy
     Attack / Health / Movement upgrades for it. Everything lasts for <b>this game</b> only — a new map resets it.</div>
 
   <div class="bar">
@@ -161,6 +185,123 @@
         b.addEventListener("click", (e) => { e.stopPropagation(); ecoUpgrade(b.dataset.eco); }));
     }
 
+    const hqEl = document.getElementById("hqSection");
+
+    function getHqTemplate() {
+      return (save.templates && save.templates[me] || []).find(t => t.isHq);
+    }
+    function getHqUnit() {
+      return (save.units || []).find(u => u.owner === me && u.templateId === 'hq');
+    }
+    function hqComp(tmpl) {
+      const comp = {};
+      for (const t of (tmpl.cells || [])) if (t) comp[t] = (comp[t] || 0) + 1;
+      return comp;
+    }
+    function hqTotalUnits(tmpl) {
+      let n = 0; for (const t of (tmpl.cells || [])) if (t) n++; return n;
+    }
+    function recomputeHqUnit(tmpl) {
+      const hqUnit = getHqUnit();
+      if (!hqUnit) return;
+      const comp = hqComp(tmpl);
+      let maxHp = 0, mov = Infinity;
+      const parts = [];
+      for (const type in comp) {
+        const d = PIECES[type], count = comp[type];
+        const atkB = bonus(type, "atk"), hpB = bonus(type, "hp"), movB = bonus(type, "mov");
+        const eAtk = d.attack + atkB, eHp = d.hp + hpB, eMov = d.movement_speed + movB;
+        parts.push({ type, count, atk: eAtk, hp: eHp, mov: eMov });
+        maxHp += count * eHp;
+        mov = Math.min(mov, eMov);
+      }
+      if (!isFinite(mov)) mov = 0;
+      const ratio = hqUnit.maxHp > 0 ? hqUnit.hp / hqUnit.maxHp : 1;
+      hqUnit.parts = parts;
+      hqUnit.maxHp = maxHp;
+      hqUnit.hp = Math.max(1, Math.round(maxHp * ratio));
+      hqUnit.mov = mov;
+    }
+    function hqAddBattalion(type) {
+      const tmpl = getHqTemplate();
+      if (!tmpl) return;
+      const cost = PIECES[type].cost;
+      if (save.economy[me] < cost) return;
+      const empty = tmpl.cells.indexOf(null);
+      if (empty < 0) return;
+      save.economy[me] -= cost;
+      tmpl.cells[empty] = type;
+      recomputeHqUnit(tmpl);
+      SaveState.save(save);
+      render();
+    }
+    function hqRemoveBattalion(type) {
+      const tmpl = getHqTemplate();
+      if (!tmpl) return;
+      if (hqTotalUnits(tmpl) <= 1) return;
+      let idx = -1;
+      for (let i = tmpl.cells.length - 1; i >= 0; i--) {
+        if (tmpl.cells[i] === type) { idx = i; break; }
+      }
+      if (idx < 0) return;
+      tmpl.cells[idx] = null;
+      recomputeHqUnit(tmpl);
+      SaveState.save(save);
+      render();
+    }
+    function renderHq() {
+      const tmpl = getHqTemplate();
+      if (!tmpl) { hqEl.innerHTML = '<div class="hq-card" style="color:#7e8893">No HQ found.</div>'; return; }
+      const comp = hqComp(tmpl);
+      const total = hqTotalUnits(tmpl);
+      const hqUnit = getHqUnit();
+      const types = Object.keys(PIECES).filter(k => k !== 'hq');
+      const unlockedTypes = types.filter(k => isUnlocked(k));
+
+      let chipsHtml = '';
+      for (const type of unlockedTypes) {
+        const count = comp[type] || 0;
+        if (count > 0) {
+          const d = PIECES[type];
+          chipsHtml += `<span class="hq-chip">`;
+          if (d.art) chipsHtml += `<img src="${d.art}" alt="" style="width:1em;height:1em;vertical-align:-0.15em"> `;
+          chipsHtml += `${d.name} ×${count}</span>`;
+        }
+      }
+      if (!chipsHtml) chipsHtml = '<span class="hq-chip">Empty</span>';
+
+      let rowsHtml = '';
+      for (const type of unlockedTypes) {
+        const d = PIECES[type];
+        const count = comp[type] || 0;
+        const canAdd = total < 25 && save.economy[me] >= d.cost;
+        const canRemove = count > 0 && total > 1;
+        const icon = d.art ? `<img src="${d.art}" alt="" style="width:1em;height:1em;vertical-align:-0.15em"> ` : '';
+        rowsHtml += `<div class="hq-row">` +
+          `<span class="hq-label">${icon}${d.name} (${count})</span>` +
+          `<button class="hq-add" data-type="${type}" ${canAdd ? '' : 'disabled'}>+ Add ${GOLD_ICON}${d.cost}</button>` +
+          `<button class="hq-rem" data-type="${type}" ${canRemove ? '' : 'disabled'}>− Remove</button>` +
+          `</div>`;
+      }
+
+      let statsLine = '';
+      if (hqUnit) {
+        statsLine = `<div class="hq-stats">❤️ HP <b>${hqUnit.hp}/${hqUnit.maxHp}</b> &nbsp; 👟 MOV <b>${hqUnit.mov}</b> &nbsp; Slots <b>${total}/25</b></div>`;
+      }
+
+      hqEl.innerHTML = `<div class="hq-card">` +
+        `<div class="hq-head"><div class="hq-star">⭐</div><div><div class="hq-title">HQ Garrison</div>` +
+        `<div class="hq-sub">Spend gold to add or remove battalions in your HQ. Min 1 required.</div></div></div>` +
+        `<div class="hq-comp">${chipsHtml}</div>` +
+        `<div class="hq-actions">${rowsHtml}</div>` +
+        `${statsLine}</div>`;
+
+      hqEl.querySelectorAll("button.hq-add").forEach(b =>
+        b.addEventListener("click", () => hqAddBattalion(b.dataset.type)));
+      hqEl.querySelectorAll("button.hq-rem").forEach(b =>
+        b.addEventListener("click", () => hqRemoveBattalion(b.dataset.type)));
+    }
+
     let openType = null;                        // which unlocked unit is expanded
 
     function unlock(type) {
@@ -224,6 +365,7 @@
     function render() {
       goldEl.textContent = save.economy[me];
       renderEcon();
+      renderHq();
       grid.innerHTML = "";
       // Infantry first, then by unlock cost.
       const types = Object.keys(PIECES).filter(k => k !== 'hq').sort((a, b) => (TECH[a] || 0) - (TECH[b] || 0));
