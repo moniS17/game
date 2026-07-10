@@ -312,19 +312,89 @@ function firstSurvivingPlayer() {
 // path and destination, and deploying claims the drop tile. Combat uses it for
 // the "surrounded by enemy colour" double-damage rule (rules.js).
 // ---------------------------------------------------------------------------
-function buildInitialTerritory(rows, cols, n) {
+// Compute spawn-center positions for each player.
+// `random` = true  → scatter randomly with min distance max(rows,cols)/n.
+// `random` = false → place at corners/edges first, then along edges if >4.
+function computeSpawnCenters(rows, cols, n, random, rng) {
+  const inB = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols;
+  const margin = (dim) => Math.max(1, Math.floor(dim * 0.12));
+
+  if (!random) {
+    // Fixed positions: corners first, then edge midpoints, then subdivide.
+    const mr = margin(rows), mc = margin(cols);
+    const fixed = [
+      { r: mr, c: mc },                              // top-left
+      { r: rows - 1 - mr, c: cols - 1 - mc },        // bottom-right
+      { r: mr, c: cols - 1 - mc },                    // top-right
+      { r: rows - 1 - mr, c: mc },                    // bottom-left
+      { r: mr, c: Math.floor(cols / 2) },             // top-mid
+      { r: rows - 1 - mr, c: Math.floor(cols / 2) },  // bottom-mid
+      { r: Math.floor(rows / 2), c: mc },             // mid-left
+      { r: Math.floor(rows / 2), c: cols - 1 - mc },  // mid-right
+    ];
+    return fixed.slice(0, n);
+  }
+
+  // Random placement with minimum separation.
+  const minDist = Math.floor(Math.max(rows, cols) / n);
+  const centers = [];
+  const mr = margin(rows), mc = margin(cols);
+  for (let owner = 0; owner < n; owner++) {
+    let best = null, bestMin = -1;
+    for (let attempt = 0; attempt < 5000; attempt++) {
+      const r = mr + Math.floor(rng() * (rows - 2 * mr));
+      const c = mc + Math.floor(rng() * (cols - 2 * mc));
+      let nearest = Infinity;
+      for (const prev of centers) {
+        const d = Math.abs(prev.r - r) + Math.abs(prev.c - c);
+        if (d < nearest) nearest = d;
+      }
+      if (nearest >= minDist) { centers.push({ r, c }); best = null; break; }
+      if (nearest > bestMin) { bestMin = nearest; best = { r, c }; }
+    }
+    if (best) centers.push(best); // fallback: best we found
+  }
+  return centers;
+}
+
+// Compute the spawn radius so the initial circle is proportional to the board.
+// Returns a hex radius guaranteed ≥ 2 (so the circle always covers several tiles).
+function spawnRadius(rows, cols, n) {
+  const dim = Math.min(rows, cols);
+  // Scale: at 34×34 with 2 players → radius ~4; at 100×100 with 2 → ~12.
+  const raw = Math.floor(dim / (n + 2));
+  return Math.max(2, Math.min(raw, Math.floor(dim / 3)));
+}
+
+function buildInitialTerritory(rows, cols, n, centers) {
   n = n || Game.playerCount || 2;
   const grid = [];
-  for (let r = 0; r < rows; r++) {
-    const row = new Array(cols).fill(null);
-    for (let p = 0; p < n; p++) {
-      const c0 = Math.floor(p * cols / n);
-      const c1 = Math.floor((p + 1) * cols / n);
-      const zoneW = Math.max(1, Math.min(17, Math.floor((c1 - c0) / 3)));
-      const start = c0;
-      for (let c = start; c < start + zoneW && c < c1; c++) row[c] = p;
+  for (let r = 0; r < rows; r++) grid.push(new Array(cols).fill(null));
+
+  if (!centers || !centers.length) {
+    // Legacy fallback: column-band territory.
+    for (let r = 0; r < rows; r++) {
+      for (let p = 0; p < n; p++) {
+        const c0 = Math.floor(p * cols / n);
+        const c1 = Math.floor((p + 1) * cols / n);
+        const zoneW = Math.max(1, Math.min(17, Math.floor((c1 - c0) / 3)));
+        for (let c = c0; c < c0 + zoneW && c < c1; c++) grid[r][c] = p;
+      }
     }
-    grid.push(row);
+    return grid;
+  }
+
+  // Circle-based territory around each center.
+  const rad = spawnRadius(rows, cols, n);
+  for (let p = 0; p < n; p++) {
+    const cr = centers[p].r, cc = centers[p].c;
+    for (let r = Math.max(0, cr - rad); r <= Math.min(rows - 1, cr + rad); r++) {
+      for (let c = Math.max(0, cc - rad); c <= Math.min(cols - 1, cc + rad); c++) {
+        if (Rules.hexDist(cr, cc, r, c) <= rad && grid[r][c] === null) {
+          grid[r][c] = p;
+        }
+      }
+    }
   }
   return grid;
 }
@@ -500,7 +570,23 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   const templates = [];
   for (let i = 0; i < n; i++) { templates.push(defaultTemplates()); templates[i].push(makeHqTemplate()); }
   const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
-  const units = buildInitialArmies(terrain, templates, count, randomStart !== false, seed, n);
+
+  // Compute spawn centers using seeded PRNG.
+  const spawnRng = Algorithms.makeRng(seed || 0);
+  const centers = computeSpawnCenters(Board.ROWS, Board.COLS, n, randomStart !== false, spawnRng);
+
+  // Assign cities/villages to the nearest spawn center (within spawn radius).
+  const rad = spawnRadius(Board.ROWS, Board.COLS, n);
+  for (const site of cities.concat(villages || [])) {
+    let bestOwner = null, bestDist = Infinity;
+    for (let p = 0; p < n; p++) {
+      const d = Rules.hexDist(centers[p].r, centers[p].c, site.r, site.c);
+      if (d <= rad && d < bestDist) { bestDist = d; bestOwner = p; }
+    }
+    site.owner = bestOwner;
+  }
+
+  const units = buildInitialArmies(terrain, templates, count, centers, seed, n, cities);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const incomeMult = new Array(n).fill(1);
@@ -512,19 +598,6 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   if (ai !== null) {
     for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = 170;
   }
-  // Assign cities to player zones
-  const boardCols = Board.COLS;
-  for (const site of cities.concat(villages || [])) {
-    let assigned = false;
-    for (let p = 0; p < n; p++) {
-      const zc0 = Math.floor(p * boardCols / n);
-      const zc1 = Math.floor((p + 1) * boardCols / n);
-      const zoneW = Math.max(1, Math.min(17, Math.floor((zc1 - zc0) / 3)));
-      if (site.c >= zc0 && site.c < zc0 + zoneW) { site.owner = p; assigned = true; break; }
-      if (site.c >= zc1 - zoneW && site.c < zc1) { site.owner = p; assigned = true; break; }
-    }
-    if (!assigned) site.owner = null;
-  }
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, playerCount: n,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
@@ -532,7 +605,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     difficulty: diff, incomeMult,
     noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
     economy: startGold,
-    territory: buildInitialTerritory(Board.ROWS, Board.COLS, n)
+    territory: buildInitialTerritory(Board.ROWS, Board.COLS, n, centers)
       .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
     cities, villages: villages || [], structures: [], units, toPlace: [],
     upgrades: Array.from({ length: n }, () => ({})),
@@ -578,17 +651,17 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
       }
     }
   }
-  // Assign cities to player zones
+  // Assign cities to player zones using spawn centers.
+  const spawnRng = Algorithms.makeRng(0);
+  const centers = computeSpawnCenters(rows, cols, n, false, spawnRng);
+  const rad = spawnRadius(rows, cols, n);
   for (const s of cities.concat(villages)) {
-    let assigned = false;
+    let bestOwner = null, bestDist = Infinity;
     for (let p = 0; p < n; p++) {
-      const zc0 = Math.floor(p * cols / n);
-      const zc1 = Math.floor((p + 1) * cols / n);
-      const zoneW = Math.max(1, Math.min(17, Math.floor((zc1 - zc0) / 3)));
-      if (s.c >= zc0 && s.c < zc0 + zoneW) { s.owner = p; assigned = true; break; }
-      if (s.c >= zc1 - zoneW && s.c < zc1) { s.owner = p; assigned = true; break; }
+      const d = Rules.hexDist(centers[p].r, centers[p].c, s.r, s.c);
+      if (d <= rad && d < bestDist) { bestDist = d; bestOwner = p; }
     }
-    if (!assigned && s.owner == null) s.owner = null;
+    if (s.owner == null) s.owner = bestOwner;
   }
   const startGold = new Array(n).fill(ECONOMY.start);
   if (customMap.economy) for (let i = 0; i < Math.min(customMap.economy.length, n); i++) startGold[i] = customMap.economy[i];
@@ -600,7 +673,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     difficulty: diff, incomeMult,
     noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
     economy: startGold,
-    territory: buildInitialTerritory(rows, cols, n)
+    territory: buildInitialTerritory(rows, cols, n, centers)
       .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
     cities, villages,
     structures: [], units: (customMap.units || []).map((u, i) => ({ ...u, id: i + 1 })),
@@ -618,36 +691,48 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
   };
 }
 
-// Seed each player's starting force. `count` units per side, placed either
-// randomly in the spawn zone or evenly spaced along the zone line closest to
-// the board center. Each unit uses the default Infantry template.
-function buildInitialArmies(terrain, templates, count, randomStart, seed, playerCount) {
-  if (!count || count <= 0) return [];
+// Seed each player's starting force inside a circle around their spawn center.
+// `count` units per side, placed within the spawn circle. Each unit uses the
+// default Infantry template. A HQ is placed at each center. If no city exists
+// in a player's circle, one is created under their HQ to guarantee survival.
+function buildInitialArmies(terrain, templates, count, centers, seed, playerCount, cities) {
   const units = [];
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
   const n = playerCount || 2;
   const rows = Board.ROWS, cols = Board.COLS;
   const stackLimit = typeof Rules !== 'undefined' ? Rules.STACK_LIMIT : 17;
+  const rad = spawnRadius(rows, cols, n);
 
-  if (randomStart) {
-    let s = ((seed || 0) ^ 0x5f3759df) >>> 0;
-    const rng = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  let s = ((seed || 0) ^ 0x5f3759df) >>> 0;
+  const rng = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
-    for (let owner = 0; owner < n; owner++) {
-      const tmpl = templates[owner][0];
-      const c0 = Math.floor(owner * cols / n);
-      const c1 = Math.floor((owner + 1) * cols / n);
-      const candidates = [];
-      for (let r = 0; r < rows; r++)
-        for (let c = c0; c < c1; c++)
-          if (dry(r, c)) candidates.push({ r, c });
-      for (let i = candidates.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  for (let owner = 0; owner < n; owner++) {
+    const center = centers[owner];
+    const tmpl = templates[owner][0];
+
+    // Collect dry tiles inside the spawn circle.
+    const candidates = [];
+    for (let r = Math.max(0, center.r - rad); r <= Math.min(rows - 1, center.r + rad); r++) {
+      for (let c = Math.max(0, center.c - rad); c <= Math.min(cols - 1, center.c + rad); c++) {
+        if (dry(r, c) && Rules.hexDist(center.r, center.c, r, c) <= rad) {
+          candidates.push({ r, c });
+        }
       }
+    }
+    // Shuffle candidates for variety.
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    // Sort by distance from center so units cluster near center first.
+    candidates.sort((a, b) =>
+      Rules.hexDist(center.r, center.c, a.r, a.c) - Rules.hexDist(center.r, center.c, b.r, b.c));
+
+    // Place units.
+    if (count > 0) {
       const placed = new Map();
       let idx = 0;
-      for (let nn = 0; nn < count && idx < candidates.length; ) {
+      for (let nn = 0; nn < count && idx < candidates.length * stackLimit; ) {
         const spot = candidates[idx % candidates.length];
         const k = spot.r + ',' + spot.c;
         const cur = placed.get(k) || 0;
@@ -657,45 +742,56 @@ function buildInitialArmies(terrain, templates, count, randomStart, seed, player
         idx++;
       }
     }
-  } else {
-    for (let owner = 0; owner < n; owner++) {
-      const tmpl = templates[owner][0];
-      const c0 = Math.floor(owner * cols / n);
-      const c1 = Math.floor((owner + 1) * cols / n);
-      const spawnCol = Math.floor((c0 + c1) / 2);
-      const candidates = [];
-      for (let r = 0; r < rows; r++)
-        if (dry(r, spawnCol)) candidates.push({ r, c: spawnCol });
-      if (!candidates.length) continue;
-      const cnt = Math.min(count, candidates.length * stackLimit);
-      for (let i = 0; i < cnt; i++) {
-        const idx = candidates.length <= cnt
-          ? i % candidates.length
-          : Math.round(i * (candidates.length - 1) / (cnt - 1 || 1));
-        const spot = candidates[idx];
-        const unit = makeUnitFromTemplate(owner, tmpl, spot.r, spot.c, { acted: false });
-        if (unit) units.push(unit);
-      }
-    }
   }
-  // Place 1 HQ per side near the center of their zone.
+
+  // Place 1 HQ per side at (or spiralling from) their center.
   for (let owner = 0; owner < n; owner++) {
+    const center = centers[owner];
     const hqTmpl = templates[owner].find(t => t.isHq) || makeHqTemplate();
-    const c0 = Math.floor(owner * cols / n);
-    const c1 = Math.floor((owner + 1) * cols / n);
-    const spawnCol = Math.floor((c0 + c1) / 2);
-    const midRow = Math.floor(rows / 2);
     let placed = false;
-    for (let dr = 0; dr <= rows; dr++) {
-      for (const rr of [midRow + dr, midRow - dr]) {
-        if (rr < 0 || rr >= rows || !dry(rr, spawnCol)) continue;
-        const ss = units.filter(u => u.r === rr && u.c === spawnCol);
-        if (ss.length >= stackLimit) continue;
-        const hq = makeUnitFromTemplate(owner, hqTmpl, rr, spawnCol, { acted: false });
-        if (hq) { units.push(hq); placed = true; }
-        break;
+    // Spiral outward from the center to find a valid tile.
+    for (let dr = 0; dr <= rad + 5; dr++) {
+      for (let rr = center.r - dr; rr <= center.r + dr; rr++) {
+        for (let cc = center.c - dr; cc <= center.c + dr; cc++) {
+          if (!inBounds(rr, cc) || !dry(rr, cc)) continue;
+          if (Math.abs(rr - center.r) !== dr && Math.abs(cc - center.c) !== dr) continue;
+          const ss = units.filter(u => u.r === rr && u.c === cc);
+          if (ss.length >= stackLimit) continue;
+          const hq = makeUnitFromTemplate(owner, hqTmpl, rr, cc, { acted: false });
+          if (hq) { units.push(hq); placed = true; }
+          break;
+        }
+        if (placed) break;
       }
       if (placed) break;
+    }
+
+    // Guarantee at least one city in this player's spawn circle.
+    const hasCity = cities.some(ci => ci.owner === owner);
+    if (!hasCity) {
+      // Place a city at the HQ position (or closest dry tile to center).
+      const hqUnit = units.find(u => u.owner === owner && u.isHq);
+      const cr = hqUnit ? hqUnit.r : center.r;
+      const cc = hqUnit ? hqUnit.c : center.c;
+      if (inBounds(cr, cc) && terrain[cr][cc] !== 'water') {
+        terrain[cr][cc] = 'city';
+        cities.push({ r: cr, c: cc, owner: owner });
+      } else {
+        // Fallback: find any dry tile near center.
+        for (let d = 0; d <= rad; d++) {
+          let done = false;
+          for (let r2 = center.r - d; r2 <= center.r + d && !done; r2++) {
+            for (let c2 = center.c - d; c2 <= center.c + d && !done; c2++) {
+              if (inBounds(r2, c2) && terrain[r2][c2] !== 'water') {
+                terrain[r2][c2] = 'city';
+                cities.push({ r: r2, c: c2, owner: owner });
+                done = true;
+              }
+            }
+          }
+          if (done) break;
+        }
+      }
     }
   }
   return units;

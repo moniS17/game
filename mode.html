@@ -206,8 +206,8 @@
         <input type="range" id="startUnitsSlider" min="0" max="102" step="1" value="1" />
         <span class="max-label" id="startUnitsMaxLabel">max 102</span>
       </div>
-      <label class="spawn-check"><input type="checkbox" id="randomStartChk" checked /> 🎲 Random start locations</label>
-      <div class="note" id="spawnNote">Units placed at random tiles in each side's spawn zone.</div>
+      <label class="spawn-check"><input type="checkbox" id="randomStartChk" checked /> 🎲 Random spawn positions</label>
+      <div class="note" id="spawnNote">Countries spawn at random positions on the board (with minimum separation).</div>
     </div>
 
     <div class="countries" id="countrySetup">
@@ -323,8 +323,8 @@
     }
     function syncNote() {
       spawnNote.textContent = randomChk.checked
-        ? "Units placed at random tiles in each side's spawn zone."
-        : "Units placed evenly along the spawn-zone line closest to the board center.";
+        ? "Countries spawn at random positions on the board (with minimum separation)."
+        : "Countries spawn at corners and edges of the board.";
     }
     startInput.addEventListener('input', () => {
       const mx = calcMaxUnits();

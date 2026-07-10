@@ -116,6 +116,18 @@
       <ul id="structureRules"></ul>
     </div>
 
+    <h2>Spawn &amp; starting positions</h2>
+    <div class="panel">
+      <ul>
+        <li>Each country starts inside a <b>circular territory</b> proportional to the board size. The circle's radius scales so every country gets a fair footprint.</li>
+        <li><b>🎲 Random spawn</b> (default): countries are placed at random positions on the board with a minimum distance of <b>max(height, width) ÷ number of countries</b> between any two centers.</li>
+        <li><b>Fixed spawn</b> (unchecked): countries spawn at <b>corners first</b> (top-left, bottom-right, top-right, bottom-left), then <b>edge midpoints</b> if more than 4 countries.</li>
+        <li>Each country is <b>guaranteed at least one city</b> inside its starting circle — if the map generator didn't place one there, a city is created under the HQ.</li>
+        <li><b>Starting units</b> are placed inside the spawn circle, clustered near the center. The HQ spawns at the circle's center.</li>
+        <li>Cities and villages inside a country's spawn circle are assigned to that country. Sites outside all circles start <b>neutral</b>.</li>
+      </ul>
+    </div>
+
     <h2>Diplomacy &amp; alliances</h2>
     <div class="panel">
       <ul>
