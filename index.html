@@ -571,7 +571,9 @@
           const uCount = Game.units.filter(u => u.owner === p).length;
           const cCount = Game.cities.filter(ci => ci.owner === p).length;
           const vCount = (Game.villages || []).filter(v => v.owner === p).length;
-          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}u · ${cCount}c · ${vCount}v</span></div>`;
+          const gRound = Rules.income(Game.cities, Game.villages || [], p, (Game.ecoUpgrades && Game.ecoUpgrades[p]) || {});
+          const bCount = Game.units.filter(u => u.owner === p).reduce((s, u) => s + (u.parts || []).reduce((a, pt) => a + pt.count, 0), 0);
+          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}units ${cCount}cities ${vCount}village ${gRound}gold/round ${bCount}battalions</span></div>`;
         }
         statsEl.innerHTML = statsHtml;
 

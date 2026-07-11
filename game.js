@@ -389,17 +389,36 @@ function buildInitialTerritory(rows, cols, n, centers) {
     return grid;
   }
 
-  // Circle-based territory around each center.
+  // Voronoi-style territory: each tile within spawn radius goes to the nearest
+  // center (by hex distance), breaking ties by lower player index.
   const rad = spawnRadius(rows, cols, n);
-  for (let p = 0; p < n; p++) {
-    const cr = centers[p].r, cc = centers[p].c;
-    for (let r = Math.max(0, cr - rad); r <= Math.min(rows - 1, cr + rad); r++) {
-      for (let c = Math.max(0, cc - rad); c <= Math.min(cols - 1, cc + rad); c++) {
-        if (Rules.hexDist(cr, cc, r, c) <= rad && grid[r][c] === null) {
-          grid[r][c] = p;
-        }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let bestP = -1, bestD = Infinity;
+      for (let p = 0; p < n; p++) {
+        const d = Rules.hexDist(centers[p].r, centers[p].c, r, c);
+        if (d <= rad && d < bestD) { bestD = d; bestP = p; }
       }
+      if (bestP >= 0) grid[r][c] = bestP;
     }
+  }
+
+  // Equalize territory sizes: trim each player to the smallest count so every
+  // country starts with the same area.
+  const counts = new Array(n).fill(0);
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) if (grid[r][c] !== null) counts[grid[r][c]]++;
+  const target = Math.min(...counts);
+  for (let p = 0; p < n; p++) {
+    if (counts[p] <= target) continue;
+    // Collect this player's tiles sorted by descending distance from center.
+    const tiles = [];
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        if (grid[r][c] === p) tiles.push({ r, c, d: Rules.hexDist(centers[p].r, centers[p].c, r, c) });
+    tiles.sort((a, b) => b.d - a.d);
+    const excess = counts[p] - target;
+    for (let i = 0; i < excess; i++) grid[tiles[i].r][tiles[i].c] = null;
   }
   return grid;
 }
@@ -591,7 +610,8 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     site.owner = bestOwner;
   }
 
-  const units = buildInitialArmies(terrain, templates, count, centers, seed, n, cities);
+  const territoryGrid = buildInitialTerritory(Board.ROWS, Board.COLS, n, centers);
+  const units = buildInitialArmies(terrain, templates, count, centers, seed, n, cities, territoryGrid);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const incomeMult = new Array(n).fill(1);
@@ -610,7 +630,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     difficulty: diff, incomeMult,
     noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
     economy: startGold,
-    territory: buildInitialTerritory(Board.ROWS, Board.COLS, n, centers)
+    territory: territoryGrid
       .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
     cities, villages: villages || [], structures: [], units, toPlace: [],
     upgrades: Array.from({ length: n }, () => ({})),
@@ -670,26 +690,34 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     if (s.owner == null) s.owner = bestOwner;
   }
   // Guarantee at least one city per player so no one is eliminated on round 1.
+  // Build territory first so we can place cities inside the country's own tiles.
+  const territoryGrid = buildInitialTerritory(rows, cols, n, centers);
   for (let p = 0; p < n; p++) {
     if (cities.some(ci => ci.owner === p)) continue;
+    // Find a non-water tile inside this player's territory.
+    let placed = false;
+    // Try center first.
     const cr = centers[p].r, cc = centers[p].c;
-    if (cr < rows && cc < cols && terrain[cr] && terrain[cr][cc] !== 'water') {
+    if (cr < rows && cc < cols && territoryGrid[cr] && territoryGrid[cr][cc] === p &&
+        terrain[cr] && terrain[cr][cc] !== 'water') {
       terrain[cr][cc] = 'city';
       cities.push({ r: cr, c: cc, owner: p });
-    } else {
-      for (let d = 1; d <= rad; d++) {
-        let done = false;
-        for (let r2 = cr - d; r2 <= cr + d && !done; r2++) {
-          for (let c2 = cc - d; c2 <= cc + d && !done; c2++) {
+      placed = true;
+    }
+    if (!placed) {
+      // Scan territory tiles by distance from center.
+      for (let d = 0; d <= rad && !placed; d++) {
+        for (let r2 = cr - d; r2 <= cr + d && !placed; r2++) {
+          for (let c2 = cc - d; c2 <= cc + d && !placed; c2++) {
             if (r2 >= 0 && r2 < rows && c2 >= 0 && c2 < cols &&
+                territoryGrid[r2] && territoryGrid[r2][c2] === p &&
                 terrain[r2] && terrain[r2][c2] !== 'water') {
               terrain[r2][c2] = 'city';
               cities.push({ r: r2, c: c2, owner: p });
-              done = true;
+              placed = true;
             }
           }
         }
-        if (done) break;
       }
     }
   }
@@ -703,7 +731,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     difficulty: diff, incomeMult,
     noUnitTurns: new Array(n).fill(0), noCityTurns: new Array(n).fill(0),
     economy: startGold,
-    territory: buildInitialTerritory(rows, cols, n, centers)
+    territory: territoryGrid
       .map((row) => row.map((v) => (v != null ? String(v) : '.')).join('')),
     cities, villages,
     structures: [], units: (customMap.units || []).map((u, i) => ({ ...u, id: i + 1 })),
@@ -726,7 +754,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
 // `count` units per side, placed within the spawn circle. Each unit uses the
 // default Infantry template. A HQ is placed at each center. If no city exists
 // in a player's circle, one is created under their HQ to guarantee survival.
-function buildInitialArmies(terrain, templates, count, centers, seed, playerCount, cities) {
+function buildInitialArmies(terrain, templates, count, centers, seed, playerCount, cities, territoryGrid) {
   const units = [];
   const dry = (r, c) => inBounds(r, c) && terrain[r][c] !== 'water';
   const n = playerCount || 2;
@@ -797,30 +825,47 @@ function buildInitialArmies(terrain, templates, count, centers, seed, playerCoun
       if (placed) break;
     }
 
-    // Guarantee at least one city in this player's spawn circle.
+    // Guarantee at least one city in this player's territory.
     const hasCity = cities.some(ci => ci.owner === owner);
     if (!hasCity) {
-      // Place a city at the HQ position (or closest dry tile to center).
+      let placed = false;
+      // Try HQ position first.
       const hqUnit = units.find(u => u.owner === owner && u.isHq);
       const cr = hqUnit ? hqUnit.r : center.r;
       const cc = hqUnit ? hqUnit.c : center.c;
-      if (inBounds(cr, cc) && terrain[cr][cc] !== 'water') {
+      if (inBounds(cr, cc) && terrain[cr][cc] !== 'water' &&
+          (!territoryGrid || (territoryGrid[cr] && territoryGrid[cr][cc] === owner))) {
         terrain[cr][cc] = 'city';
         cities.push({ r: cr, c: cc, owner: owner });
-      } else {
-        // Fallback: find any dry tile near center.
-        for (let d = 0; d <= rad; d++) {
-          let done = false;
-          for (let r2 = center.r - d; r2 <= center.r + d && !done; r2++) {
-            for (let c2 = center.c - d; c2 <= center.c + d && !done; c2++) {
-              if (inBounds(r2, c2) && terrain[r2][c2] !== 'water') {
+        placed = true;
+      }
+      // Fallback: find a dry tile inside own territory, nearest to center.
+      if (!placed) {
+        for (let d = 0; d <= rad && !placed; d++) {
+          for (let r2 = center.r - d; r2 <= center.r + d && !placed; r2++) {
+            for (let c2 = center.c - d; c2 <= center.c + d && !placed; c2++) {
+              if (inBounds(r2, c2) && terrain[r2][c2] !== 'water' &&
+                  (!territoryGrid || (territoryGrid[r2] && territoryGrid[r2][c2] === owner))) {
                 terrain[r2][c2] = 'city';
                 cities.push({ r: r2, c: c2, owner: owner });
-                done = true;
+                placed = true;
               }
             }
           }
-          if (done) break;
+        }
+      }
+      // Last resort: any dry tile near center (no territory check).
+      if (!placed) {
+        for (let d = 0; d <= rad && !placed; d++) {
+          for (let r2 = center.r - d; r2 <= center.r + d && !placed; r2++) {
+            for (let c2 = center.c - d; c2 <= center.c + d && !placed; c2++) {
+              if (inBounds(r2, c2) && terrain[r2][c2] !== 'water') {
+                terrain[r2][c2] = 'city';
+                cities.push({ r: r2, c: c2, owner: owner });
+                placed = true;
+              }
+            }
+          }
         }
       }
     }
