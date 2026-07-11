@@ -62,6 +62,7 @@ const Game = {
   diplomacy: [],        // NxN matrix: diplomacy[a][b] = 'war' | 'peace' | 'alliance'
   damageDealt: [],      // NxN matrix: accumulated combat damage for peace deals
   aiStrategy: [],       // per-player: 'attack' | 'defend' | 'balanced' | null
+  spawnCenters: [],     // [{r,c}] per-player spawn center for circle-based deployment
   noUnitTurns: [0, 0],
   noCityTurns: [0, 0],
   winner: null,
@@ -242,7 +243,11 @@ function rebuildUnitAt() {
 }
 
 // Placement-zone test for a column: each player gets cols/N columns.
-function inZone(owner, c) {
+function inZone(owner, c, r) {
+  if (Game.spawnCenters && Game.spawnCenters.length > owner) {
+    if (r == null) return Game.territory.some(row => row[c] === owner);
+    return Game.territory[r] && Game.territory[r][c] === owner;
+  }
   const n = Game.playerCount || 2;
   const cols = COLS();
   const c0 = Math.floor(owner * cols / n);
@@ -616,6 +621,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     diplomacy: initDiplomacy(n),
     damageDealt: initDamageDealt(n),
     aiStrategy: new Array(n).fill(null),
+    spawnCenters: centers,
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
 }
@@ -663,6 +669,30 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     }
     if (s.owner == null) s.owner = bestOwner;
   }
+  // Guarantee at least one city per player so no one is eliminated on round 1.
+  for (let p = 0; p < n; p++) {
+    if (cities.some(ci => ci.owner === p)) continue;
+    const cr = centers[p].r, cc = centers[p].c;
+    if (cr < rows && cc < cols && terrain[cr] && terrain[cr][cc] !== 'water') {
+      terrain[cr][cc] = 'city';
+      cities.push({ r: cr, c: cc, owner: p });
+    } else {
+      for (let d = 1; d <= rad; d++) {
+        let done = false;
+        for (let r2 = cr - d; r2 <= cr + d && !done; r2++) {
+          for (let c2 = cc - d; c2 <= cc + d && !done; c2++) {
+            if (r2 >= 0 && r2 < rows && c2 >= 0 && c2 < cols &&
+                terrain[r2] && terrain[r2][c2] !== 'water') {
+              terrain[r2][c2] = 'city';
+              cities.push({ r: r2, c: c2, owner: p });
+              done = true;
+            }
+          }
+        }
+        if (done) break;
+      }
+    }
+  }
   const startGold = new Array(n).fill(ECONOMY.start);
   if (customMap.economy) for (let i = 0; i < Math.min(customMap.economy.length, n); i++) startGold[i] = customMap.economy[i];
   if (ai !== null) { for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = Math.max(startGold[i], 170); }
@@ -686,6 +716,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     diplomacy: initDiplomacy(n),
     damageDealt: initDamageDealt(n),
     aiStrategy: new Array(n).fill(null),
+    spawnCenters: centers,
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
     customTerrain: customMap.terrain,
   };
@@ -865,6 +896,7 @@ function loadIntoGame(st) {
   Game.damageDealt = (st.damageDealt && st.damageDealt.length === n) ? st.damageDealt.map(r => r.slice()) : initDamageDealt(n);
   Game.aiStrategy = (st.aiStrategy || new Array(n).fill(null)).slice();
   while (Game.aiStrategy.length < n) Game.aiStrategy.push(null);
+  Game.spawnCenters = st.spawnCenters || [];
 
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
@@ -970,7 +1002,7 @@ function regenAmount(u) {
 // A queued unit is skipped if its template contains a still-locked subunit.
 function placeAt(r, c) {
   const owner = Game.turn;
-  if (!inZone(owner, c)) { UI.log('Deploy inside your own deployment zone.'); return; }
+  if (!inZone(owner, c, r)) { UI.log('Deploy inside your own deployment zone.'); return; }
   if (Game.terrain[r][c] === 'water') { UI.log('Cannot deploy on water.'); return; }
   const stack = stackAt(r, c);
   if (stack.length && stack[0].owner !== owner) { UI.log('Tile is held by the enemy.'); return; }

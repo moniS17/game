@@ -198,15 +198,28 @@ function aiBestTarget(r, c, me) {
 // Spending — research, purchasing, deployment
 // ---------------------------------------------------------------------------
 
+function aiCenter(me) {
+  if (Game.spawnCenters && Game.spawnCenters[me]) return Game.spawnCenters[me];
+  const owned = Game.units.filter(u => u.owner === me);
+  if (owned.length) {
+    const r = Math.round(owned.reduce((s, u) => s + u.r, 0) / owned.length);
+    const c = Math.round(owned.reduce((s, u) => s + u.c, 0) / owned.length);
+    return { r, c };
+  }
+  const myCities = Game.cities.filter(ci => ci.owner === me);
+  if (myCities.length) return myCities[0];
+  return { r: Math.floor(Board.ROWS / 2), c: Math.floor(Board.COLS / 2) };
+}
+
 function aiThreatRow(me) {
+  const center = aiCenter(me);
   let best = null, bestD = Infinity;
-  const myMid = Math.floor((Math.floor(me * Board.COLS / PLAYERS.length) + Math.floor((me + 1) * Board.COLS / PLAYERS.length)) / 2);
   for (const u of Game.units) {
     if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
-    const d = Math.abs(u.c - myMid);
-    if (d < bestD) { bestD = d; best = u.r; }
+    const d = Rules.hexDist(u.r, u.c, center.r, center.c);
+    if (d < bestD) { bestD = d; best = { r: u.r, c: u.c }; }
   }
-  return best == null ? Math.floor(Board.ROWS / 2) : best;
+  return best || center;
 }
 
 function compTemplate(name, comp) {
@@ -277,13 +290,13 @@ function aiResearchTech(me) {
 }
 
 function aiEnemyTankRow(me) {
+  const center = aiCenter(me);
   let best = null, bestD = Infinity;
-  const myMid = Math.floor((Math.floor(me * Board.COLS / PLAYERS.length) + Math.floor((me + 1) * Board.COLS / PLAYERS.length)) / 2);
   for (const u of Game.units) {
     if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
     if (!(u.parts || []).some(p => p.type === 'tank' && p.count > 0)) continue;
-    const d = Math.abs(u.c - myMid);
-    if (d < bestD) { bestD = d; best = u.r; }
+    const d = Rules.hexDist(u.r, u.c, center.r, center.c);
+    if (d < bestD) { bestD = d; best = { r: u.r, c: u.c }; }
   }
   return best;
 }
@@ -291,23 +304,27 @@ function aiEnemyTankRow(me) {
 function aiDeployUnits(me, specs) {
   if (!specs.length) return 0;
   const cols = Board.COLS, rows = Board.ROWS;
-  const n = PLAYERS.length;
-  const zoneStart = Math.floor(me * cols / n);
-  const zoneEnd = Math.floor((me + 1) * cols / n);
-  const frontCol = me < n / 2 ? zoneEnd - 1 : zoneStart;
-  const targetRow = aiThreatRow(me);
-  const tankRow = aiEnemyTankRow(me);
+  const threat = aiThreatRow(me);
+  const tankThreat = aiEnemyTankRow(me);
   const noCities = aiHasNoCities(me);
 
-  function buildCands(tRow) {
+  function buildCands(toward) {
     const cands = [];
-    for (let c = 0; c < cols; c++) {
-      if (!window._inZone(me, c)) continue;
-      for (let r = 0; r < rows; r++) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
         if (Game.terrain[r][c] === 'water') continue;
+        if (Game.territory[r] && Game.territory[r][c] !== me) continue;
         const s = window._stackAt(r, c);
         if (s.length && s[0].owner !== me) continue;
-        cands.push({ r, c, d: Rules.hexDist(r, c, tRow, frontCol), isCity: Game.terrain[r][c] === 'city' });
+        cands.push({ r, c, d: Rules.hexDist(r, c, toward.r, toward.c), isCity: Game.terrain[r][c] === 'city' });
+      }
+    }
+    if (!cands.length) {
+      for (const ci of Game.cities) {
+        if (ci.owner !== me) continue;
+        const s = window._stackAt(ci.r, ci.c);
+        if (s.length && s[0].owner !== me) continue;
+        cands.push({ r: ci.r, c: ci.c, d: Rules.hexDist(ci.r, ci.c, toward.r, toward.c), isCity: true });
       }
     }
     if (noCities) {
@@ -318,8 +335,8 @@ function aiDeployUnits(me, specs) {
     return cands;
   }
 
-  const defaultCands = buildCands(targetRow);
-  const cannonCands = tankRow != null ? buildCands(tankRow) : defaultCands;
+  const defaultCands = buildCands(threat);
+  const cannonCands = tankThreat ? buildCands(tankThreat) : defaultCands;
 
   let placed = 0;
   for (const spec of specs) {
@@ -361,10 +378,7 @@ function aiProtectHq(hqUnit, me) {
 
   const nearestEnDist = aiNearestEnemyDist(hqUnit.r, hqUnit.c, me);
   const bigStack = aiBiggestFriendlyStack(me);
-  const n = PLAYERS.length;
-  const zoneStart = Math.floor(me * Board.COLS / n);
-  const zoneEnd = Math.floor((me + 1) * Board.COLS / n);
-  const edgeCol = me < n / 2 ? zoneStart : zoneEnd - 1;
+  const center = aiCenter(me);
 
   let strategy = 'flee';
   if (bigStack && bigStack.count >= 4) {
@@ -398,9 +412,10 @@ function aiProtectHq(hqUnit, me) {
       const distToStack = Rules.hexDist(rr, cc, bigStack.r, bigStack.c);
       score = -distToStack * 4 - enemyAdj * 20 - enemy2 * 12 - enemy3 * 4 + friendNear * 5;
     } else {
-      const edgeDist = Math.abs(cc - edgeCol);
-      const edgeW = urgent ? 1 : 3;
-      score = -edgeDist * edgeW - enemyAdj * 20 - enemy2 * 15 - enemy3 * 5 + friendNear * 3;
+      const nearestEn = aiNearestEnemyDist(rr, cc, me);
+      const centerDist = Rules.hexDist(rr, cc, center.r, center.c);
+      const safeW = urgent ? 6 : 3;
+      score = nearestEn * safeW - centerDist - enemyAdj * 20 - enemy2 * 15 - enemy3 * 5 + friendNear * 3;
     }
 
     if (score > bestScore) { bestScore = score; bestKey = [rr, cc]; }
@@ -578,7 +593,7 @@ function runAiFor(me, strategy) {
     } else {
       target = aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
     }
-    if (!target) break;
+    if (!target) continue;
 
     if (!Rules.isHexNeighbor(r, c, target.r, target.c)) {
       Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, group);
@@ -720,10 +735,14 @@ function aiSendGold(me) {
 function runAiTurn() {
   const me = Game.turn;
   const logStart = (window.UI && UI.entries) ? UI.entries.length : 0;
-  aiDiplomacy(me);
-  aiSendGold(me);
-  runAiFor(me);
-  if (Game.winner === null) aiSpendAndReinforce(me);
+  try {
+    aiDiplomacy(me);
+    aiSendGold(me);
+    runAiFor(me);
+    if (Game.winner === null) aiSpendAndReinforce(me);
+  } catch (e) {
+    console.error(`AI error for player ${me}:`, e);
+  }
   Game.reachable = new Map();
   window._persist();
   UI.refresh();
