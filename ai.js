@@ -242,6 +242,22 @@ function aiIsEarlyGame(me) {
   return Game.round <= 4 && aiMyCityCount(me) < 5 && aiUncapturedSettlementCount(me) >= 3;
 }
 
+function aiFrontlineEnemyCount(me) {
+  let count = 0;
+  for (const u of Game.units) {
+    if (u.owner === me || !window.isAtWar(me, u.owner)) continue;
+    let near = false;
+    for (let r = Math.max(0, u.r - 3); r <= Math.min(Board.ROWS - 1, u.r + 3) && !near; r++) {
+      for (let c = Math.max(0, u.c - 3); c <= Math.min(Board.COLS - 1, u.c + 3) && !near; c++) {
+        if (Rules.hexDist(u.r, u.c, r, c) > 3) continue;
+        if (Game.territory[r] && Game.territory[r][c] === me) near = true;
+      }
+    }
+    if (near) count++;
+  }
+  return count;
+}
+
 function aiBuyUnits(me) {
   const roster = Object.keys(PIECES)
     .filter(t => t !== 'hq' && window.isUnlocked(me, t))
@@ -263,8 +279,9 @@ function aiBuyUnits(me) {
     return units;
   }
 
-  // Mid/late game: buy battalion-sized units (4 companies each) for combat power
-  const BN_SIZE = 4;
+  // Mid/late game: scale unit size to frontline threat — more enemies = bigger units that tank more
+  const threat = aiFrontlineEnemyCount(me);
+  const BN_SIZE = threat >= 8 ? 12 : threat >= 4 ? 8 : 4;
 
   const enemyTanks = aiEnemyHasTanks(me);
   if (enemyTanks && window.isUnlocked(me, 'cannon')) {
