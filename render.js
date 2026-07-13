@@ -477,15 +477,15 @@ window.Render = (function () {
   }
 
   function drawStack(G, stack, r, c, size, detailed, innerSize) {
-    const u = stack[stack.length - 1];
+    const hq = stack.find(u => window.isHqUnit && window.isHqUnit(u));
+    const u = hq || stack[stack.length - 1];
     const center = hexCenter(r, c, size);
     const sx = center.x - cam.x - innerSize * 0.08, sy = center.y - cam.y;
     const def = PIECES[u.type];
     const color = PLAYERS[u.owner].color;
-    const isHq = window.isHqUnit && window.isHqUnit(u);
     const echelon = unitEchelon(u);
 
-    if (isHq) {
+    if (hq) {
       const rw = innerSize * 0.8, rh = innerSize * 0.6;
       ctx.globalAlpha = 0.75; ctx.fillStyle = color;
       ctx.fillRect(sx - rw / 2, sy - rh / 2, rw, rh);

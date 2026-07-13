@@ -26,12 +26,12 @@
  */
 window.PIECES = {
   infantry: {
-    name: 'Infantry', code: 'i', art: 'assets/pawn.svg',
+    name: 'Infantry', code: 'i', art: 'assets/infantry.svg',
     hp: 10, attack: 10, movement_speed: 3, cost: 10,
   },
   motorized: {
     // Truck-borne infantry: quick, ranged-value attacker.
-    name: 'Motorized', code: 'm', art: 'assets/truck.svg',
+    name: 'Motorized', code: 'm', art: 'assets/motorized.svg',
     hp: 20, attack: 20, movement_speed: 6, cost: 50,
   },
   cavalry: {
@@ -41,7 +41,7 @@ window.PIECES = {
   },
   cannon: {
     // Siege gun: heavy hitter, slow.
-    name: 'Cannon', code: 'n', art: 'assets/cannon.svg',
+    name: 'Artillery', code: 'n', art: 'assets/artillery.svg',
     hp: 10, attack: 30, movement_speed: 3, cost: 40,
   },
   tank: {
