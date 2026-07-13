@@ -123,15 +123,15 @@
           <h2 style="margin-top:0">Companies (click to paint)</h2>
           <div class="palette" id="bnPalette"></div>
           <div class="stats" id="bnStats"></div>
-          <div class="hint">A battalion holds up to 12 companies (3×4). Unit image is determined by &gt;50% majority type. Each battalion appears as a button in the Regiment Designer below.</div>
+          <div class="hint">A battalion holds up to 12 companies (3×4). Unit image is determined by &gt;50% majority type. Each battalion appears as a button in the Division Designer below.</div>
         </div>
       </div>
     </div>
 
     <hr class="section-divider" />
 
-    <!-- Regiment Designer Section -->
-    <h2>Regiment Templates (5×5)</h2>
+    <!-- Division Designer Section -->
+    <h2>Division Templates (5×5)</h2>
     <div class="lib" id="lib"></div>
 
     <div class="editor" id="editor">
@@ -146,15 +146,15 @@
           <div id="addBn" style="margin-top:4px"></div>
           <div class="stats" id="stats"></div>
           <div class="comp" id="comp"></div>
-          <div class="hint">A regiment is built from battalion templates only. Click a filled cell to erase it.
-            Unit image = majority (&gt;50%) type. Echelon: I = company, II = battalion, III = regiment.</div>
+          <div class="hint">A division is built from battalion templates only. Click a filled cell to erase it.
+            Unit image = majority (&gt;50%) type. Echelon: II = battalion, III = division.</div>
         </div>
       </div>
     </div>
 
     <div class="bar">
       <a class="battle" href="index.html">⬅ Battle</a>
-      <a class="buy" href="buy.html">🛒 Buy regiments</a>
+      <a class="buy" href="buy.html">🛒 Buy divisions</a>
       <a class="tech" href="tech.html">⚗️ Tech tree</a>
     </div>
   </div>
@@ -186,7 +186,7 @@
     }
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — design battalion and regiment blueprints; buy regiments on the Buy page.";
+      PLAYERS[me].name + " — design battalion and division blueprints; buy divisions on the Buy page.";
 
     const isUnlocked = (t) => t === "infantry" || !!save.unlocked[me][t];
     const steps = (t, s) => (save.upgrades[me] && save.upgrades[me][t] && save.upgrades[me][t][s]) || 0;
@@ -313,7 +313,7 @@
     });
 
     // =========================================================================
-    // REGIMENT DESIGNER
+    // DIVISION DESIGNER
     // =========================================================================
     let selId = save.templates[me][0].id;
 
@@ -409,25 +409,7 @@
         const disabled = !allUnlocked || empty < filled;
         html += `<button class="add-bn custom" data-bnid="${bn.id}" ${disabled ? "disabled" : ""}>+ ${bn.name}</button>`;
       }
-      // Standard single-type battalion buttons (4 of same type)
-      for (const t in PIECES) {
-        if (t === "hq") continue;
-        const locked = !isUnlocked(t);
-        const disabled = locked || empty < 4;
-        html += `<button class="add-bn" data-type="${t}" ${disabled ? "disabled" : ""}>+ 4× ${PIECES[t].name}</button>`;
-      }
       el.innerHTML = html;
-      el.querySelectorAll(".add-bn[data-type]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const type = btn.dataset.type;
-          const cells = cur().cells;
-          let added = 0;
-          for (let i = 0; i < CAP && added < 4; i++) {
-            if (cells[i] === null) { cells[i] = type; added++; }
-          }
-          commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
-        });
-      });
       el.querySelectorAll(".add-bn[data-bnid]").forEach(btn => {
         btn.addEventListener("click", () => {
           const bn = save.battalionTemplates[me].find(b => b.id === btn.dataset.bnid);

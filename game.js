@@ -201,7 +201,7 @@ function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
     acted: !!o.acted, moved: false,
   };
 }
-// A player's default starting template library: one "Infantry" regiment (4 battalions of 4 infantry = 16 companies).
+// A player's default starting template library: one "Infantry" division (4 battalions of 4 infantry = 16 companies).
 function defaultTemplates() {
   const cells = new Array(TEMPLATE_CELLS).fill(null);
   for (let i = 0; i < 16; i++) cells[i] = 'infantry';

@@ -63,7 +63,7 @@
 
   <div class="grid" id="grid"></div>
   <div id="noTemplates" class="empty" style="display:none">
-    No buildable templates yet — design one in the <a href="template.html">Regiment designer</a>.
+    No buildable templates yet — design one in the <a href="template.html">Division designer</a>.
   </div>
   <div class="queue" id="queue"></div>
 
@@ -107,7 +107,7 @@
     const templateById = (id) => save.templates[buyer].find((t) => t.id === id);
 
     document.getElementById("who").textContent =
-      PLAYERS[buyer].name + "'s turn — buy regiments built from your templates; deploy at your home edge.";
+      PLAYERS[buyer].name + "'s turn — buy divisions built from your templates; deploy at your home edge.";
 
     const goldEl = document.getElementById("gold");
     const queueEl = document.getElementById("queue");

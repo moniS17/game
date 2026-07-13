@@ -418,7 +418,7 @@ window.Render = (function () {
     if (!u.parts) return null;
     let total = 0;
     for (const p of u.parts) total += p.count;
-    if (total >= 12) return 'rgt';
+    if (total >= 12) return 'div';
     if (total >= 4) return 'bn';
     return null;
   }
@@ -462,7 +462,7 @@ window.Render = (function () {
       const tickH = Math.max(3, h * 0.22);
       const tickTop = cy - h / 2 - tickH - 1;
       ctx.lineWidth = Math.max(1, w * 0.05);
-      if (echelon === 'rgt') {
+      if (echelon === 'div') {
         const gap = w * 0.12;
         ctx.beginPath(); ctx.moveTo(cx - gap, tickTop); ctx.lineTo(cx - gap, tickTop + tickH); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx, tickTop); ctx.lineTo(cx, tickTop + tickH); ctx.stroke();
