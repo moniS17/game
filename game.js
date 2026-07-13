@@ -1070,7 +1070,7 @@ function placeAt(r, c) {
     room--; placed++;
   }
   if (!placed && blockedLocked) {
-    UI.log('That battalion needs a unit you have not researched yet.');
+    UI.log('That template needs a unit type you have not researched yet.');
   } else {
     if (placed) { captureIfCity(r, c, owner); claimTile(r, c, owner); } // deploying claims the tile
     UI.log(`Deployed ${placed} unit(s) at r${r}, c${c}.` +

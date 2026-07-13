@@ -67,6 +67,16 @@
     .stats .k { color: #9aa4ad; }
     .hint { font-size: .75rem; color: #7e8893; margin-top: 8px; }
     .hint a { color: #8ea2ff; }
+    .comp { margin-top: 10px; font-size: .82rem; color: #c5ccd3; line-height: 1.6; }
+    .comp b { color: #fff; }
+    .add-bn {
+      display: inline-flex; align-items: center; gap: 5px; padding: .45rem .7rem;
+      border: none; border-radius: 6px; background: #3a5bd9; color: #fff;
+      font-weight: 600; font-size: .78rem; cursor: pointer; margin: 2px;
+    }
+    .add-bn:hover:not(:disabled) { background: #2f49b0; }
+    .add-bn:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
+    .add-bn img { width: 1em; height: 1em; }
 
     .bar { margin: 22px 0 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
@@ -100,11 +110,13 @@
       <div class="row">
         <div class="grid5" id="grid"></div>
         <div class="side">
-          <h2 style="margin-top:0">Battalions (click to paint)</h2>
+          <h2 style="margin-top:0">Companies (click to paint)</h2>
           <div class="palette" id="palette"></div>
+          <div id="addBn" style="margin-top:10px"></div>
           <div class="stats" id="stats"></div>
-          <div class="hint">Locked battalions are researched in the <a href="tech.html">Tech tree</a>.
-            A template holds up to 25 battalions (5×5).</div>
+          <div class="comp" id="comp"></div>
+          <div class="hint">Locked units are researched in the <a href="tech.html">Tech tree</a>.
+            A template holds up to 25 companies (5×5). 4 companies of the same type auto-merge into a battalion.</div>
         </div>
       </div>
     </div>
@@ -193,7 +205,7 @@
         if (t) { cell.style.background = PLAYERS[me].color; cell.innerHTML = iconHtml(t); }
         cell.addEventListener("click", () => {
           cells[i] = (brush && isUnlocked(brush)) ? brush : null;
-          commit(); renderGrid(); renderStats(); renderLib();
+          commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
         });
         grid.appendChild(cell);
       }
@@ -221,10 +233,60 @@
     }
 
     function renderStats() {
-      const s = statsOf(cur().cells);
+      const cells = cur().cells;
+      const s = statsOf(cells);
       document.getElementById("stats").innerHTML =
-        `<span class="k">Battalions</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
+        `<span class="k">Companies</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
         `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
+    }
+
+    function compOf(cells) {
+      const counts = {};
+      for (const t of cells) { if (t) counts[t] = (counts[t] || 0) + 1; }
+      return counts;
+    }
+
+    function renderComp() {
+      const cells = cur().cells;
+      const counts = compOf(cells);
+      const parts = [];
+      for (const t in counts) {
+        const bn = Math.floor(counts[t] / 4);
+        const co = counts[t] % 4;
+        let label = "";
+        if (bn > 0) label += `${bn} Bn`;
+        if (bn > 0 && co > 0) label += " + ";
+        if (co > 0) label += `${co} Co`;
+        parts.push(`<b>${label}</b> ${PIECES[t].name}`);
+      }
+      document.getElementById("comp").innerHTML = parts.length ? parts.join(" &nbsp;·&nbsp; ") : "";
+    }
+
+    function emptySlots(cells) { return cells.filter(c => c === null).length; }
+
+    function renderAddBn() {
+      const el = document.getElementById("addBn");
+      const cells = cur().cells;
+      const empty = emptySlots(cells);
+      let html = "";
+      for (const t in PIECES) {
+        if (t === "hq") continue;
+        const locked = !isUnlocked(t);
+        const disabled = locked || empty < 4;
+        html += `<button class="add-bn" data-type="${t}" ${disabled ? "disabled" : ""}>+ Bn ${PIECES[t].name}</button>`;
+      }
+      el.innerHTML = html;
+      el.querySelectorAll(".add-bn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const type = btn.dataset.type;
+          const cells = cur().cells;
+          let added = 0;
+          for (let i = 0; i < CAP && added < 4; i++) {
+            if (cells[i] === null) { cells[i] = type; added++; }
+          }
+          commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
+        });
+      });
     }
 
     function renderName() {
@@ -232,7 +294,7 @@
       input.value = cur().name;
     }
 
-    function render() { renderLib(); renderName(); renderGrid(); renderPalette(); renderStats(); }
+    function render() { renderLib(); renderName(); renderGrid(); renderPalette(); renderStats(); renderComp(); renderAddBn(); }
 
     document.getElementById("nameInput").addEventListener("input", (e) => {
       cur().name = e.target.value || "Template"; commit(); renderLib();

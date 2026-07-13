@@ -414,6 +414,63 @@ window.Render = (function () {
     ctx.closePath();
   }
 
+  function unitEchelon(u) {
+    if (!u.parts) return 'co';
+    let primaryCount = 0;
+    for (const p of u.parts) if (p.type === u.type) primaryCount += p.count;
+    return primaryCount >= 4 ? 'bn' : 'co';
+  }
+
+  function drawNatoSymbol(cx, cy, w, h, type, color, echelon) {
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, w * 0.06);
+    ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+
+    const pad = w * 0.12;
+    const l = cx - w / 2 + pad, r = cx + w / 2 - pad;
+    const t = cy - h / 2 + pad, b = cy + h / 2 - pad;
+    ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff';
+    ctx.lineWidth = Math.max(1.5, w * 0.06);
+    ctx.lineCap = 'round';
+
+    if (type === 'infantry' || type === 'motorized') {
+      ctx.beginPath(); ctx.moveTo(l, t); ctx.lineTo(r, b); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(r, t); ctx.lineTo(l, b); ctx.stroke();
+      if (type === 'motorized') {
+        const wr = Math.max(2, w * 0.12);
+        ctx.beginPath(); ctx.arc(cx, cy + h / 2 + wr + 1, wr, 0, Math.PI * 2); ctx.stroke();
+      }
+    } else if (type === 'tank') {
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, (r - l) * 0.5, (b - t) * 0.4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (type === 'cannon') {
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.min(r - l, b - t) * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'cavalry') {
+      ctx.beginPath(); ctx.moveTo(l, b); ctx.lineTo(r, t); ctx.stroke();
+    }
+
+    if (echelon && w >= 10) {
+      const tickH = Math.max(3, h * 0.22);
+      const tickTop = cy - h / 2 - tickH - 1;
+      ctx.lineWidth = Math.max(1, w * 0.05);
+      if (echelon === 'bn') {
+        const gap = w * 0.08;
+        ctx.beginPath(); ctx.moveTo(cx - gap, tickTop); ctx.lineTo(cx - gap, tickTop + tickH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + gap, tickTop); ctx.lineTo(cx + gap, tickTop + tickH); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.moveTo(cx, tickTop); ctx.lineTo(cx, tickTop + tickH); ctx.stroke();
+      }
+    }
+    ctx.lineCap = 'butt';
+  }
+
   function drawStack(G, stack, r, c, size, detailed, innerSize) {
     const u = stack[stack.length - 1];
     const center = hexCenter(r, c, size);
@@ -421,34 +478,25 @@ window.Render = (function () {
     const def = PIECES[u.type];
     const color = PLAYERS[u.owner].color;
     const isHq = window.isHqUnit && window.isHqUnit(u);
+    const echelon = unitEchelon(u);
 
     if (isHq) {
+      const rw = innerSize * 0.8, rh = innerSize * 0.6;
       ctx.globalAlpha = 0.75; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.48, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(sx - rw / 2, sy - rh / 2, rw, rh);
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, innerSize * 0.06);
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.48, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeRect(sx - rw / 2, sy - rh / 2, rw, rh);
       ctx.fillStyle = '#fff';
-      drawStar(sx, sy, innerSize * 0.3, 5);
+      drawStar(sx, sy, innerSize * 0.25, 5);
       ctx.fill();
-    } else if (detailed && images[u.type] && images[u.type].complete) {
-      ctx.globalAlpha = 0.6; ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.7;
-      const imgS = innerSize * 0.5;
-      ctx.drawImage(images[u.type], sx - imgS / 2, sy - imgS / 2, imgS, imgS);
-      ctx.globalAlpha = 1;
+    } else if (innerSize >= 9) {
+      const rw = innerSize * 0.8, rh = innerSize * 0.6;
+      drawNatoSymbol(sx, sy, rw, rh, u.type, color, echelon);
     } else {
       ctx.globalAlpha = 0.65; ctx.fillStyle = color;
       ctx.beginPath(); ctx.arc(sx, sy, innerSize * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
-      if (innerSize >= 9) {
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.floor(innerSize * 0.644)}px monospace`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const label = stack.length > 1 ? def.code + toSub(stack.length) : def.code;
-        ctx.fillText(label, sx, sy + 0.5);
-      }
     }
 
     // Count badge
@@ -465,7 +513,7 @@ window.Render = (function () {
 
     // HP bar
     if (innerSize >= 14 && u.hp < u.maxHp) {
-      const bw = innerSize * 0.8, bx = sx - bw / 2, by = sy - innerSize * 0.5;
+      const bw = innerSize * 0.8, bx = sx - bw / 2, by = sy - innerSize * 0.58;
       ctx.fillStyle = '#000'; ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = '#4caf50'; ctx.fillRect(bx, by, bw * (u.hp / u.maxHp), 3);
     }

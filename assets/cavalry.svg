@@ -1,21 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Cavalry: full side-profile horse -->
-  <g fill="#5d4037">
-    <!-- body -->
-    <ellipse cx="30" cy="34" rx="17" ry="9"/>
-    <!-- neck -->
-    <path d="M42 30 q7 -3 9 -13 l5 2 q-2 13 -9 17 z"/>
-    <!-- head -->
-    <path d="M50 13 l10 -3 l2 7 l-8 5 z"/>
-    <!-- ears -->
-    <path d="M54 11 l2 -5 l3 4 z"/>
-    <!-- legs -->
-    <rect x="18" y="40" width="4" height="17" rx="1"/>
-    <rect x="27" y="40" width="4" height="17" rx="1"/>
-    <rect x="36" y="40" width="4" height="17" rx="1"/>
-    <rect x="43" y="40" width="4" height="17" rx="1"/>
-    <!-- tail -->
-    <path d="M13 30 q-9 5 -6 18 l5 0 q-2 -11 7 -13 z"/>
-  </g>
-  <circle cx="57" cy="15" r="1.4" fill="#fff"/>
+  <!-- NATO Cavalry/Recon: single diagonal line inside rectangle -->
+  <rect x="8" y="14" width="48" height="36" rx="2" fill="none" stroke="#263238" stroke-width="4"/>
+  <line x1="12" y1="46" x2="52" y2="18" stroke="#263238" stroke-width="4" stroke-linecap="round"/>
 </svg>

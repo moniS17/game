@@ -467,7 +467,15 @@
       const atk = Rules.unitAttack(u);
       let cost = 0;
       for (const p of (u.parts || [])) cost += (PIECES[p.type].cost || 0) * p.count;
-      const comp = (u.parts || []).map((p) => `${PIECES[p.type].name} ×${p.count}`).join(' · ');
+      const comp = (u.parts || []).map((p) => {
+        const bn = Math.floor(p.count / 4);
+        const co = p.count % 4;
+        let label = '';
+        if (bn > 0) label += `${bn} Bn`;
+        if (bn > 0 && co > 0) label += ' + ';
+        if (co > 0 || !bn) label += `${co || p.count} Co`;
+        return `${PIECES[p.type].name} ${label}`;
+      }).join(' · ');
       const showSplit = window.canSplitUnit && window.canSplitUnit(u);
       document.getElementById('unitModalTitle').innerHTML =
         `<span style="color:${color}">${PLAYERS[u.owner].name}</span> — ${u.name || PIECES[u.type].name}`;
@@ -573,7 +581,7 @@
           const vCount = (Game.villages || []).filter(v => v.owner === p).length;
           const gRound = Rules.income(Game.cities, Game.villages || [], p, (Game.ecoUpgrades && Game.ecoUpgrades[p]) || {});
           const bCount = Game.units.filter(u => u.owner === p).reduce((s, u) => s + (u.parts || []).reduce((a, pt) => a + pt.count, 0), 0);
-          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}units ${cCount}cities ${vCount}village ${gRound}gold/round ${bCount}battalions</span></div>`;
+          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}units ${cCount}cities ${vCount}village ${gRound}gold/round ${bCount}companies</span></div>`;
         }
         statsEl.innerHTML = statsHtml;
 

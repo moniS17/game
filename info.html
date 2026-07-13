@@ -259,12 +259,12 @@
 
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
-      `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>battalions</b>. A board piece is a <b>regiment</b> built from a template; its HP &amp; ATK are the <b>sum of its battalions</b>. Many regiments can share one template.</li>` +
+      `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>companies</b>. A board piece is a <b>regiment</b> built from a template; its HP &amp; ATK are the <b>sum of its companies</b>. Many regiments can share one template. <b>4 companies</b> of the same type auto-merge into a <b>battalion</b>.</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} regiments</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their regiments' ATK</b>, applied one regiment at a time; a regiment is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
       `<li><b>Terrain shapes attacks</b>: each regiment's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
-      `<li><b>Battalion matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Battalion vs battalion</b> table above). The defending stack's lead battalion type is the target.</li>` +
+      `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
       `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a regiment paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured gaps</b> between tiles matching the player.</li>` +
       `<li><b>Front-line</b>: where your territory borders the enemy's, a <b>dark line</b> marks the confrontation — push it forward by advancing regiments.</li>` +
       `<li class="debuff">If a stack's <b>six hex neighbours are all the enemy's colour</b> (surrounded), it takes <b>double damage</b> from that enemy in combat.</li>` +
@@ -276,24 +276,24 @@
     // --- Economy, tech tree & upgrades ---
     document.getElementById("econRules").innerHTML =
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting regiments (up to <b>3 × board height</b>).</li>` +
-      `<li><b>Tech tree</b>: only the <b>Infantry</b> battalion is unlocked at the start. Research other battalion types with gold ` +
+      `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other unit types with gold ` +
         `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
-      `<li><b>Templates</b>: design reusable 5×5 blueprints of battalions; a regiment's <b>cost = the sum of its battalions' costs</b>.</li>` +
+      `<li><b>Templates</b>: design reusable 5×5 blueprints of companies; a regiment's <b>cost = the sum of its companies' costs</b>.</li>` +
       `<li><b>Buy</b>: pick a template and buy regiments built from it; deploy them in your zone.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
-        `strengthen a battalion type wherever it appears, and apply only to the <b>current game</b>.</li>`;
+        `strengthen a unit type wherever it appears, and apply only to the <b>current game</b>.</li>`;
 
     // --- Regiment actions (refit, split, combine) ---
     document.getElementById("actionRules").innerHTML =
       `<li><b>Refit</b>: swap a deployed regiment to a different template. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new template and the <b>current value of the regiment</b> — <span class="debuff">damaged regiments are worth less</span> (proportional to remaining HP), so refitting a battered regiment costs more.</li>` +
-      `<li><b>Split</b>: break individual battalions off a deployed regiment into separate 1-battalion pieces on the same tile. The original regiment keeps its remaining battalions. Requires at least 2 battalions and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off regiments inherit the parent's HP ratio and cannot act until the next turn.</li>` +
-      `<li><b>Combine</b>: merge battalions from one regiment (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs battalions up to the 25-battalion template cap. If the donor is fully absorbed it is removed from the board.</li>`;
+      `<li><b>Split</b>: break individual companies off a deployed regiment into separate pieces on the same tile. The original regiment keeps its remaining companies. Requires at least 2 companies and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off regiments inherit the parent's HP ratio and cannot act until the next turn.</li>` +
+      `<li><b>Combine</b>: merge companies from one regiment (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs companies up to the 25-company template cap. If the donor is fully absorbed it is removed from the board.</li>`;
 
     // --- HQ (Headquarters) ---
     document.getElementById("hqRules").innerHTML =
       `<li>Each side starts with <b>one HQ</b> regiment — a unique command unit placed in the deployment zone.</li>` +
       `<li><span class="debuff">If your HQ is destroyed, you lose immediately.</span> Protect it at all costs.</li>` +
-      `<li>The HQ starts with <b>1 Infantry</b> battalion. Each time you <b>research a new battalion type</b>, one battalion of that type is automatically added to the HQ's hidden template — making it stronger over time.</li>` +
+      `<li>The HQ starts with <b>1 Infantry</b> company. Each time you <b>research a new unit type</b>, one company of that type is automatically added to the HQ's hidden template — making it stronger over time.</li>` +
       `<li>The HQ's template is <b>hidden</b> — it does not appear in the Template Designer or the Shop. You <b>cannot refit</b> the HQ to another template, and you cannot buy additional HQs.</li>` +
       `<li><b>📯 Rally</b>: select the HQ and click <b>Rally</b>, then tap any tile on the board. All your other regiments will move toward that tile this turn (using their remaining movement). The HQ itself does not move during a rally.</li>` +
       `<li>HQ stats: HP <b>${PIECES.hq.hp}</b> · ATK <b>${PIECES.hq.attack}</b> · MOV <b>${PIECES.hq.movement_speed}</b>. It is a command unit, not a fighter — keep it behind the front line.</li>`;
