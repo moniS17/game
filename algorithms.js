@@ -258,8 +258,10 @@ window.Algorithms = (function () {
     return { terrain: t, cities, villages };
   }
 
+  const maxPlayers = (rows, cols) => Math.min(8, Math.max(2, Math.floor(Math.min(rows, cols) / 3)));
+
   return {
-    GRID, MIN, MAX, clampDim, makeRng, generateMap,
+    GRID, MIN, MAX, clampDim, makeRng, generateMap, maxPlayers,
     CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide, neutralCount,
     generateLakes, generateRivers, carveRiver, generateForests, placeCities, placeNeutralCities, generateVillages,
   };

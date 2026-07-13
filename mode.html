@@ -211,7 +211,7 @@
     </div>
 
     <div class="countries" id="countrySetup">
-      <h2>Countries (2–8)</h2>
+      <h2 id="countryHeader">Countries (2–8)</h2>
       <div class="count-row">
         <input type="number" id="countryCountInput" min="2" max="8" step="1" value="2" inputmode="numeric" />
         <input type="range" id="countryCountSlider" min="2" max="8" step="1" value="2" />
@@ -287,6 +287,7 @@
       heightInput.value = String(Algorithms.GRID);
       errEl.textContent = '';
       syncStartUnits();
+      if (typeof syncCountryMax === 'function') syncCountryMax();
     });
 
     // Adjust BOTH width and height by `delta`, clamped to [MIN, MAX]. A blank or
@@ -298,6 +299,7 @@
       }
       errEl.textContent = '';
       syncStartUnits();
+      if (typeof syncCountryMax === 'function') syncCountryMax();
     }
     document.getElementById('minus10Btn').addEventListener('click', () => stepBoth(-10));
     document.getElementById('plus10Btn').addEventListener('click', () => stepBoth(10));
@@ -336,8 +338,8 @@
     startSlider.addEventListener('input', () => {
       startInput.value = startSlider.value;
     });
-    widthInput.addEventListener('input', syncStartUnits);
-    heightInput.addEventListener('input', syncStartUnits);
+    widthInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
+    heightInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
     randomChk.addEventListener('change', syncNote);
     syncStartUnits();
     syncNote();
@@ -349,8 +351,23 @@
     const sideOpt = document.getElementById('sideOpt');
     const firstMoveOpt = document.getElementById('firstMoveOpt');
 
+    function syncCountryMax() {
+      const r = readDim(heightInput) || Algorithms.GRID;
+      const c = readDim(widthInput) || Algorithms.GRID;
+      const mx = Algorithms.maxPlayers(r, c);
+      ccInput.max = String(mx);
+      ccSlider.max = String(mx);
+      document.getElementById('countryHeader').textContent = 'Countries (2–' + mx + ')';
+      if (parseInt(ccInput.value) > mx) {
+        ccInput.value = String(mx);
+        ccSlider.value = String(mx);
+        renderCountryList();
+      }
+    }
+
     function renderCountryList() {
-      const n = Math.max(2, Math.min(8, parseInt(ccInput.value) || 2));
+      const mx = parseInt(ccInput.max) || 8;
+      const n = Math.max(2, Math.min(mx, parseInt(ccInput.value) || 2));
       let html = '';
       for (let i = 0; i < n; i++) {
         const color = PLAYER_COLORS[i];
@@ -372,9 +389,10 @@
       }
     }
     ccInput.addEventListener('input', () => {
+      const mx = parseInt(ccInput.max) || 8;
       let v = Math.floor(Number(ccInput.value));
       if (v < 2) ccInput.value = '2';
-      else if (v > 8) ccInput.value = '8';
+      else if (v > mx) ccInput.value = String(mx);
       ccSlider.value = ccInput.value;
       renderCountryList();
     });
@@ -382,6 +400,7 @@
       ccInput.value = ccSlider.value;
       renderCountryList();
     });
+    syncCountryMax();
     renderCountryList();
 
     // Segmented Country1/Country2 pickers: track the selected value, highlight the choice.
@@ -405,7 +424,8 @@
         errEl.textContent = `Enter whole numbers between ${MIN} and ${MAX} for both width and height.`;
         return false;
       }
-      const playerCount = Math.max(2, Math.min(8, parseInt(ccInput.value) || 2));
+      const maxP = Algorithms.maxPlayers(rows, cols);
+      const playerCount = Math.max(2, Math.min(maxP, parseInt(ccInput.value) || 2));
       const playerNames = [];
       document.querySelectorAll('.country-name').forEach(el => {
         playerNames.push(el.value.trim() || ('Country' + (parseInt(el.dataset.i) + 1)));

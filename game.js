@@ -587,7 +587,8 @@ function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
 function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames) {
-  const n = playerCount || 2;
+  const maxP = Algorithms.maxPlayers(rows || Algorithms.GRID, cols || Algorithms.GRID);
+  const n = Math.min(maxP, playerCount || 2);
   if (playerNames) window.initPlayers(n, playerNames);
   else window.initPlayers(n);
   const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID, n);
