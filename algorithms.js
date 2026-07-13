@@ -30,8 +30,14 @@ window.Algorithms = (function () {
   const areaScale = (rows, cols) => (rows * cols) / (GRID * GRID); // 1 at 100x100
   const citiesPerSide = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
   const unitsPerSide = (rows, cols) => Math.max(1, Math.round(UNITS_PER_SIDE * areaScale(rows, cols)));
-  // Neutral cities near the board center: 1 at 10x10, 17 at 100x100, more on larger boards.
-  const neutralCount = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
+  // Neutral cities near the board center: scales with both area and player count
+  // so small maps and crowded maps always have a fair amount to fight over.
+  const neutralCount = (rows, cols, n) => {
+    n = n || 2;
+    const perSide = citiesPerSide(rows, cols);
+    const total = perSide * n;
+    return Math.max(n, Math.round(total * 0.3));
+  };
 
   // --- seeded PRNG (mulberry32): deterministic given the seed ---------------
   function makeRng(seed) {
@@ -182,29 +188,23 @@ window.Algorithms = (function () {
     return { cities, occupied };
   }
 
-  // --- 4b. NEUTRAL CITIES: unowned cities between player clusters ------
+  // --- 4b. NEUTRAL CITIES: unowned cities scattered across the map ------
   function placeNeutralCities(t, rng, rows, cols, occupied, playerCount) {
     const n = playerCount || 2;
     const cities = [];
-    const count = neutralCount(rows, cols);
-    const perGap = Math.max(1, Math.round(count / n));
-    for (let g = 0; g < n; g++) {
-      const gapMid = Math.round((g + 1) / n * (cols - 1));
-      const half = Math.max(2, Math.round(cols * 0.08));
-      const cMin = Math.max(1, gapMid - half), cMax = Math.min(cols - 2, gapMid + half);
-      let placed = 0, attempts = 0;
-      const cap = perGap * 200 + 500;
-      while (placed < perGap && attempts < cap) {
-        attempts++;
-        const r = randInt(rng, 1, rows - 2);
-        const c = randInt(rng, cMin, cMax);
-        const k = r + ',' + c;
-        if (t[r][c] !== 'plains' || occupied.has(k)) continue;
-        t[r][c] = 'city';
-        occupied.add(k);
-        cities.push({ r, c, owner: null });
-        placed++;
-      }
+    const count = neutralCount(rows, cols, n);
+    let placed = 0, attempts = 0;
+    const cap = count * 300 + 500;
+    while (placed < count && attempts < cap) {
+      attempts++;
+      const r = randInt(rng, 1, rows - 2);
+      const c = randInt(rng, 1, cols - 2);
+      const k = r + ',' + c;
+      if (t[r][c] !== 'plains' || occupied.has(k)) continue;
+      t[r][c] = 'city';
+      occupied.add(k);
+      cities.push({ r, c, owner: null });
+      placed++;
     }
     return cities;
   }

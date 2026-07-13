@@ -830,7 +830,7 @@ function buildInitialArmies(terrain, templates, count, centers, seed, playerCoun
     if (!hasCity) {
       let placed = false;
       // Try HQ position first.
-      const hqUnit = units.find(u => u.owner === owner && u.isHq);
+      const hqUnit = units.find(u => u.owner === owner && u.templateId === 'hq');
       const cr = hqUnit ? hqUnit.r : center.r;
       const cc = hqUnit ? hqUnit.c : center.c;
       if (inBounds(cr, cc) && terrain[cr][cc] !== 'water' &&

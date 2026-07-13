@@ -229,8 +229,17 @@ function compTemplate(name, comp) {
   return { id: 'adhoc', name, cells };
 }
 
+function aiUncapturedSettlementCount(me) {
+  let count = 0;
+  for (const s of Game.cities.concat(Game.villages || [])) {
+    if (s.owner == null) count++;
+    else if (s.owner !== me && window.isAtWar(me, s.owner)) count++;
+  }
+  return count;
+}
+
 function aiIsEarlyGame(me) {
-  return Game.round <= 4 && aiMyCityCount(me) < 5;
+  return Game.round <= 4 && aiMyCityCount(me) < 5 && aiUncapturedSettlementCount(me) >= 3;
 }
 
 function aiBuyUnits(me) {
