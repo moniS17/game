@@ -229,6 +229,10 @@ function compTemplate(name, comp) {
   return { id: 'adhoc', name, cells };
 }
 
+function aiIsEarlyGame(me) {
+  return Game.round <= 4 && aiMyCityCount(me) < 5;
+}
+
 function aiBuyUnits(me) {
   const roster = Object.keys(PIECES)
     .filter(t => t !== 'hq' && window.isUnlocked(me, t))
@@ -237,40 +241,60 @@ function aiBuyUnits(me) {
   const cheapest = PIECES[roster[0]].cost;
   const units = [];
   let budget = Game.economy[me];
+  const early = aiIsEarlyGame(me);
 
-  const earlyInfBudget = Math.floor(budget * 0.85);
-  const infCost = PIECES.infantry.cost;
-  let infSpent = 0;
-  while (infSpent + infCost <= earlyInfBudget && units.length < 100) {
-    const size = Math.max(1, Math.min(5, Math.floor((earlyInfBudget - infSpent) / infCost / 2) || 1));
-    let n = 0;
-    while (n < size && infSpent + infCost <= earlyInfBudget) { infSpent += infCost; n++; }
-    units.push({ type: 'infantry', size: n });
+  if (early) {
+    // Early game: buy many 1-company scouts to spread and grab settlements
+    const infCost = PIECES.infantry.cost;
+    while (budget >= infCost && units.length < 100) {
+      budget -= infCost;
+      units.push({ type: 'infantry', size: 1 });
+    }
+    Game.economy[me] = budget;
+    return units;
   }
-  budget -= infSpent;
+
+  // Mid/late game: buy battalion-sized units (4 companies each) for combat power
+  const BN_SIZE = 4;
 
   const enemyTanks = aiEnemyHasTanks(me);
   if (enemyTanks && window.isUnlocked(me, 'cannon')) {
-    const cannonCost = PIECES.cannon.cost;
-    const cannonBudget = Math.floor(budget / 2);
+    const cannonCost = PIECES.cannon.cost * BN_SIZE;
+    const cannonBudget = Math.floor(budget * 0.35);
     let spent = 0;
     while (spent + cannonCost <= cannonBudget && units.length < 100) {
-      const size = Math.max(1, Math.min(4, Math.floor((cannonBudget - spent) / cannonCost / 2) || 1));
-      let n = 0;
-      while (n < size && spent + cannonCost <= cannonBudget) { spent += cannonCost; n++; }
-      units.push({ type: 'cannon', size: n });
+      spent += cannonCost;
+      units.push({ type: 'cannon', size: BN_SIZE });
     }
     budget -= spent;
   }
 
+  // Main force: battalion-sized infantry, then mix in unlocked types
+  const mainBudget = Math.floor(budget * 0.7);
+  const infBnCost = PIECES.infantry.cost * BN_SIZE;
+  let mainSpent = 0;
+  while (mainSpent + infBnCost <= mainBudget && units.length < 100) {
+    mainSpent += infBnCost;
+    units.push({ type: 'infantry', size: BN_SIZE });
+  }
+  budget -= mainSpent;
+
+  // Remaining budget: cycle through unlocked types at battalion size, fall back to smaller
   while (budget >= cheapest && units.length < 100) {
-    const affordable = roster.filter(t => PIECES[t].cost <= budget);
-    const type = affordable[units.length % affordable.length];
-    const cost = PIECES[type].cost;
-    const size = Math.max(1, Math.min(4, Math.floor(budget / cost / 3) || 1));
-    let n = 0;
-    while (n < size && budget >= cost) { budget -= cost; n++; }
-    units.push({ type, size: n });
+    const affordable = roster.filter(t => PIECES[t].cost * BN_SIZE <= budget);
+    if (affordable.length) {
+      const type = affordable[units.length % affordable.length];
+      budget -= PIECES[type].cost * BN_SIZE;
+      units.push({ type, size: BN_SIZE });
+    } else {
+      // Not enough for a full battalion — buy the largest affordable company group
+      const any = roster.filter(t => PIECES[t].cost <= budget);
+      if (!any.length) break;
+      const type = any[any.length - 1]; // most expensive affordable
+      let n = 0;
+      while (n < BN_SIZE && budget >= PIECES[type].cost) { budget -= PIECES[type].cost; n++; }
+      if (n > 0) units.push({ type, size: n });
+    }
   }
   Game.economy[me] = budget;
   return units;
@@ -307,6 +331,7 @@ function aiDeployUnits(me, specs) {
   const threat = aiThreatRow(me);
   const tankThreat = aiEnemyTankRow(me);
   const noCities = aiHasNoCities(me);
+  const early = aiIsEarlyGame(me);
 
   function buildCands(toward) {
     const cands = [];
@@ -316,7 +341,10 @@ function aiDeployUnits(me, specs) {
         if (Game.territory[r] && Game.territory[r][c] !== me) continue;
         const s = window._stackAt(r, c);
         if (s.length && s[0].owner !== me) continue;
-        cands.push({ r, c, d: Rules.hexDist(r, c, toward.r, toward.c), isCity: Game.terrain[r][c] === 'city' });
+        const isCity = Game.terrain[r][c] === 'city';
+        const isVillage = Game.terrain[r][c] === 'village';
+        const nearSettlement = early ? aiNearbyUncapturedSettlements(r, c, me, 3) : 0;
+        cands.push({ r, c, d: Rules.hexDist(r, c, toward.r, toward.c), isCity, isVillage, nearSettlement });
       }
     }
     if (!cands.length) {
@@ -324,10 +352,13 @@ function aiDeployUnits(me, specs) {
         if (ci.owner !== me) continue;
         const s = window._stackAt(ci.r, ci.c);
         if (s.length && s[0].owner !== me) continue;
-        cands.push({ r: ci.r, c: ci.c, d: Rules.hexDist(ci.r, ci.c, toward.r, toward.c), isCity: true });
+        cands.push({ r: ci.r, c: ci.c, d: Rules.hexDist(ci.r, ci.c, toward.r, toward.c), isCity: true, isVillage: false, nearSettlement: 0 });
       }
     }
-    if (noCities) {
+    if (early) {
+      // Early game: spread units near uncaptured settlements, minimize stacking
+      cands.sort((a, b) => (b.nearSettlement - a.nearSettlement) || (b.isCity - a.isCity) || (b.isVillage - a.isVillage) || (a.d - b.d));
+    } else if (noCities) {
       cands.sort((a, b) => (b.isCity - a.isCity) || (a.d - b.d));
     } else {
       cands.sort((a, b) => a.d - b.d);
@@ -342,7 +373,10 @@ function aiDeployUnits(me, specs) {
   for (const spec of specs) {
     if (!spec.size) continue;
     const pool = spec.type === 'cannon' ? cannonCands : defaultCands;
-    const dest = pool.find(cand => window._stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT)
+    // Early game: spread scouts — prefer empty tiles
+    const maxPerTile = early ? 1 : Rules.STACK_LIMIT;
+    const dest = pool.find(cand => window._stackAt(cand.r, cand.c).length < maxPerTile)
+              || pool.find(cand => window._stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT)
               || defaultCands.find(cand => window._stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
     if (!dest) break;
     const tmpl = compTemplate(PIECES[spec.type].name, { [spec.type]: spec.size });
@@ -366,6 +400,59 @@ function aiSpendAndReinforce(me) {
     for (let i = 0; i < placed; i++) counts[specs[i].type] = (counts[specs[i].type] || 0) + specs[i].size;
     const names = Object.keys(counts).map(t => `${PIECES[t].name} ×${counts[t]}`);
     UI.log(`${PLAYERS[me].name} reinforced with ${names.join(', ')}.`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Early-game expansion — split multi-company units into scouts near settlements
+// ---------------------------------------------------------------------------
+
+function aiNearbyUncapturedSettlements(r, c, me, range) {
+  let count = 0;
+  for (const s of Game.cities.concat(Game.villages || [])) {
+    if (s.owner === me) continue;
+    if (s.owner != null && !window.isAtWar(me, s.owner)) continue;
+    if (Rules.hexDist(s.r, s.c, r, c) <= range) count++;
+  }
+  return count;
+}
+
+function aiSplitForExpansion(me) {
+  if (!aiIsEarlyGame(me)) return;
+
+  const tiles = [];
+  for (const [k, s] of Game.unitAt) {
+    if (s.length && s[0].owner === me) tiles.push(k);
+  }
+
+  for (const k0 of tiles) {
+    const [r, c] = k0.split(',').map(Number);
+    const stack = window._stackAt(r, c).filter(u => u.owner === me);
+
+    for (const u of stack) {
+      if (window.isHqUnit(u)) continue;
+      const subs = (u.parts || []).reduce((s, p) => s + p.count, 0);
+      if (subs < 2) continue;
+
+      const nearEnemies = aiCountNeighborEnemyUnits(r, c, me);
+      if (nearEnemies > 0) continue;
+
+      const nearSettlements = aiNearbyUncapturedSettlements(r, c, me, 4);
+      if (nearSettlements < 1) continue;
+
+      const room = Rules.STACK_LIMIT - window._stackAt(r, c).length;
+      if (room < 1) continue;
+
+      const toSplit = [];
+      for (const p of (u.parts || [])) {
+        for (let i = 0; i < p.count - 1 && toSplit.length < room && toSplit.length < nearSettlements; i++) {
+          toSplit.push(p.type);
+        }
+      }
+      if (toSplit.length > 0) {
+        window.splitUnit(u, toSplit);
+      }
+    }
   }
 }
 
@@ -738,6 +825,7 @@ function runAiTurn() {
   try {
     aiDiplomacy(me);
     aiSendGold(me);
+    aiSplitForExpansion(me);
     runAiFor(me);
     if (Game.winner === null) aiSpendAndReinforce(me);
   } catch (e) {

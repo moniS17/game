@@ -180,6 +180,8 @@
       `<li><b>Hard</b>: AI earns <span class="buff">1.7×</span> income per round — 70% more gold from all sources.</li>` +
       `<li><b>Normal</b>: AI earns <b>1×</b> income — same rate as the player.</li>` +
       `<li><b>Easy</b>: AI earns <span class="debuff">0.17×</span> income — only 17% of normal gold.</li>` +
+      `<li><b>Early expansion</b>: in the first few rounds the AI deploys <b>single-company scouts</b> spread across its territory and <b>splits</b> larger units near uncaptured settlements to grab cities and villages for income as fast as possible.</li>` +
+      `<li><b>Battalion doctrine</b>: once the AI has a stable economy (round 5+), it switches to buying <b>battalion-sized units</b> (4 companies each) for superior combat power. Fewer but stronger regiments.</li>` +
       `<li><b>Aggression</b>: when the AI has <b>~40% more units</b> than the player, it plays aggressively — attacking into defended positions (cities, forests, villages) instead of holding back.</li>` +
       `<li><b>Adaptation</b>: the AI mirrors the player's formation — if the player <b>spreads out</b> (5+ stacks), the AI spreads to match; if the player <b>concentrates</b> into few stacks (≤3), the AI converges on the largest enemy group.</li>` +
       `<li><b>HQ escort</b>: the AI protects its HQ by choosing between two strategies — <b>flee</b> toward its own edge when enemies are close and no escort is available, or <b>escort</b> by moving the HQ toward its largest friendly stack (≥4 regiments) for protection when the stack is nearby and in a safe area.</li>` +
@@ -260,6 +262,7 @@
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
       `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>companies</b>. A board piece is a <b>regiment</b> built from a template; its HP &amp; ATK are the <b>sum of its companies</b>. Many regiments can share one template. <b>4 companies</b> of the same type auto-merge into a <b>battalion</b>.</li>` +
+      `<li><b>NATO symbols</b>: units on the board are shown as NATO APP-6 standard rectangles — Infantry ╳, Tank ◯, Cannon ●, Cavalry ╱, Motorized ╳+wheel. A <b>single tick</b> (|) above the symbol means company-size (1–3 companies); <b>two ticks</b> (||) means battalion-size (4+ companies of the primary type).</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} regiments</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
       `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their regiments' ATK</b>, applied one regiment at a time; a regiment is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
