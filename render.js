@@ -416,9 +416,11 @@ window.Render = (function () {
 
   function unitEchelon(u) {
     if (!u.parts) return 'co';
-    let primaryCount = 0;
-    for (const p of u.parts) if (p.type === u.type) primaryCount += p.count;
-    return primaryCount >= 4 ? 'bn' : 'co';
+    let total = 0;
+    for (const p of u.parts) total += p.count;
+    if (total >= 12) return 'rgt';
+    if (total >= 4) return 'bn';
+    return 'co';
   }
 
   function drawNatoSymbol(cx, cy, w, h, type, color, echelon) {
@@ -460,7 +462,12 @@ window.Render = (function () {
       const tickH = Math.max(3, h * 0.22);
       const tickTop = cy - h / 2 - tickH - 1;
       ctx.lineWidth = Math.max(1, w * 0.05);
-      if (echelon === 'bn') {
+      if (echelon === 'rgt') {
+        const gap = w * 0.12;
+        ctx.beginPath(); ctx.moveTo(cx - gap, tickTop); ctx.lineTo(cx - gap, tickTop + tickH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, tickTop); ctx.lineTo(cx, tickTop + tickH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + gap, tickTop); ctx.lineTo(cx + gap, tickTop + tickH); ctx.stroke();
+      } else if (echelon === 'bn') {
         const gap = w * 0.08;
         ctx.beginPath(); ctx.moveTo(cx - gap, tickTop); ctx.lineTo(cx - gap, tickTop + tickH); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx + gap, tickTop); ctx.lineTo(cx + gap, tickTop + tickH); ctx.stroke();

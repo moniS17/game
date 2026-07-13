@@ -142,13 +142,12 @@
       <div class="row">
         <div class="grid5" id="grid"></div>
         <div class="side">
-          <h2 style="margin-top:0">Companies (click to paint)</h2>
-          <div class="palette" id="palette"></div>
-          <div id="addBn" style="margin-top:10px"></div>
+          <h2 style="margin-top:0">Add battalions (click cell to erase)</h2>
+          <div id="addBn" style="margin-top:4px"></div>
           <div class="stats" id="stats"></div>
           <div class="comp" id="comp"></div>
-          <div class="hint">Locked units are researched in the <a href="tech.html">Tech tree</a>.
-            A regiment holds up to 25 companies (5×5). Unit image = majority (&gt;50%) type.</div>
+          <div class="hint">A regiment is built from battalion templates only. Click a filled cell to erase it.
+            Unit image = majority (&gt;50%) type. Echelon: I = company, II = battalion, III = regiment.</div>
         </div>
       </div>
     </div>
@@ -254,7 +253,10 @@
         const t = cells[i];
         const cell = document.createElement("div");
         cell.className = "cell";
-        if (t) { cell.style.background = PLAYERS[me].color; cell.innerHTML = iconHtml(t); }
+        if (t) {
+          cell.style.background = isUnlocked(t) ? PLAYERS[me].color : '#4a4f55';
+          cell.innerHTML = iconHtml(t);
+        }
         cell.addEventListener("click", () => {
           cells[i] = (bnBrush && isUnlocked(bnBrush)) ? bnBrush : null;
           commit(); renderBnGrid(); renderBnStats(); renderBnLib(); renderAddBn();
@@ -314,7 +316,6 @@
     // REGIMENT DESIGNER
     // =========================================================================
     let selId = save.templates[me][0].id;
-    let brush = "infantry";
 
     const cur = () => save.templates[me].find((t) => t.id === selId) || save.templates[me][0];
 
@@ -348,35 +349,18 @@
         const t = cells[i];
         const cell = document.createElement("div");
         cell.className = "cell";
-        if (t) { cell.style.background = PLAYERS[me].color; cell.innerHTML = iconHtml(t); }
-        cell.addEventListener("click", () => {
-          cells[i] = (brush && isUnlocked(brush)) ? brush : null;
-          commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
-        });
+        if (t) {
+          cell.style.background = isUnlocked(t) ? PLAYERS[me].color : '#4a4f55';
+          cell.innerHTML = iconHtml(t);
+          cell.addEventListener("click", () => {
+            cells[i] = null;
+            commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
+          });
+        }
         grid.appendChild(cell);
       }
     }
 
-    function renderPalette() {
-      const pal = document.getElementById("palette");
-      pal.innerHTML = "";
-      const er = document.createElement("div");
-      er.className = "brush" + (brush === "" ? " sel" : "");
-      er.innerHTML = `<div class="ic">⌫</div><b>Erase</b>`;
-      er.addEventListener("click", () => { brush = ""; renderPalette(); });
-      pal.appendChild(er);
-      for (const t in PIECES) {
-        if (t === "hq") continue;
-        const locked = !isUnlocked(t);
-        const b = document.createElement("div");
-        b.className = "brush" + (brush === t ? " sel" : "") + (locked ? " locked" : "");
-        const e = eff(t);
-        b.innerHTML = `<div class="ic">${iconHtml(t)}</div><b>${PIECES[t].name}</b>` +
-          `<small>${GOLD_ICON}${PIECES[t].cost} · ${e.hp}hp · ${e.atk}atk</small>`;
-        if (!locked) b.addEventListener("click", () => { brush = t; renderPalette(); });
-        pal.appendChild(b);
-      }
-    }
 
     function renderStats() {
       const cells = cur().cells;
@@ -464,7 +448,7 @@
       input.value = cur().name;
     }
 
-    function render() { renderLib(); renderName(); renderGrid(); renderPalette(); renderStats(); renderComp(); renderAddBn(); }
+    function render() { renderLib(); renderName(); renderGrid(); renderStats(); renderComp(); renderAddBn(); }
 
     document.getElementById("nameInput").addEventListener("input", (e) => {
       cur().name = e.target.value || "Template"; commit(); renderLib();
