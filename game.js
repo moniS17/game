@@ -1274,6 +1274,20 @@ function checkWinner() {
   // Check if only 1 player (or allied bloc) remains
   const alive = [];
   for (let i = 0; i < n; i++) if (!Game.eliminated.has(i)) alive.push(i);
+  // PVE: if the human player is eliminated, game ends immediately
+  if (Game.mode === 'pve') {
+    const human = n > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
+    if (Game.eliminated.has(human)) {
+      let best = alive[0] || 0, bestUnits = 0;
+      for (const p of alive) {
+        const cnt = Game.units.filter(u => u.owner === p).length;
+        if (cnt > bestUnits) { bestUnits = cnt; best = p; }
+      }
+      Game.winner = best;
+      Game.winReason = `${PLAYERS[human].name} was eliminated`;
+      return;
+    }
+  }
   if (alive.length <= 1) {
     Game.winner = alive[0] != null ? alive[0] : 0;
     return;

@@ -49,6 +49,10 @@
     }
     .cell img { width: 74%; height: 74%; }
 
+    /* 2x2 grid for battalion designer */
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; width: 110px; flex: 0 0 auto; }
+    .grid2 .cell { width: 50px; height: 50px; }
+
     .side { flex: 1; min-width: 220px; }
     /* palette */
     .palette { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -77,6 +81,10 @@
     .add-bn:hover:not(:disabled) { background: #2f49b0; }
     .add-bn:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
     .add-bn img { width: 1em; height: 1em; }
+    .add-bn.custom { background: #6a4bd9; }
+    .add-bn.custom:hover:not(:disabled) { background: #5a3bc0; }
+
+    .section-divider { border: none; border-top: 1px solid #3a3f45; margin: 20px 0; }
 
     .bar { margin: 22px 0 0; display: flex; gap: 12px; }
     .bar a { flex: 1; text-align: center; padding: .8rem; border-radius: 8px; text-decoration: none; font-weight: 600; color: #fff; }
@@ -85,6 +93,8 @@
       body { padding: 14px; }
       h1 { font-size: 1.1rem; }
       .grid5 { width: 180px; }
+      .grid2 { width: 90px; }
+      .grid2 .cell { width: 40px; height: 40px; }
       .cell { font-size: .82rem; }
       .brush { min-width: 52px; padding: .4rem; }
     }
@@ -99,7 +109,29 @@
     <header><h1>▦ Regiment Designer</h1></header>
     <div class="who" id="who"></div>
 
-    <h2>Your templates</h2>
+    <!-- Battalion Designer Section -->
+    <h2>Battalion Templates</h2>
+    <div class="lib" id="bnLib"></div>
+    <div class="editor" id="bnEditor">
+      <div class="nameRow">
+        <input id="bnNameInput" type="text" maxlength="24" placeholder="Battalion name" />
+        <button class="del" id="bnDelBtn">Delete</button>
+      </div>
+      <div class="row">
+        <div class="grid2" id="bnGrid"></div>
+        <div class="side">
+          <h2 style="margin-top:0">Companies (click to paint)</h2>
+          <div class="palette" id="bnPalette"></div>
+          <div class="stats" id="bnStats"></div>
+          <div class="hint">A battalion is 4 companies. Stats = 1/4 of a regiment made of 4 identical battalions.</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+
+    <!-- Regiment Designer Section -->
+    <h2>Regiment Templates</h2>
     <div class="lib" id="lib"></div>
 
     <div class="editor" id="editor">
@@ -136,6 +168,7 @@
 
     const me = save.turn;
     const CAP = 25;
+    const BN_CAP = 4;
     save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
     save.unlocked[me] = save.unlocked[me] || {}; save.unlocked[me].infantry = true;
     save.upgrades = save.upgrades || [{}, {}];
@@ -145,9 +178,14 @@
       for (let i = 0; i < 4; i++) cells[i] = 'infantry';
       save.templates[me] = [{ id: 't1', name: 'Infantry', cells }];
     }
+    save.battalionTemplates = save.battalionTemplates || [];
+    while (save.battalionTemplates.length <= me) save.battalionTemplates.push([]);
+    if (!save.battalionTemplates[me].length) {
+      save.battalionTemplates[me] = [{ id: 'b1', name: 'Infantry Bn', cells: ['infantry','infantry','infantry','infantry'] }];
+    }
 
     document.getElementById("who").textContent =
-      PLAYERS[me].name + " — design reusable blueprints; buy regiments built from them on the Buy page.";
+      PLAYERS[me].name + " — design battalion and regiment blueprints; buy regiments on the Buy page.";
 
     const isUnlocked = (t) => t === "infantry" || !!save.unlocked[me][t];
     const steps = (t, s) => (save.upgrades[me] && save.upgrades[me][t] && save.upgrades[me][t][s]) || 0;
@@ -162,15 +200,110 @@
       return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n };
     }
 
-    let selId = save.templates[me][0].id;   // selected template
-    let brush = "infantry";                 // active subunit ("" = eraser)
-
-    const cur = () => save.templates[me].find((t) => t.id === selId) || save.templates[me][0];
     const commit = () => SaveState.save(save);
-
     function iconHtml(t) {
       return PIECES[t].art ? `<img src="${PIECES[t].art}" alt="">` : PIECES[t].code;
     }
+
+    // =========================================================================
+    // BATTALION DESIGNER
+    // =========================================================================
+    let bnSelId = save.battalionTemplates[me][0].id;
+    let bnBrush = "infantry";
+
+    const curBn = () => save.battalionTemplates[me].find(t => t.id === bnSelId) || save.battalionTemplates[me][0];
+
+    function renderBnLib() {
+      const lib = document.getElementById("bnLib");
+      lib.innerHTML = "";
+      for (const t of save.battalionTemplates[me]) {
+        const chip = document.createElement("div");
+        chip.className = "chip" + (t.id === bnSelId ? " active" : "");
+        const s = statsOf(t.cells);
+        chip.innerHTML = `${t.name} <span style="color:#9aa4ad">${GOLD_ICON}${s.cost}</span>`;
+        chip.addEventListener("click", () => { bnSelId = t.id; renderBn(); });
+        lib.appendChild(chip);
+      }
+      const add = document.createElement("div");
+      add.className = "chip new";
+      add.textContent = "+ New";
+      add.addEventListener("click", () => {
+        const id = "b" + Date.now().toString(36);
+        save.battalionTemplates[me].push({ id, name: "Battalion " + (save.battalionTemplates[me].length + 1), cells: new Array(BN_CAP).fill(null) });
+        bnSelId = id; commit(); renderBn(); renderAddBn();
+      });
+      lib.appendChild(add);
+    }
+
+    function renderBnGrid() {
+      const grid = document.getElementById("bnGrid");
+      const cells = curBn().cells;
+      grid.innerHTML = "";
+      for (let i = 0; i < BN_CAP; i++) {
+        const t = cells[i];
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        if (t) { cell.style.background = PLAYERS[me].color; cell.innerHTML = iconHtml(t); }
+        cell.addEventListener("click", () => {
+          cells[i] = (bnBrush && isUnlocked(bnBrush)) ? bnBrush : null;
+          commit(); renderBnGrid(); renderBnStats(); renderBnLib(); renderAddBn();
+        });
+        grid.appendChild(cell);
+      }
+    }
+
+    function renderBnPalette() {
+      const pal = document.getElementById("bnPalette");
+      pal.innerHTML = "";
+      const er = document.createElement("div");
+      er.className = "brush" + (bnBrush === "" ? " sel" : "");
+      er.innerHTML = `<div class="ic">⌫</div><b>Erase</b>`;
+      er.addEventListener("click", () => { bnBrush = ""; renderBnPalette(); });
+      pal.appendChild(er);
+      for (const t in PIECES) {
+        if (t === "hq") continue;
+        const locked = !isUnlocked(t);
+        const b = document.createElement("div");
+        b.className = "brush" + (bnBrush === t ? " sel" : "") + (locked ? " locked" : "");
+        const e = eff(t);
+        b.innerHTML = `<div class="ic">${iconHtml(t)}</div><b>${PIECES[t].name}</b>` +
+          `<small>${GOLD_ICON}${PIECES[t].cost} · ${e.hp}hp · ${e.atk}atk</small>`;
+        if (!locked) b.addEventListener("click", () => { bnBrush = t; renderBnPalette(); });
+        pal.appendChild(b);
+      }
+    }
+
+    function renderBnStats() {
+      const cells = curBn().cells;
+      const s = statsOf(cells);
+      document.getElementById("bnStats").innerHTML =
+        `<span class="k">Companies</span> <b>${s.n}</b>/4 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
+        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
+    }
+
+    function renderBnName() {
+      document.getElementById("bnNameInput").value = curBn().name;
+    }
+
+    function renderBn() { renderBnLib(); renderBnName(); renderBnGrid(); renderBnPalette(); renderBnStats(); }
+
+    document.getElementById("bnNameInput").addEventListener("input", (e) => {
+      curBn().name = e.target.value || "Battalion"; commit(); renderBnLib(); renderAddBn();
+    });
+    document.getElementById("bnDelBtn").addEventListener("click", () => {
+      const arr = save.battalionTemplates[me];
+      if (arr.length <= 1) { alert("Keep at least one battalion template."); return; }
+      const i = arr.findIndex(t => t.id === bnSelId);
+      arr.splice(i, 1); bnSelId = arr[0].id; commit(); renderBn(); renderAddBn();
+    });
+
+    // =========================================================================
+    // REGIMENT DESIGNER
+    // =========================================================================
+    let selId = save.templates[me][0].id;
+    let brush = "infantry";
+
+    const cur = () => save.templates[me].find((t) => t.id === selId) || save.templates[me][0];
 
     function renderLib() {
       const lib = document.getElementById("lib");
@@ -214,13 +347,13 @@
     function renderPalette() {
       const pal = document.getElementById("palette");
       pal.innerHTML = "";
-      // eraser
       const er = document.createElement("div");
       er.className = "brush" + (brush === "" ? " sel" : "");
       er.innerHTML = `<div class="ic">⌫</div><b>Erase</b>`;
       er.addEventListener("click", () => { brush = ""; renderPalette(); });
       pal.appendChild(er);
       for (const t in PIECES) {
+        if (t === "hq") continue;
         const locked = !isUnlocked(t);
         const b = document.createElement("div");
         b.className = "brush" + (brush === t ? " sel" : "") + (locked ? " locked" : "");
@@ -269,20 +402,42 @@
       const cells = cur().cells;
       const empty = emptySlots(cells);
       let html = "";
+      // Standard single-type battalion buttons
       for (const t in PIECES) {
         if (t === "hq") continue;
         const locked = !isUnlocked(t);
         const disabled = locked || empty < 4;
         html += `<button class="add-bn" data-type="${t}" ${disabled ? "disabled" : ""}>+ Bn ${PIECES[t].name}</button>`;
       }
+      // Custom battalion template buttons
+      for (const bn of save.battalionTemplates[me]) {
+        const filled = bn.cells.filter(c => c !== null).length;
+        if (filled === 0) continue;
+        const allUnlocked = bn.cells.every(c => c === null || isUnlocked(c));
+        const disabled = !allUnlocked || empty < filled;
+        html += `<button class="add-bn custom" data-bnid="${bn.id}" ${disabled ? "disabled" : ""}>+ ${bn.name}</button>`;
+      }
       el.innerHTML = html;
-      el.querySelectorAll(".add-bn").forEach(btn => {
+      el.querySelectorAll(".add-bn[data-type]").forEach(btn => {
         btn.addEventListener("click", () => {
           const type = btn.dataset.type;
           const cells = cur().cells;
           let added = 0;
           for (let i = 0; i < CAP && added < 4; i++) {
             if (cells[i] === null) { cells[i] = type; added++; }
+          }
+          commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
+        });
+      });
+      el.querySelectorAll(".add-bn[data-bnid]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const bn = save.battalionTemplates[me].find(b => b.id === btn.dataset.bnid);
+          if (!bn) return;
+          const cells = cur().cells;
+          const toAdd = bn.cells.filter(c => c !== null);
+          let added = 0;
+          for (let i = 0; i < CAP && added < toAdd.length; i++) {
+            if (cells[i] === null) { cells[i] = toAdd[added]; added++; }
           }
           commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
         });
@@ -306,6 +461,7 @@
       arr.splice(i, 1); selId = arr[0].id; commit(); render();
     });
 
+    renderBn();
     render();
   </script>
 </body>

@@ -137,7 +137,8 @@
         <li><b>Peace</b>: units cannot attack each other, but cannot pass through each other's territory either.</li>
         <li><b>Alliance</b>: units can move through allied territory and stacks. Allies can send each other gold.</li>
         <li><b>AI Takeover</b>: when handing your turn to the AI, choose a strategy — <b>Focus Attack</b> (aggressive), <b>Focus Defend</b> (cautious), or <b>Balanced</b> (default).</li>
-        <li><b>Elimination</b>: when a country loses its HQ, has no units for 3 turns, or no cities for 7 turns, it is eliminated.</li>
+        <li><b>Elimination</b>: a country is eliminated when it has <b>no units for 3 turns</b> or <b>no cities for 7 turns</b>. HQ destruction is instant (see HQ section below).</li>
+        <li><b>PvE</b>: if the human player is eliminated, the game ends immediately — AI countries fighting each other won't continue without you.</li>
         <li><b>Peace deals</b>: eliminated territory is redistributed among the countries that fought it, proportional to damage dealt. Cities count for 2 points, villages for 1.</li>
         <li><b>Victory</b>: the game ends when only one country (or alliance bloc) survives.</li>
       </ul>
@@ -262,6 +263,7 @@
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
       `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>companies</b>. A board piece is a <b>regiment</b> built from a template; its HP &amp; ATK are the <b>sum of its companies</b>. Many regiments can share one template. <b>4 companies</b> of the same type auto-merge into a <b>battalion</b>.</li>` +
+      `<li><b>Battalion Designer</b>: design reusable 4-company battalion blueprints in the Template page. Stamp them into the regiment grid as building blocks — a battalion's stats equal 1/4 of a regiment composed of 4 identical battalions.</li>` +
       `<li><b>NATO symbols</b>: units on the board are shown as NATO APP-6 standard rectangles — Infantry ╳, Tank ◯, Cannon ●, Cavalry ╱, Motorized ╳+wheel. A <b>single tick</b> (|) above the symbol means company-size (1–3 companies); <b>two ticks</b> (||) means battalion-size (4+ companies of the primary type).</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} regiments</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
@@ -281,7 +283,7 @@
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting regiments (up to <b>3 × board height</b>).</li>` +
       `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other unit types with gold ` +
         `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
-      `<li><b>Templates</b>: design reusable 5×5 blueprints of companies; a regiment's <b>cost = the sum of its companies' costs</b>.</li>` +
+      `<li><b>Templates</b>: design reusable 5×5 regiment blueprints and 4-company battalion blueprints; a regiment's <b>cost = the sum of its companies' costs</b>.</li>` +
       `<li><b>Buy</b>: pick a template and buy regiments built from it; deploy them in your zone.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
         `strengthen a unit type wherever it appears, and apply only to the <b>current game</b>.</li>`;
