@@ -55,7 +55,8 @@ const Game = {
   toPlace: [],          // [{templateId, owner}] bought units awaiting deployment
   upgrades: [{}, {}],   // per-player, per-subunit-type upgrade steps: {infantry:{atk,hp,mov}}
   unlocked: [{ infantry: true }, { infantry: true }], // tech tree: subunits each player has researched
-  templates: [[], []],  // per-player library of blueprints: {id, name, cells:[type|null ×25]}
+  templates: [[], []],  // per-player library of blueprints: {id, name, cells:[bnId|null ×25]}
+  battalionTemplates: [[], []], // per-player battalion blueprints: {id, name, cells:[type|null ×12]}
   creative: false,      // creative mode: enables the in-game "+gold" cheat button
   aiPlayer: 1,          // pve: which side (0/1) the AI controls; null in pvp
   eliminated: new Set(),
@@ -133,22 +134,41 @@ function upgradeHqTemplate(owner, type) {
 }
 
 // ---------------------------------------------------------------------------
-// Templates — reusable 5x5 blueprints of subunits. A UNIT is built from one.
-// A template is { id, name, cells:[subunitType|null ×25] }. Its cost/HP/ATK/MOV
-// are the aggregate of its subunits (subunit stats from units.js PIECES, plus
-// the owner's per-type upgrades snapshotted at build time).
+// Templates — reusable 5x5 blueprints of battalions. A UNIT is built from one.
+// A template is { id, name, cells:[bnId|null ×25] }. Each cell references a
+// battalion template whose cells hold company types. HQ templates are special
+// (cells hold company types directly, not battalion IDs).
 // ---------------------------------------------------------------------------
 const TEMPLATE_CELLS = 25; // 5x5
+const BN_CELLS = 12;       // 3x4
+
+// Resolve a division template's cells into flat company types, expanding battalion IDs.
+function templateCompanies(owner, tmpl) {
+  const companies = [];
+  if (tmpl.isHq) {
+    for (const t of (tmpl.cells || [])) if (t) companies.push(t);
+    return companies;
+  }
+  const bns = Game.battalionTemplates[owner] || [];
+  for (const cellId of (tmpl.cells || [])) {
+    if (!cellId) continue;
+    const bn = bns.find(b => b.id === cellId);
+    if (bn) {
+      for (const t of (bn.cells || [])) if (t) companies.push(t);
+    }
+  }
+  return companies;
+}
 
 // Count subunits per type in a template's cells -> {type: count}.
-function templateComp(tmpl) {
+function templateComp(owner, tmpl) {
   const comp = {};
-  for (const t of (tmpl.cells || [])) if (t) comp[t] = (comp[t] || 0) + 1;
+  for (const t of templateCompanies(owner, tmpl)) comp[t] = (comp[t] || 0) + 1;
   return comp;
 }
-// Total subunits placed in a template.
-function templateSize(tmpl) {
-  let n = 0; for (const t of (tmpl.cells || [])) if (t) n++; return n;
+// Total companies in a template (resolved through battalions).
+function templateSize(owner, tmpl) {
+  return templateCompanies(owner, tmpl).length;
 }
 // Per-type effective subunit stats for `owner` (base + upgrades).
 function subunitEff(owner, type) {
@@ -159,15 +179,15 @@ function subunitEff(owner, type) {
     mov: d.movement_speed + upgradeSteps(owner, type, 'mov') * UPGRADE.mov.gain,
   };
 }
-// Gold cost of one unit built from `tmpl` = sum of its subunits' base costs.
+// Gold cost of one unit built from `tmpl` = sum of its companies' base costs.
 function templateCost(owner, tmpl) {
   let c = 0;
-  for (const t of (tmpl.cells || [])) if (t) c += PIECES[t].cost;
+  for (const t of templateCompanies(owner, tmpl)) c += PIECES[t].cost;
   return c;
 }
 // Aggregate stats of a unit built from `tmpl` by `owner`.
 function templateStats(owner, tmpl) {
-  const comp = templateComp(tmpl);
+  const comp = templateComp(owner, tmpl);
   let maxHp = 0, atk = 0, mov = Infinity;
   const parts = [];
   for (const type in comp) {
@@ -178,15 +198,14 @@ function templateStats(owner, tmpl) {
     mov = Math.min(mov, e.mov);
   }
   if (!isFinite(mov)) mov = 0;
-  // Primary subunit (drawn on the board): >50% majority wins; fallback to most numerous, ties broken by cost.
-  const total = templateSize(tmpl);
+  const total = templateSize(owner, tmpl);
   let primary = null, best = -1;
   for (const type in comp) {
     if (comp[type] * 2 > total) { primary = type; break; }
     const score = comp[type] * 100 + PIECES[type].cost;
     if (score > best) { best = score; primary = type; }
   }
-  return { parts, maxHp, atk, mov, primary, cost: templateCost(owner, tmpl), size: templateSize(tmpl) };
+  return { parts, maxHp, atk, mov, primary, cost: templateCost(owner, tmpl), size: total };
 }
 // Build a board unit from a template. Returns null for an empty template.
 function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
@@ -201,10 +220,15 @@ function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
     acted: !!o.acted, moved: false,
   };
 }
-// A player's default starting template library: one "Infantry" division (4 battalions of 4 infantry = 16 companies).
+// A player's default starting template library: one "Infantry" division with 4 infantry battalions.
+function defaultBattalionTemplates() {
+  const cells = new Array(BN_CELLS).fill(null);
+  for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+  return [{ id: 'b1', name: 'Infantry Bn', cells }];
+}
 function defaultTemplates() {
   const cells = new Array(TEMPLATE_CELLS).fill(null);
-  for (let i = 0; i < 16; i++) cells[i] = 'infantry';
+  for (let i = 0; i < 4; i++) cells[i] = 'b1';
   return [{ id: 't1', name: 'Infantry', cells }];
 }
 function findTemplate(owner, id) {
@@ -555,6 +579,7 @@ function serialize() {
     ecoUpgrades: (Game.ecoUpgrades || []).map(e => ({ ...e })),
     unlocked: Game.unlocked.map(u => ({ ...u })),
     templates: Game.templates.map(arr => (arr || []).map(cloneTemplate)),
+    battalionTemplates: Game.battalionTemplates.map(arr => (arr || []).map(cloneTemplate)),
     pendingSpawns: [],
     eliminated: [...Game.eliminated],
     diplomacy: Game.diplomacy.map(row => row.slice()),
@@ -935,6 +960,9 @@ function loadIntoGame(st) {
   Game.templates = Array.from({ length: n }, (_, i) =>
     (st.templates && st.templates[i] && st.templates[i].length) ? st.templates[i].map(cloneTemplate) : defaultTemplates()
   );
+  Game.battalionTemplates = Array.from({ length: n }, (_, i) =>
+    (st.battalionTemplates && st.battalionTemplates[i] && st.battalionTemplates[i].length) ? st.battalionTemplates[i].map(cloneTemplate) : defaultBattalionTemplates()
+  );
   for (let p = 0; p < n; p++) {
     if (!Game.templates[p].some(t => t.isHq)) Game.templates[p].push(makeHqTemplate());
   }
@@ -1062,9 +1090,9 @@ function placeAt(r, c) {
     const sp = Game.toPlace[i];
     if (sp.owner !== owner) { i++; continue; }
     const tmpl = findTemplate(owner, sp.templateId);
-    if (!tmpl || !templateSize(tmpl)) { Game.toPlace.splice(i, 1); continue; } // stale/empty
+    if (!tmpl || !templateSize(owner, tmpl)) { Game.toPlace.splice(i, 1); continue; } // stale/empty
     // Every subunit in the template must be unlocked to deploy it.
-    if (Object.keys(templateComp(tmpl)).some((t) => !isUnlocked(owner, t))) { blockedLocked = true; i++; continue; }
+    if (Object.keys(templateComp(owner, tmpl)).some((t) => !isUnlocked(owner, t))) { blockedLocked = true; i++; continue; }
     Game.toPlace.splice(i, 1);
     const u = makeUnitFromTemplate(owner, tmpl, r, c, { acted: true, movesLeft: 0 }); // arrive; act next turn
     if (!u) continue;
@@ -1338,8 +1366,8 @@ function unitCostFromParts(u) {
 
 function refitUnitsTo(tmplId) {
   const tmpl = findTemplate(Game.turn, tmplId);
-  if (!tmpl || !templateSize(tmpl)) return 0;
-  if (Object.keys(templateComp(tmpl)).some((t) => !isUnlocked(Game.turn, t))) return 0;
+  if (!tmpl || !templateSize(Game.turn, tmpl)) return 0;
+  if (Object.keys(templateComp(Game.turn, tmpl)).some((t) => !isUnlocked(Game.turn, t))) return 0;
   const eligible = Game.selUnits.filter((u) => canRefitUnit(u) && u.templateId !== tmplId);
   if (!eligible.length) return 0;
   const newCost = templateCost(Game.turn, tmpl);

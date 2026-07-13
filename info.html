@@ -262,8 +262,8 @@
 
     // --- Combat & stacking rules ---
     document.getElementById("combatRules").innerHTML =
-      `<li>A <b>template</b> is a reusable 5×5 blueprint of <b>companies</b>. A board piece is a <b>division</b> built from a template; its HP &amp; ATK are the <b>sum of its companies</b>. Many divisions can share one template. <b>4 companies</b> of the same type auto-merge into a <b>battalion</b>.</li>` +
-      `<li><b>Battalion Designer</b>: design reusable 4-company battalion blueprints in the Template page. Stamp them into the division grid as building blocks — a battalion's stats equal 1/4 of a division composed of 4 identical battalions.</li>` +
+      `<li>A <b>division template</b> is a 5×5 grid of <b>battalion slots</b>. Each slot references a <b>battalion template</b> (3×4 grid of companies). A board piece is a <b>division</b> built from a template; its HP &amp; ATK are the <b>sum of all its companies</b> across all battalions.</li>` +
+      `<li><b>Battalion Designer</b>: design reusable battalion blueprints (up to 12 companies each) in the Template page. Add them as building blocks into the division grid — one slot per battalion.</li>` +
       `<li><b>NATO symbols</b>: units on the board are shown as NATO APP-6 standard rectangles — Infantry ╳, Tank ◯, Cannon ●, Cavalry ╱, Motorized ╳+wheel. <b>Two ticks</b> (||) above the symbol means battalion-size (4–11 companies); <b>three ticks</b> (|||) means division-size (12+ companies).</li>` +
       `<li>Up to <b>${Rules.STACK_LIMIT} divisions</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
       `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
@@ -283,7 +283,7 @@
       `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting divisions (up to <b>3 × board height</b>).</li>` +
       `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other unit types with gold ` +
         `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
-      `<li><b>Templates</b>: design reusable 5×5 division blueprints and 4-company battalion blueprints; a division's <b>cost = the sum of its companies' costs</b>.</li>` +
+      `<li><b>Templates</b>: design 5×5 division blueprints (filled with battalion slots) and 3×4 battalion blueprints (filled with companies); a division's <b>cost = the sum of all its companies' costs</b>.</li>` +
       `<li><b>Buy</b>: pick a template and buy divisions built from it; deploy them in your zone.</li>` +
       `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
         `strengthen a unit type wherever it appears, and apply only to the <b>current game</b>.</li>`;

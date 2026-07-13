@@ -795,8 +795,8 @@
       let rows = '';
       for (const tmpl of templates) {
         if (tmpl.isHq) continue;
-        if (!templateSize(tmpl)) continue;
-        const comp = templateComp(tmpl);
+        if (!templateSize(Game.turn, tmpl)) continue;
+        const comp = templateComp(Game.turn, tmpl);
         if (Object.keys(comp).some((t) => !isUnlocked(Game.turn, t))) continue;
         const canRefit = eligible.filter((u) => u.templateId !== tmpl.id);
         if (!canRefit.length) continue;

@@ -94,11 +94,23 @@
       hp: PIECES[t].hp + steps(t, "hp") * UPGRADES.hp.gain,
       mov: PIECES[t].movement_speed + steps(t, "mov") * UPGRADES.mov.gain,
     });
-    // Aggregate a battalion's cost / stats, and whether every unit is unlocked.
+    save.battalionTemplates = save.battalionTemplates || [];
+    while (save.battalionTemplates.length <= buyer) save.battalionTemplates.push([]);
+    function findBn(id) { return save.battalionTemplates[buyer].find(b => b.id === id); }
+    function divCompanies(cells) {
+      const companies = [];
+      for (const bnId of cells) {
+        if (!bnId) continue;
+        const bn = findBn(bnId);
+        if (bn) for (const t of bn.cells) { if (t) companies.push(t); }
+      }
+      return companies;
+    }
     function statsOf(tmpl) {
-      let cost = 0, hp = 0, atk = 0, mov = Infinity, n = 0, ok = true;
-      for (const t of (tmpl.cells || [])) {
-        if (!t) continue; n++; const e = eff(t);
+      const companies = tmpl.isHq ? (tmpl.cells || []).filter(t => t) : divCompanies(tmpl.cells || []);
+      let cost = 0, hp = 0, atk = 0, mov = Infinity, n = companies.length, ok = true;
+      for (const t of companies) {
+        const e = eff(t);
         cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov);
         if (!isUnlocked(t)) ok = false;
       }
@@ -170,9 +182,10 @@
         const card = document.createElement("div");
         card.className = "card";
         card.dataset.id = tmpl.id;
+        const bnCount = (tmpl.cells || []).filter(c => c !== null).length;
         card.innerHTML =
           `<div class="top">${miniHtml(tmpl)}<div><h3>${tmpl.name}</h3>` +
-            `<div class="stats"><span class="cost">${GOLD_ICON}${s.cost}</span> each · ${s.n}/25 companies</div></div></div>` +
+            `<div class="stats"><span class="cost">${GOLD_ICON}${s.cost}</span> each · ${bnCount} bn / ${s.n} co</div></div></div>` +
           `<div class="stats">❤️ HP <b>${s.hp}</b> &nbsp; ⚔️ ATK <b>${s.atk}</b> &nbsp; 👟 MOV <b>${s.mov}</b></div>` +
           `<div class="stepper">` +
             `<button class="dec10" type="button">−10</button>` +

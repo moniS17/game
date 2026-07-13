@@ -222,11 +222,20 @@ function aiThreatRow(me) {
   return best || center;
 }
 
-function compTemplate(name, comp) {
-  const cells = new Array(TEMPLATE_CELLS).fill(null);
-  let i = 0;
-  for (const type in comp) for (let k = 0; k < comp[type] && i < TEMPLATE_CELLS; k++) cells[i++] = type;
-  return { id: 'adhoc', name, cells };
+function compTemplate(me, name, comp) {
+  const bnCells = new Array(BN_CELLS).fill(null);
+  let ci = 0;
+  for (const type in comp) for (let k = 0; k < comp[type] && ci < BN_CELLS; k++) bnCells[ci++] = type;
+  Game.battalionTemplates[me] = Game.battalionTemplates[me] || [];
+  const key = bnCells.join(',');
+  let bn = Game.battalionTemplates[me].find(b => b.cells.join(',') === key);
+  if (!bn) {
+    bn = { id: 'ai_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6), name: name + ' Bn', cells: bnCells };
+    Game.battalionTemplates[me].push(bn);
+  }
+  const divCells = new Array(TEMPLATE_CELLS).fill(null);
+  divCells[0] = bn.id;
+  return { id: 'adhoc', name, cells: divCells };
 }
 
 function aiUncapturedSettlementCount(me) {
@@ -405,7 +414,7 @@ function aiDeployUnits(me, specs) {
               || pool.find(cand => window._stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT)
               || defaultCands.find(cand => window._stackAt(cand.r, cand.c).length < Rules.STACK_LIMIT);
     if (!dest) break;
-    const tmpl = compTemplate(PIECES[spec.type].name, { [spec.type]: spec.size });
+    const tmpl = compTemplate(me, PIECES[spec.type].name, { [spec.type]: spec.size });
     const u = window._makeUnit(me, tmpl, dest.r, dest.c, { acted: true, movesLeft: 0 });
     if (!u) continue;
     Game.units.push(u);

@@ -146,8 +146,8 @@
           <div id="addBn" style="margin-top:4px"></div>
           <div class="stats" id="stats"></div>
           <div class="comp" id="comp"></div>
-          <div class="hint">A division is built from battalion templates only. Click a filled cell to erase it.
-            Unit image = majority (&gt;50%) type. Echelon: II = battalion, III = division.</div>
+          <div class="hint">A division holds up to 25 battalions (5×5). Each cell = one battalion template. Click a filled cell to erase it.
+            Unit image = majority (&gt;50%) type across all companies. Echelon: II = battalion, III = division.</div>
         </div>
       </div>
     </div>
@@ -174,7 +174,7 @@
     save.templates = save.templates || [[], []];
     if (!save.templates[me] || !save.templates[me].length) {
       const cells = new Array(CAP).fill(null);
-      for (let i = 0; i < 16; i++) cells[i] = 'infantry';
+      for (let i = 0; i < 4; i++) cells[i] = 'b1';
       save.templates[me] = [{ id: 't1', name: 'Infantry', cells }];
     }
     save.battalionTemplates = save.battalionTemplates || [];
@@ -200,6 +200,22 @@
       for (const t of cells) { if (!t) continue; n++; const e = eff(t); cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov); }
       return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n };
     }
+    function findBn(id) { return save.battalionTemplates[me].find(b => b.id === id); }
+    function divCompanies(cells) {
+      const companies = [];
+      for (const bnId of cells) {
+        if (!bnId) continue;
+        const bn = findBn(bnId);
+        if (bn) for (const t of bn.cells) { if (t) companies.push(t); }
+      }
+      return companies;
+    }
+    function divStatsOf(cells) {
+      const companies = divCompanies(cells);
+      let cost = 0, hp = 0, atk = 0, mov = Infinity;
+      for (const t of companies) { const e = eff(t); cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov); }
+      return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n: companies.length };
+    }
     function majorityType(cells) {
       const counts = {};
       let total = 0;
@@ -208,6 +224,9 @@
       let best = null, bestN = 0;
       for (const t in counts) { if (counts[t] > bestN) { bestN = counts[t]; best = t; } }
       return best;
+    }
+    function divMajorityType(cells) {
+      return majorityType(divCompanies(cells));
     }
 
     const commit = () => SaveState.save(save);
@@ -326,7 +345,7 @@
         if (t.isHq) continue;
         const chip = document.createElement("div");
         chip.className = "chip" + (t.id === selId ? " active" : "");
-        chip.innerHTML = `${t.name} <span style="color:#9aa4ad">${GOLD_ICON}${statsOf(t.cells).cost}</span>`;
+        chip.innerHTML = `${t.name} <span style="color:#9aa4ad">${GOLD_ICON}${divStatsOf(t.cells).cost}</span>`;
         chip.addEventListener("click", () => { selId = t.id; render(); });
         lib.appendChild(chip);
       }
@@ -346,12 +365,18 @@
       const cells = cur().cells;
       grid.innerHTML = "";
       for (let i = 0; i < CAP; i++) {
-        const t = cells[i];
+        const bnId = cells[i];
         const cell = document.createElement("div");
         cell.className = "cell";
-        if (t) {
-          cell.style.background = isUnlocked(t) ? PLAYERS[me].color : '#4a4f55';
-          cell.innerHTML = iconHtml(t);
+        if (bnId) {
+          const bn = findBn(bnId);
+          if (bn) {
+            const maj = majorityType(bn.cells);
+            const allUnlocked = bn.cells.every(c => c === null || isUnlocked(c));
+            cell.style.background = allUnlocked ? PLAYERS[me].color : '#4a4f55';
+            cell.innerHTML = maj ? iconHtml(maj) : '?';
+            cell.title = bn.name;
+          }
           cell.addEventListener("click", () => {
             cells[i] = null;
             commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
@@ -364,17 +389,18 @@
 
     function renderStats() {
       const cells = cur().cells;
-      const s = statsOf(cells);
-      const maj = majorityType(cells);
+      const s = divStatsOf(cells);
+      const bnCount = cells.filter(c => c !== null).length;
+      const maj = divMajorityType(cells);
       document.getElementById("stats").innerHTML =
-        `<span class="k">Companies</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
+        `<span class="k">Battalions</span> <b>${bnCount}</b>/25 &nbsp; <span class="k">Companies</span> <b>${s.n}</b> &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
         `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>` +
         (maj ? `<br><span class="k">Type</span> <b>${PIECES[maj].name}</b>` : '');
     }
 
     function compOf(cells) {
       const counts = {};
-      for (const t of cells) { if (t) counts[t] = (counts[t] || 0) + 1; }
+      for (const t of divCompanies(cells)) counts[t] = (counts[t] || 0) + 1;
       return counts;
     }
 
@@ -383,15 +409,9 @@
       const counts = compOf(cells);
       const parts = [];
       for (const t in counts) {
-        const bn = Math.floor(counts[t] / 4);
-        const co = counts[t] % 4;
-        let label = "";
-        if (bn > 0) label += `${bn} Bn`;
-        if (bn > 0 && co > 0) label += " + ";
-        if (co > 0) label += `${co} Co`;
-        parts.push(`<b>${label}</b> ${PIECES[t].name}`);
+        parts.push(`<b>${counts[t]}</b> ${PIECES[t].name}`);
       }
-      document.getElementById("comp").innerHTML = parts.length ? parts.join(" &nbsp;·&nbsp; ") : "";
+      document.getElementById("comp").innerHTML = parts.length ? "Companies: " + parts.join(" &nbsp;·&nbsp; ") : "";
     }
 
     function emptySlots(cells) { return cells.filter(c => c === null).length; }
@@ -401,24 +421,19 @@
       const cells = cur().cells;
       const empty = emptySlots(cells);
       let html = "";
-      // Custom battalion template buttons (shown first)
       for (const bn of save.battalionTemplates[me]) {
         const filled = bn.cells.filter(c => c !== null).length;
         if (filled === 0) continue;
         const allUnlocked = bn.cells.every(c => c === null || isUnlocked(c));
-        const disabled = !allUnlocked || empty < filled;
+        const disabled = !allUnlocked || empty < 1;
         html += `<button class="add-bn custom" data-bnid="${bn.id}" ${disabled ? "disabled" : ""}>+ ${bn.name}</button>`;
       }
       el.innerHTML = html;
       el.querySelectorAll(".add-bn[data-bnid]").forEach(btn => {
         btn.addEventListener("click", () => {
-          const bn = save.battalionTemplates[me].find(b => b.id === btn.dataset.bnid);
-          if (!bn) return;
           const cells = cur().cells;
-          const toAdd = bn.cells.filter(c => c !== null);
-          let added = 0;
-          for (let i = 0; i < CAP && added < toAdd.length; i++) {
-            if (cells[i] === null) { cells[i] = toAdd[added]; added++; }
+          for (let i = 0; i < CAP; i++) {
+            if (cells[i] === null) { cells[i] = btn.dataset.bnid; break; }
           }
           commit(); renderGrid(); renderStats(); renderLib(); renderComp(); renderAddBn();
         });
