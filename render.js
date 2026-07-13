@@ -415,12 +415,12 @@ window.Render = (function () {
   }
 
   function unitEchelon(u) {
-    if (!u.parts) return 'co';
+    if (!u.parts) return null;
     let total = 0;
     for (const p of u.parts) total += p.count;
     if (total >= 12) return 'rgt';
     if (total >= 4) return 'bn';
-    return 'co';
+    return null;
   }
 
   function drawNatoSymbol(cx, cy, w, h, type, color, echelon) {
@@ -471,8 +471,6 @@ window.Render = (function () {
         const gap = w * 0.08;
         ctx.beginPath(); ctx.moveTo(cx - gap, tickTop); ctx.lineTo(cx - gap, tickTop + tickH); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cx + gap, tickTop); ctx.lineTo(cx + gap, tickTop + tickH); ctx.stroke();
-      } else {
-        ctx.beginPath(); ctx.moveTo(cx, tickTop); ctx.lineTo(cx, tickTop + tickH); ctx.stroke();
       }
     }
     ctx.lineCap = 'butt';
