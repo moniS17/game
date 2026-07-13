@@ -126,6 +126,19 @@
     button.small:disabled { background: #333a41; color: #6b727a; cursor: not-allowed; }
 
     .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; }
+    .stat-chip {
+      display: inline-block; cursor: pointer; position: relative;
+      text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px;
+    }
+    .stat-chip:hover { color: #fff; }
+    .stat-dropdown {
+      display: none; position: absolute; left: 0; top: 100%; z-index: 50;
+      background: #23282e; border: 1px solid #3a3f45; border-radius: 6px; padding: 6px 10px;
+      font-size: .78rem; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      min-width: 100px;
+    }
+    .stat-chip.open .stat-dropdown { display: block; }
+    .stat-dropdown div { padding: 2px 0; }
     .muted { color: #9aa4ad; }
     .hint { font-size: .75rem; color: #7e8893; }
 
@@ -166,6 +179,25 @@
     .refit-action { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
     .refit-gain { color: #4caf50; font-weight: 600; }
     .refit-spend { color: #ff5a52; font-weight: 600; }
+
+    /* Peace proposal popup */
+    .peace-popup {
+      position: fixed; inset: 0; z-index: 110; padding: 20px;
+      background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+      -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    }
+    .peace-box {
+      background: #23282e; border: 1px solid #3a3f45; border-radius: 10px; padding: 22px;
+      text-align: center; min-width: 260px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+    .peace-box h3 { font-size: 1.1rem; margin-bottom: 12px; }
+    .peace-box p { font-size: .9rem; color: #c5ccd3; margin-bottom: 16px; }
+    .peace-btns { display: flex; gap: 12px; justify-content: center; }
+    .peace-btns button { width: auto; padding: 10px 24px; font-size: .95rem; margin: 0; }
+    .peace-accept { background: #2e7d46 !important; }
+    .peace-accept:hover { background: #266b3b !important; }
+    .peace-reject { background: #b71c1c !important; }
+    .peace-reject:hover { background: #8e1515 !important; }
 
     .utmpl-grid i.split-pick { cursor: pointer; transition: transform .1s, box-shadow .1s; }
     .utmpl-grid i.split-pick:hover { transform: scale(1.12); box-shadow: 0 0 6px rgba(255,255,255,0.3); }
@@ -367,6 +399,18 @@
       <h2 id="peaceDealTitle" style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Peace Deal</h2>
       <div id="peaceDealBody" class="peace-deal-list"></div>
       <button id="peaceDealOk">OK</button>
+    </div>
+  </div>
+
+  <!-- Peace proposal popup — shown when AI proposes peace to human -->
+  <div id="peaceProposalPopup" class="peace-popup" style="display:none">
+    <div class="peace-box">
+      <h3 id="peaceProposalTitle"></h3>
+      <p id="peaceProposalBody"></p>
+      <div class="peace-btns">
+        <button id="peaceAcceptBtn" class="peace-accept">Accept</button>
+        <button id="peaceRejectBtn" class="peace-reject">Reject</button>
+      </div>
     </div>
   </div>
 
@@ -576,14 +620,33 @@
         let statsHtml = '';
         for (let p = 0; p < PLAYERS.length; p++) {
           if (Game.eliminated && Game.eliminated.has(p)) continue;
-          const uCount = Game.units.filter(u => u.owner === p).length;
+          const units = Game.units.filter(u => u.owner === p);
+          const uCount = units.length;
           const cCount = Game.cities.filter(ci => ci.owner === p).length;
           const vCount = (Game.villages || []).filter(v => v.owner === p).length;
           const gRound = Rules.income(Game.cities, Game.villages || [], p, (Game.ecoUpgrades && Game.ecoUpgrades[p]) || {});
-          const bCount = Game.units.filter(u => u.owner === p).reduce((s, u) => s + (u.parts || []).reduce((a, pt) => a + pt.count, 0), 0);
-          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>${uCount}units ${cCount}cities ${vCount}village ${gRound}gold/round ${bCount}companies</span></div>`;
+
+          // Company breakdown by type
+          const coCounts = {};
+          for (const u of units) for (const pt of (u.parts || [])) coCounts[pt.type] = (coCounts[pt.type] || 0) + pt.count;
+          let coDropdown = '';
+          for (const t in coCounts) coDropdown += `<div>${PIECES[t].name}: ${coCounts[t]}</div>`;
+
+          statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>` +
+            `<span class="stat-chip" data-drop="bn${p}">${uCount} bn<span class="stat-dropdown">${coDropdown || '<div>No units</div>'}</span></span> ` +
+            `${cCount} city ` +
+            `<span class="stat-chip" data-drop="g${p}">${gRound} gold/rnd<span class="stat-dropdown"><div>${vCount} village</div></span></span>` +
+            `</span></div>`;
         }
         statsEl.innerHTML = statsHtml;
+        statsEl.querySelectorAll('.stat-chip').forEach(chip => {
+          chip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasOpen = chip.classList.contains('open');
+            document.querySelectorAll('.stat-chip.open').forEach(c => c.classList.remove('open'));
+            if (!wasOpen) chip.classList.add('open');
+          });
+        });
 
         // placement banner
         const placePanel = document.getElementById('placePanel');
@@ -727,6 +790,7 @@
     // (info.html) to keep the board sidebar focused on play.
 
     document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
+    document.addEventListener('click', () => document.querySelectorAll('.stat-chip.open').forEach(c => c.classList.remove('open')));
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
     document.getElementById('templateBtn').addEventListener('click', () => { window.location.href = 'template.html'; });
     document.getElementById('techBtn').addEventListener('click', () => { window.location.href = 'tech.html'; });
@@ -769,6 +833,37 @@
       document.getElementById('peaceDealBody').innerHTML = body;
       document.getElementById('peaceDealModal').style.display = 'flex';
     };
+
+    // Peace proposal popup — process queued AI proposals one at a time
+    function showNextPeaceProposal() {
+      if (!Game.peaceProposals || !Game.peaceProposals.length) return;
+      const humanPlayer = Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
+      const idx = Game.peaceProposals.findIndex(p => p.to === humanPlayer);
+      if (idx === -1) return;
+      const proposal = Game.peaceProposals[idx];
+      document.getElementById('peaceProposalTitle').textContent =
+        PLAYERS[proposal.from].name + ' proposes peace';
+      document.getElementById('peaceProposalBody').textContent =
+        PLAYERS[proposal.from].name + ' wants to end the war with ' + PLAYERS[proposal.to].name + '. Do you accept?';
+      document.getElementById('peaceProposalPopup').style.display = 'flex';
+
+      document.getElementById('peaceAcceptBtn').onclick = () => {
+        window.setDiplomacy(proposal.from, proposal.to, 'peace');
+        UI.log(PLAYERS[proposal.to].name + ' accepts peace with ' + PLAYERS[proposal.from].name + '.');
+        Game.peaceProposals.splice(idx, 1);
+        document.getElementById('peaceProposalPopup').style.display = 'none';
+        UI.refresh();
+        Render.render();
+        showNextPeaceProposal();
+      };
+      document.getElementById('peaceRejectBtn').onclick = () => {
+        UI.log(PLAYERS[proposal.to].name + ' rejects peace with ' + PLAYERS[proposal.from].name + '.');
+        Game.peaceProposals.splice(idx, 1);
+        document.getElementById('peaceProposalPopup').style.display = 'none';
+        showNextPeaceProposal();
+      };
+    }
+    window.showPeaceProposals = showNextPeaceProposal;
 
     // Combat-log pop-up: OK closes it; the checkbox preference is remembered.
     document.getElementById('logModalOk').addEventListener('click', () => {
@@ -997,6 +1092,7 @@
     })();
   </script>
   <script src="input.js"></script>
+  <script src="minicpm.js"></script>
   <script src="ai.js"></script>
   <script src="game.js"></script>
 </body>

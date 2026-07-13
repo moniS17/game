@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- NATO Artillery/Cannon: filled circle inside rectangle -->
-  <rect x="8" y="14" width="48" height="36" rx="2" fill="none" stroke="#263238" stroke-width="4"/>
-  <circle cx="32" cy="32" r="10" fill="#263238"/>
-</svg>

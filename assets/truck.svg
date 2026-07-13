@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- NATO Motorized Infantry: crossed diagonals (X) inside rectangle + wheel below -->
-  <rect x="8" y="10" width="48" height="32" rx="2" fill="none" stroke="#263238" stroke-width="4"/>
-  <line x1="12" y1="14" x2="52" y2="38" stroke="#263238" stroke-width="4" stroke-linecap="round"/>
-  <line x1="52" y1="14" x2="12" y2="38" stroke="#263238" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="32" cy="52" r="7" fill="none" stroke="#263238" stroke-width="3"/>
-</svg>

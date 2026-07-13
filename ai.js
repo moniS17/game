@@ -781,6 +781,7 @@ function aiDiplomacy(me) {
   const enemies = window.getEnemies(me);
   const allies = window.getAllies(me);
   const myUnits = aiUnitCount(me);
+  const myCities = aiMyCityCount(me);
 
   // Find strongest and weakest enemies
   let strongestEnemy = null, strongestCount = 0;
@@ -791,24 +792,34 @@ function aiDiplomacy(me) {
     if (c < weakestCount) { weakestCount = c; weakestEnemy = e; }
   }
 
-  // Try to ally with weak neighbors against strong threats
   for (let p = 0; p < PLAYERS.length; p++) {
     if (p === me || Game.eliminated.has(p)) continue;
     const rel = Game.diplomacy[me][p];
     const theirUnits = aiUnitCount(p);
 
-    if (rel === 'war' && enemies.length > 1 && theirUnits < myUnits * 0.7) {
-      // Propose peace with weak enemies when fighting multiple fronts
-      window.setDiplomacy(me, p, 'peace');
-      UI.log(`${PLAYERS[me].name} proposes peace with ${PLAYERS[p].name}.`);
-    } else if (rel === 'peace' && strongestEnemy !== null && strongestCount > myUnits * 1.5) {
-      // Ally against a dominant threat
-      if (p !== strongestEnemy && theirUnits >= myUnits * 0.5) {
-        window.setDiplomacy(me, p, 'alliance');
-        UI.log(`${PLAYERS[me].name} forms alliance with ${PLAYERS[p].name} against ${PLAYERS[strongestEnemy].name}.`);
+    if (rel === 'war') {
+      // Desperate: 1 city left or outnumbered 2:1 — beg for peace with anyone
+      if (myCities <= 1 || theirUnits >= myUnits * 2) {
+        window.proposePeace(me, p);
+        continue;
+      }
+      // Multi-front: propose peace with weaker enemy
+      if (enemies.length > 1 && theirUnits < myUnits * 0.7) {
+        window.proposePeace(me, p);
+      }
+    } else if (rel === 'peace') {
+      // Declare war on much weaker neighbor (2× units advantage)
+      if (theirUnits > 0 && myUnits >= theirUnits * 2 && myCities >= 3) {
+        window.setDiplomacy(me, p, 'war');
+        UI.log(`${PLAYERS[me].name} declares war on ${PLAYERS[p].name}!`);
+      } else if (strongestEnemy !== null && strongestCount > myUnits * 1.5) {
+        // Ally against a dominant threat
+        if (p !== strongestEnemy && theirUnits >= myUnits * 0.5) {
+          window.setDiplomacy(me, p, 'alliance');
+          UI.log(`${PLAYERS[me].name} forms alliance with ${PLAYERS[p].name} against ${PLAYERS[strongestEnemy].name}.`);
+        }
       }
     } else if (rel === 'alliance' && enemies.length === 0) {
-      // Break alliance when no enemies remain (we're the last alliance bloc)
       window.setDiplomacy(me, p, 'war');
       UI.log(`${PLAYERS[me].name} breaks alliance with ${PLAYERS[p].name}!`);
     }
@@ -875,6 +886,10 @@ function runAiTurn() {
 }
 
 function runAiTakeover(strategy) {
+  if (Game.aiEngine === 'cpm' && window.runCpmTakeover) {
+    window.runCpmTakeover(strategy);
+    return;
+  }
   if (Game.winner !== null) return;
   if (window.inPlacement()) { UI.log('Deploy your units first.'); UI.refresh(); return; }
   if (Game.orderQueue.length) window.clearAllOrders();
@@ -893,3 +908,9 @@ function runAiTakeover(strategy) {
 
 window.runAiTurn = runAiTurn;
 window.runAiTakeover = runAiTakeover;
+window.runAiFor = runAiFor;
+window.aiSpendAndReinforce = aiSpendAndReinforce;
+window.aiDeployUnits = aiDeployUnits;
+window.aiDiplomacy = aiDiplomacy;
+window.aiSendGold = aiSendGold;
+window.aiSplitForExpansion = aiSplitForExpansion;

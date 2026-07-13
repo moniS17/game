@@ -236,6 +236,16 @@
       <div class="note">Only applies to Player vs AI — the AI takes the other side.</div>
     </div>
 
+    <div class="opt" id="aiEngineOpt">
+      <h2>AI Engine</h2>
+      <div class="seg" id="aiEngineSeg">
+        <button type="button" data-v="algorithm" class="on">🔧 Algorithm</button>
+        <button type="button" data-v="cpm">🧠 MiniCPM</button>
+      </div>
+      <div class="note" id="aiEngineNote">Built-in algorithmic AI (instant, no setup needed).</div>
+      <div id="cpmStatus" style="display:none;font-size:.7rem;margin-top:.3rem;"></div>
+    </div>
+
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
     <button class="editor-btn" id="editorBtn">🎨 Creative Mode <small>Edit Map →</small></button>
     <div id="loadedInfo" class="loaded-badge" style="display:none;"></div>
@@ -416,6 +426,42 @@
     const firstMove = wireSeg('firstSeg'); // which side moves first (both modes)
     const humanSide = wireSeg('sideSeg');  // which side the human plays (PvE only)
 
+    // AI engine toggle — uses string values, not numbers
+    (function wireAiEngine() {
+      const seg = document.getElementById('aiEngineSeg');
+      const note = document.getElementById('aiEngineNote');
+      const status = document.getElementById('cpmStatus');
+      seg.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-v]');
+        if (!btn) return;
+        for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b === btn);
+        if (btn.dataset.v === 'cpm') {
+          note.textContent = 'Local MiniCPM LLM (requires running start-minicpm.sh).';
+          checkCpmStatus();
+        } else {
+          note.textContent = 'Built-in algorithmic AI (instant, no setup needed).';
+          status.style.display = 'none';
+        }
+      });
+      function checkCpmStatus() {
+        status.style.display = '';
+        status.textContent = '⏳ Checking MiniCPM server...';
+        status.style.color = '#9aa4ad';
+        fetch('http://127.0.0.1:18766/health', { signal: AbortSignal.timeout(2000) })
+          .then(r => {
+            if (r.ok) { status.textContent = '✅ MiniCPM server is running'; status.style.color = '#7cb342'; }
+            else { status.textContent = '❌ Server responded with error'; status.style.color = '#ff7a76'; }
+          })
+          .catch(() => {
+            status.textContent = '❌ MiniCPM server not found — run ./start-minicpm.sh first';
+            status.style.color = '#ff7a76';
+          });
+      }
+    })();
+    function aiEngine() {
+      return document.getElementById('aiEngineSeg').querySelector('button.on').dataset.v;
+    }
+
     // Start a new game: validate size, hand off to index.html which generates the map.
     // `difficulty` (easy|normal|hard) only applies to PvE and tunes gold income.
     function start(mode, difficulty) {
@@ -437,7 +483,8 @@
         startUnits: Math.max(0, Math.floor(Number(startInput.value)) || 0),
         randomStart: randomChk.checked,
         playerCount: playerCount,
-        playerNames: playerNames };
+        playerNames: playerNames,
+        aiEngine: aiEngine() };
       if (playerCount > 2) {
         intentObj.mode = 'pve';
         intentObj.human = 0;

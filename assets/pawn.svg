@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- NATO Infantry: crossed diagonals (X) inside rectangle -->
-  <rect x="8" y="14" width="48" height="36" rx="2" fill="none" stroke="#263238" stroke-width="4"/>
-  <line x1="12" y1="18" x2="52" y2="46" stroke="#263238" stroke-width="4" stroke-linecap="round"/>
-  <line x1="52" y1="18" x2="12" y2="46" stroke="#263238" stroke-width="4" stroke-linecap="round"/>
-</svg>

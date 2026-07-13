@@ -42,12 +42,12 @@ window.PIECES = {
   cannon: {
     // Siege gun: heavy hitter, slow.
     name: 'Artillery', code: 'n', art: 'assets/artillery.svg',
-    hp: 10, attack: 30, movement_speed: 3, cost: 40,
+    hp: 9, attack: 31, movement_speed: 3, cost: 40,
   },
   tank: {
     // Heavy: high hp and attack, decent speed, most expensive.
     name: 'Tank', code: 't', art: 'assets/tank.svg',
-    hp: 30, attack: 30, movement_speed: 6, cost: 100,
+    hp: 30, attack: 31, movement_speed: 6, cost: 100,
   },
   hq: {
     // Headquarters: unique command unit (1 per side). Rally ability.

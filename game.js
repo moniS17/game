@@ -69,6 +69,8 @@ const Game = {
   winner: null,
   winReason: null,
   orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
+  peaceProposals: [],   // [{from, to}] queued AI peace proposals awaiting human response
+  aiEngine: 'algorithm', // 'algorithm' | 'cpm' — which AI drives non-human players
 };
 let nextOrderId = 1;
 let nextId = 1;
@@ -307,6 +309,15 @@ function setDiplomacy(a, b, state) {
   if (!Game.diplomacy.length) return;
   Game.diplomacy[a][b] = state;
   Game.diplomacy[b][a] = state;
+}
+function proposePeace(from, to) {
+  if (Game.aiPlayer != null && to !== Game.aiPlayer && !Game.eliminated.has(to)) {
+    Game.peaceProposals.push({ from, to });
+    UI.log(`${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
+  } else {
+    setDiplomacy(from, to, 'peace');
+    UI.log(`${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
+  }
 }
 function getEnemies(player) {
   const enemies = [];
@@ -585,6 +596,7 @@ function serialize() {
     diplomacy: Game.diplomacy.map(row => row.slice()),
     damageDealt: Game.damageDealt.map(row => row.slice()),
     aiStrategy: (Game.aiStrategy || []).slice(),
+    aiEngine: Game.aiEngine || 'algorithm',
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
   if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
@@ -972,6 +984,7 @@ function loadIntoGame(st) {
   Game.damageDealt = (st.damageDealt && st.damageDealt.length === n) ? st.damageDealt.map(r => r.slice()) : initDamageDealt(n);
   Game.aiStrategy = (st.aiStrategy || new Array(n).fill(null)).slice();
   while (Game.aiStrategy.length < n) Game.aiStrategy.push(null);
+  Game.aiEngine = st.aiEngine || 'algorithm';
   Game.spawnCenters = st.spawnCenters || [];
 
   rebuildUnitAt();
@@ -1837,7 +1850,11 @@ function advanceTo(player) {
   Render.autoZoom();
   // AI turn: in PvE mode, all non-human players are AI
   const isAi = Game.mode === 'pve' && player !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
-  if (isAi) window.runAiTurn();
+  if (isAi) {
+    if (Game.aiEngine === 'cpm') window.runCpmTurn();
+    else window.runAiTurn();
+  }
+  else if (window.showPeaceProposals) window.showPeaceProposals();
 }
 
 function nextRound() {
@@ -1901,6 +1918,7 @@ function boot() {
     } else {
       st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames);
     }
+    st.aiEngine = intent.aiEngine || 'algorithm';
     SaveState.save(st);
   } else {
     st = SaveState.load();
@@ -1913,7 +1931,10 @@ function boot() {
   // If the AI is set to move first, let it take its opening turn immediately.
   const isAi = Game.mode === 'pve' && Game.winner === null &&
     Game.turn !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
-  if (isAi) window.runAiTurn();
+  if (isAi) {
+    if (Game.aiEngine === 'cpm') window.runCpmTurn();
+    else window.runAiTurn();
+  }
 }
 
 window.addEventListener('resize', () => Render.resize());
@@ -1978,6 +1999,7 @@ window._bestAdjacentForAttack = bestAdjacentForAttack;
 window.isAtWar = isAtWar;
 window.isAlly = isAlly;
 window.setDiplomacy = setDiplomacy;
+window.proposePeace = proposePeace;
 window.getEnemies = getEnemies;
 window.getAllies = getAllies;
 window.nextPlayer = nextPlayer;
