@@ -247,6 +247,7 @@
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
+    <div class="note" style="text-align:center; margin:-0.6rem 0 0.8rem; font-size:.65rem; color:#6b727a;">This is for in-game free money</div>
     <button class="editor-btn" id="editorBtn">🎨 Creative Mode <small>Edit Map →</small></button>
     <div id="loadedInfo" class="loaded-badge" style="display:none;"></div>
     <button class="load-btn" id="loadMapBtn" style="display:none;">📂 Load Map</button>
@@ -375,20 +376,31 @@
       }
     }
 
+    let selectedHuman = 0;
     function renderCountryList() {
       const mx = parseInt(ccInput.max) || 8;
       const n = Math.max(2, Math.min(mx, parseInt(ccInput.value) || 2));
+      if (selectedHuman >= n) selectedHuman = 0;
       let html = '';
       for (let i = 0; i < n; i++) {
         const color = PLAYER_COLORS[i];
         const name = 'Country' + (i + 1);
+        const youTag = i === selectedHuman
+          ? '<span class="you-tag on" style="font-size:.7rem;color:#7cb342;cursor:pointer;font-weight:700;" data-i="' + i + '">(You) ✓</span>'
+          : '<span class="you-tag" style="font-size:.7rem;color:#555;cursor:pointer;" data-i="' + i + '">Play</span>';
         html += `<div class="country-item">` +
           `<span class="country-swatch" style="background:${color}"></span>` +
           `<input type="text" class="country-name" data-i="${i}" value="${name}" maxlength="20" />` +
-          (i === 0 ? '<span style="font-size:.7rem;color:#9aa4ad;">(You)</span>' : '') +
+          youTag +
           `</div>`;
       }
       countryList.innerHTML = html;
+      countryList.querySelectorAll('.you-tag').forEach(el => {
+        el.addEventListener('click', () => {
+          selectedHuman = parseInt(el.dataset.i);
+          renderCountryList();
+        });
+      });
       // Hide "You play" and "First move" if N>2
       if (n > 2) {
         sideOpt.style.display = 'none';
@@ -487,7 +499,7 @@
         aiEngine: aiEngine() };
       if (playerCount > 2) {
         intentObj.mode = 'pve';
-        intentObj.human = 0;
+        intentObj.human = selectedHuman;
         intentObj.start = 0;
       }
       if (loadedMap) intentObj.customMap = loadedMap;

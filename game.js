@@ -71,6 +71,7 @@ const Game = {
   orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
   peaceProposals: [],   // [{from, to}] queued AI peace proposals awaiting human response
   aiEngine: 'algorithm', // 'algorithm' | 'cpm' — which AI drives non-human players
+  humanPlayer: 0,        // which player index the human controls in PvE
 };
 let nextOrderId = 1;
 let nextId = 1;
@@ -597,6 +598,7 @@ function serialize() {
     damageDealt: Game.damageDealt.map(row => row.slice()),
     aiStrategy: (Game.aiStrategy || []).slice(),
     aiEngine: Game.aiEngine || 'algorithm',
+    humanPlayer: Game.humanPlayer || 0,
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
   if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
@@ -625,7 +627,7 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames) {
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames, humanPlayer) {
   const maxP = Algorithms.maxPlayers(rows || Algorithms.GRID, cols || Algorithms.GRID);
   const n = Math.min(maxP, playerCount || 2);
   if (playerNames) window.initPlayers(n, playerNames);
@@ -653,15 +655,16 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   const territoryGrid = buildInitialTerritory(Board.ROWS, Board.COLS, n, centers);
   const units = buildInitialArmies(terrain, templates, count, centers, seed, n, cities, territoryGrid);
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
+  const hp = humanPlayer != null ? humanPlayer : (ai != null ? (1 - ai) : 0);
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const incomeMult = new Array(n).fill(1);
   if (ai !== null) {
     const aiMult = diff === 'easy' ? 0.17 : diff === 'hard' ? 1.7 : 1;
-    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) incomeMult[i] = aiMult;
+    for (let i = 0; i < n; i++) if (i !== hp) incomeMult[i] = aiMult;
   }
   const startGold = new Array(n).fill(ECONOMY.start);
   if (ai !== null) {
-    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = 170;
+    for (let i = 0; i < n; i++) if (i !== hp) startGold[i] = 170;
   }
   return {
     seed, mode, rows: Board.ROWS, cols: Board.COLS, playerCount: n,
@@ -686,7 +689,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
   };
 }
 
-function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, difficulty, playerCount, playerNames) {
+function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, difficulty, playerCount, playerNames, humanPlayer) {
   const n = playerCount || 2;
   if (playerNames) window.initPlayers(n, playerNames);
   else window.initPlayers(n);
@@ -694,10 +697,11 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
   Board.setDims(rows, cols);
   const diff = (difficulty === 'easy' || difficulty === 'hard') ? difficulty : 'normal';
   const ai = mode === 'pve' ? ((aiPlayer === 0 || aiPlayer === 1) ? aiPlayer : 1) : null;
+  const hp = humanPlayer != null ? humanPlayer : (ai != null ? (1 - ai) : 0);
   const incomeMult = new Array(n).fill(1);
   if (ai !== null) {
     const aiMult = diff === 'easy' ? 0.17 : diff === 'hard' ? 1.7 : 1;
-    for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) incomeMult[i] = aiMult;
+    for (let i = 0; i < n; i++) if (i !== hp) incomeMult[i] = aiMult;
   }
   const templates = [];
   for (let i = 0; i < n; i++) { templates.push(defaultTemplates()); templates[i].push(makeHqTemplate()); }
@@ -763,7 +767,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
   }
   const startGold = new Array(n).fill(ECONOMY.start);
   if (customMap.economy) for (let i = 0; i < Math.min(customMap.economy.length, n); i++) startGold[i] = customMap.economy[i];
-  if (ai !== null) { for (let i = 0; i < n; i++) if (i !== (n > 2 ? 0 : (1 - ai))) startGold[i] = Math.max(startGold[i], 170); }
+  if (ai !== null) { for (let i = 0; i < n; i++) if (i !== hp) startGold[i] = Math.max(startGold[i], 170); }
   return {
     seed: 0, mode, rows, cols, playerCount: n,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
@@ -985,6 +989,7 @@ function loadIntoGame(st) {
   Game.aiStrategy = (st.aiStrategy || new Array(n).fill(null)).slice();
   while (Game.aiStrategy.length < n) Game.aiStrategy.push(null);
   Game.aiEngine = st.aiEngine || 'algorithm';
+  Game.humanPlayer = st.humanPlayer != null ? st.humanPlayer : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
   Game.spawnCenters = st.spawnCenters || [];
 
   rebuildUnitAt();
@@ -1319,7 +1324,7 @@ function checkWinner() {
   for (let i = 0; i < n; i++) if (!Game.eliminated.has(i)) alive.push(i);
   // PVE: if the human player is eliminated, game ends immediately
   if (Game.mode === 'pve') {
-    const human = n > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
+    const human = Game.humanPlayer || 0;
     if (Game.eliminated.has(human)) {
       let best = alive[0] || 0, bestUnits = 0;
       for (const p of alive) {
@@ -1849,7 +1854,7 @@ function advanceTo(player) {
   Render.render();
   Render.autoZoom();
   // AI turn: in PvE mode, all non-human players are AI
-  const isAi = Game.mode === 'pve' && player !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
+  const isAi = Game.mode === 'pve' && player !== Game.humanPlayer;
   if (isAi) {
     if (Game.aiEngine === 'cpm') window.runCpmTurn();
     else window.runAiTurn();
@@ -1912,13 +1917,16 @@ function boot() {
     const mode = intent.mode || 'pvp';
     const start = intent.start === 1 ? 1 : 0;
     const aiPlayer = mode === 'pve' ? (intent.human === 1 ? 0 : 1) : null;
+    const humanPlayer = intent.human != null ? intent.human : (aiPlayer != null ? (1 - aiPlayer) : 0);
     const pc = intent.playerCount || 2;
     if (intent.customMap) {
-      st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty, pc, intent.playerNames);
+      st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty, pc, intent.playerNames, humanPlayer);
     } else {
-      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames);
+      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames, humanPlayer);
     }
     st.aiEngine = intent.aiEngine || 'algorithm';
+    st.humanPlayer = humanPlayer;
+    if (st.aiEngine === 'cpm' && window.MiniCPM) window.MiniCPM.ensureRunning();
     SaveState.save(st);
   } else {
     st = SaveState.load();
@@ -1930,7 +1938,7 @@ function boot() {
   UI.refresh();
   // If the AI is set to move first, let it take its opening turn immediately.
   const isAi = Game.mode === 'pve' && Game.winner === null &&
-    Game.turn !== (Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0));
+    Game.turn !== Game.humanPlayer;
   if (isAi) {
     if (Game.aiEngine === 'cpm') window.runCpmTurn();
     else window.runAiTurn();
@@ -1983,6 +1991,7 @@ window.startNewGame = (mode) => { SaveState.setIntent({ action: 'new', mode }); 
 
 // Internal helpers exposed for ai.js and input.js
 window._stackAt = stackAt;
+window._rebuildUnitAt = rebuildUnitAt;
 window._moveGroup = moveGroup;
 window._doAttack = doAttack;
 window._addToStack = addToStack;

@@ -249,7 +249,22 @@ const MiniCPM = (function () {
     window._advanceTo(window.nextPlayer(me));
   }
 
-  return { available, runCpmTurn, runCpmTakeover };
+  async function ensureRunning() {
+    if (await available()) return;
+    const toast = document.createElement('div');
+    toast.style.cssText =
+      'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
+      'background:#b8412f;color:#fff;padding:.8rem 1.4rem;border-radius:8px;' +
+      'font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center;';
+    toast.textContent = '⚠ MiniCPM server not reachable — run ./start-minicpm.sh then reload';
+    document.body.appendChild(toast);
+    for (let i = 0; i < 5; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      if (await available()) { toast.remove(); return; }
+    }
+  }
+
+  return { available, ensureRunning, runCpmTurn, runCpmTakeover };
 })();
 
 window.MiniCPM = MiniCPM;

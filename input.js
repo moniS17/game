@@ -10,6 +10,15 @@
 function handleTapAt(r, c) {
   if (Game.winner !== null || !Board.inBounds(r, c)) return;
 
+  if (Game.creative && window._creativePaintOwner != null) {
+    const owner = window._creativePaintOwner === -1 ? null : window._creativePaintOwner;
+    if (!Game.territory[r]) Game.territory[r] = new Array(Board.COLS).fill(null);
+    Game.territory[r][c] = owner;
+    window._persist();
+    Render.render();
+    return;
+  }
+
   if (window._rallyMode) {
     window._rallyMode = false;
     window.rallyAllUnits(r, c);

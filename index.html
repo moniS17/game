@@ -301,6 +301,17 @@
       <!-- creative-mode cheat: only shown when the game was started in creative mode -->
       <button id="creativeBtn" style="display:none; background:#8e5bd9;">🎁 +171,717 gold</button>
 
+      <!-- creative-mode country toolbox -->
+      <div id="countryToolbox" style="display:none; background:#1b2026; border:1px solid #6a4bd9; border-radius:8px; padding:.6rem; margin-bottom:8px;">
+        <div style="font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; color:#9aa4ad; margin-bottom:.4rem;">Country Toolbox</div>
+        <div id="countrySwatches" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:.5rem;"></div>
+        <div style="display:flex; gap:4px;">
+          <button id="addCountryBtn" style="flex:1; padding:4px; font-size:.75rem; background:#2e7d46; border:none; border-radius:4px; color:#fff; cursor:pointer;">+ Country</button>
+          <button id="rmCountryBtn" style="flex:1; padding:4px; font-size:.75rem; background:#6b3030; border:none; border-radius:4px; color:#fff; cursor:pointer;">− Country</button>
+        </div>
+        <div id="paintHint" style="font-size:.62rem; color:#6b727a; margin-top:.3rem;"></div>
+      </div>
+
       <div id="playerStats"></div>
 
       <div class="shop-row">
@@ -614,6 +625,8 @@
 
         // creative-mode cheat button (only when the game is in creative mode)
         document.getElementById('creativeBtn').style.display = Game.creative ? '' : 'none';
+        document.getElementById('countryToolbox').style.display = Game.creative ? '' : 'none';
+        if (Game.creative) window._refreshCountrySwatches && window._refreshCountrySwatches();
 
         // Dynamic player stats
         const statsEl = document.getElementById('playerStats');
@@ -798,6 +811,95 @@
     document.getElementById('infoBtn').addEventListener('click', () => { window.location.href = 'info.html'; });
     document.getElementById('menuBtn').addEventListener('click', () => { window.location.href = 'menu.html'; });
     document.getElementById('creativeBtn').addEventListener('click', () => window.creativeGrant());
+
+    // --- Creative mode country toolbox ---
+    window._creativePaintOwner = null;
+    window._refreshCountrySwatches = function () {
+      const el = document.getElementById('countrySwatches');
+      if (!el) return;
+      let html = '';
+      for (let i = 0; i < PLAYERS.length; i++) {
+        const sel = window._creativePaintOwner === i;
+        html += `<button class="ctswatch" data-p="${i}" style="width:28px;height:28px;border-radius:4px;border:2px solid ${sel ? '#fff' : '#333'};background:${PLAYERS[i].color};cursor:pointer;padding:0;" title="${PLAYERS[i].name}"></button>`;
+      }
+      // "Erase" swatch (null owner)
+      const erasing = window._creativePaintOwner === -1;
+      html += `<button class="ctswatch" data-p="-1" style="width:28px;height:28px;border-radius:4px;border:2px solid ${erasing ? '#fff' : '#333'};background:#444;cursor:pointer;padding:0;font-size:.7rem;color:#aaa;" title="Erase territory">✕</button>`;
+      el.innerHTML = html;
+      el.querySelectorAll('.ctswatch').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = parseInt(btn.dataset.p);
+          window._creativePaintOwner = window._creativePaintOwner === p ? null : p;
+          window._refreshCountrySwatches();
+          const hint = document.getElementById('paintHint');
+          if (window._creativePaintOwner != null) {
+            hint.textContent = window._creativePaintOwner === -1 ? 'Tap tiles to erase territory' : 'Tap tiles to paint ' + PLAYERS[window._creativePaintOwner].name + ' territory';
+          } else {
+            hint.textContent = '';
+          }
+        });
+      });
+    };
+
+    document.getElementById('addCountryBtn').addEventListener('click', () => {
+      if (PLAYERS.length >= 8) return;
+      const idx = PLAYERS.length;
+      PLAYERS.push({ name: 'Country' + (idx + 1), color: PLAYER_COLORS[idx] });
+      Game.playerCount = PLAYERS.length;
+      Game.economy.push(ECONOMY.start);
+      Game.incomeMult.push(1);
+      Game.noUnitTurns.push(0);
+      Game.noCityTurns.push(0);
+      Game.aiStrategy.push(null);
+      // Expand diplomacy matrix
+      const n = PLAYERS.length;
+      for (let i = 0; i < n - 1; i++) {
+        Game.diplomacy[i] = Game.diplomacy[i] || [];
+        Game.diplomacy[i][n - 1] = 'war';
+        Game.damageDealt[i] = Game.damageDealt[i] || [];
+        Game.damageDealt[i][n - 1] = 0;
+      }
+      Game.diplomacy[n - 1] = new Array(n).fill('war');
+      Game.diplomacy[n - 1][n - 1] = 'self';
+      Game.damageDealt[n - 1] = new Array(n).fill(0);
+      window._persist();
+      UI.refresh();
+      Render.render();
+    });
+
+    document.getElementById('rmCountryBtn').addEventListener('click', () => {
+      if (PLAYERS.length <= 2) return;
+      const idx = PLAYERS.length - 1;
+      // Remove units/cities/villages owned by last country
+      Game.units = Game.units.filter(u => u.owner !== idx);
+      Game.cities.forEach(c => { if (c.owner === idx) c.owner = null; });
+      Game.villages.forEach(v => { if (v.owner === idx) v.owner = null; });
+      // Clear territory
+      for (let r = 0; r < Board.ROWS; r++)
+        for (let c = 0; c < Board.COLS; c++)
+          if (Game.territory[r] && Game.territory[r][c] === idx) Game.territory[r][c] = null;
+      PLAYERS.pop();
+      Game.playerCount = PLAYERS.length;
+      Game.economy.pop();
+      Game.incomeMult.pop();
+      Game.noUnitTurns.pop();
+      Game.noCityTurns.pop();
+      Game.aiStrategy.pop();
+      Game.diplomacy.pop();
+      Game.damageDealt.pop();
+      for (let i = 0; i < PLAYERS.length; i++) {
+        Game.diplomacy[i].pop();
+        Game.damageDealt[i].pop();
+      }
+      Game.eliminated.delete(idx);
+      if (window._creativePaintOwner === idx) window._creativePaintOwner = null;
+      if (Game.turn >= PLAYERS.length) Game.turn = 0;
+      if (Game.humanPlayer >= PLAYERS.length) Game.humanPlayer = 0;
+      window._rebuildUnitAt();
+      window._persist();
+      UI.refresh();
+      Render.render();
+    });
     document.getElementById('selectAllChk').addEventListener('change', (e) => window.setSelectAll(e.target.checked));
 
     // Sidebar action buttons
@@ -837,7 +939,7 @@
     // Peace proposal popup — process queued AI proposals one at a time
     function showNextPeaceProposal() {
       if (!Game.peaceProposals || !Game.peaceProposals.length) return;
-      const humanPlayer = Game.playerCount > 2 ? 0 : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
+      const humanPlayer = Game.humanPlayer || 0;
       const idx = Game.peaceProposals.findIndex(p => p.to === humanPlayer);
       if (idx === -1) return;
       const proposal = Game.peaceProposals[idx];
