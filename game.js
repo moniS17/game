@@ -178,9 +178,11 @@ function templateStats(owner, tmpl) {
     mov = Math.min(mov, e.mov);
   }
   if (!isFinite(mov)) mov = 0;
-  // Primary subunit (drawn on the board): most numerous, ties broken by cost.
+  // Primary subunit (drawn on the board): >50% majority wins; fallback to most numerous, ties broken by cost.
+  const total = templateSize(tmpl);
   let primary = null, best = -1;
   for (const type in comp) {
+    if (comp[type] * 2 > total) { primary = type; break; }
     const score = comp[type] * 100 + PIECES[type].cost;
     if (score > best) { best = score; primary = type; }
   }
@@ -199,10 +201,10 @@ function makeUnitFromTemplate(owner, tmpl, r, c, opts) {
     acted: !!o.acted, moved: false,
   };
 }
-// A player's default starting template library: one "Infantry" template (4 bodies).
+// A player's default starting template library: one "Infantry" regiment (4 battalions of 4 infantry = 16 companies).
 function defaultTemplates() {
   const cells = new Array(TEMPLATE_CELLS).fill(null);
-  for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+  for (let i = 0; i < 16; i++) cells[i] = 'infantry';
   return [{ id: 't1', name: 'Infantry', cells }];
 }
 function findTemplate(owner, id) {

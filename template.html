@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
-  <title>Battlegrid — Regiment Designer</title>
+  <title>Battlegrid — Unit Designer</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -49,9 +49,9 @@
     }
     .cell img { width: 74%; height: 74%; }
 
-    /* 2x2 grid for battalion designer */
-    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; width: 110px; flex: 0 0 auto; }
-    .grid2 .cell { width: 50px; height: 50px; }
+    /* 3x4 grid for battalion designer */
+    .grid-bn { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; width: 200px; flex: 0 0 auto; }
+    .grid-bn .cell { width: 46px; height: 46px; }
 
     .side { flex: 1; min-width: 220px; }
     /* palette */
@@ -93,8 +93,8 @@
       body { padding: 14px; }
       h1 { font-size: 1.1rem; }
       .grid5 { width: 180px; }
-      .grid2 { width: 90px; }
-      .grid2 .cell { width: 40px; height: 40px; }
+      .grid-bn { width: 160px; }
+      .grid-bn .cell { width: 36px; height: 36px; }
       .cell { font-size: .82rem; }
       .brush { min-width: 52px; padding: .4rem; }
     }
@@ -106,11 +106,11 @@
 </head>
 <body>
   <div class="wrap">
-    <header><h1>▦ Regiment Designer</h1></header>
+    <header><h1>▦ Unit Designer</h1></header>
     <div class="who" id="who"></div>
 
     <!-- Battalion Designer Section -->
-    <h2>Battalion Templates</h2>
+    <h2>Battalion Templates (3×4)</h2>
     <div class="lib" id="bnLib"></div>
     <div class="editor" id="bnEditor">
       <div class="nameRow">
@@ -118,12 +118,12 @@
         <button class="del" id="bnDelBtn">Delete</button>
       </div>
       <div class="row">
-        <div class="grid2" id="bnGrid"></div>
+        <div class="grid-bn" id="bnGrid"></div>
         <div class="side">
           <h2 style="margin-top:0">Companies (click to paint)</h2>
           <div class="palette" id="bnPalette"></div>
           <div class="stats" id="bnStats"></div>
-          <div class="hint">A battalion is 4 companies. Stats = 1/4 of a regiment made of 4 identical battalions.</div>
+          <div class="hint">A battalion holds up to 12 companies (3×4). Unit image is determined by &gt;50% majority type. Each battalion appears as a button in the Regiment Designer below.</div>
         </div>
       </div>
     </div>
@@ -131,7 +131,7 @@
     <hr class="section-divider" />
 
     <!-- Regiment Designer Section -->
-    <h2>Regiment Templates</h2>
+    <h2>Regiment Templates (5×5)</h2>
     <div class="lib" id="lib"></div>
 
     <div class="editor" id="editor">
@@ -148,7 +148,7 @@
           <div class="stats" id="stats"></div>
           <div class="comp" id="comp"></div>
           <div class="hint">Locked units are researched in the <a href="tech.html">Tech tree</a>.
-            A template holds up to 25 companies (5×5). 4 companies of the same type auto-merge into a battalion.</div>
+            A regiment holds up to 25 companies (5×5). Unit image = majority (&gt;50%) type.</div>
         </div>
       </div>
     </div>
@@ -168,20 +168,22 @@
 
     const me = save.turn;
     const CAP = 25;
-    const BN_CAP = 4;
+    const BN_CAP = 12;
     save.unlocked = save.unlocked || [{ infantry: true }, { infantry: true }];
     save.unlocked[me] = save.unlocked[me] || {}; save.unlocked[me].infantry = true;
     save.upgrades = save.upgrades || [{}, {}];
     save.templates = save.templates || [[], []];
     if (!save.templates[me] || !save.templates[me].length) {
       const cells = new Array(CAP).fill(null);
-      for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+      for (let i = 0; i < 16; i++) cells[i] = 'infantry';
       save.templates[me] = [{ id: 't1', name: 'Infantry', cells }];
     }
     save.battalionTemplates = save.battalionTemplates || [];
     while (save.battalionTemplates.length <= me) save.battalionTemplates.push([]);
     if (!save.battalionTemplates[me].length) {
-      save.battalionTemplates[me] = [{ id: 'b1', name: 'Infantry Bn', cells: ['infantry','infantry','infantry','infantry'] }];
+      const cells = new Array(BN_CAP).fill(null);
+      for (let i = 0; i < 4; i++) cells[i] = 'infantry';
+      save.battalionTemplates[me] = [{ id: 'b1', name: 'Infantry Bn', cells }];
     }
 
     document.getElementById("who").textContent =
@@ -198,6 +200,15 @@
       let cost = 0, hp = 0, atk = 0, mov = Infinity, n = 0;
       for (const t of cells) { if (!t) continue; n++; const e = eff(t); cost += PIECES[t].cost; hp += e.hp; atk += e.atk; mov = Math.min(mov, e.mov); }
       return { cost, hp, atk, mov: isFinite(mov) ? mov : 0, n };
+    }
+    function majorityType(cells) {
+      const counts = {};
+      let total = 0;
+      for (const t of cells) { if (t) { counts[t] = (counts[t] || 0) + 1; total++; } }
+      for (const t in counts) { if (counts[t] * 2 > total) return t; }
+      let best = null, bestN = 0;
+      for (const t in counts) { if (counts[t] > bestN) { bestN = counts[t]; best = t; } }
+      return best;
     }
 
     const commit = () => SaveState.save(save);
@@ -276,9 +287,11 @@
     function renderBnStats() {
       const cells = curBn().cells;
       const s = statsOf(cells);
+      const maj = majorityType(cells);
       document.getElementById("bnStats").innerHTML =
-        `<span class="k">Companies</span> <b>${s.n}</b>/4 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
-        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
+        `<span class="k">Companies</span> <b>${s.n}</b>/12 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
+        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>` +
+        (maj ? `<br><span class="k">Type</span> <b>${PIECES[maj].name}</b>` : '');
     }
 
     function renderBnName() {
@@ -368,9 +381,11 @@
     function renderStats() {
       const cells = cur().cells;
       const s = statsOf(cells);
+      const maj = majorityType(cells);
       document.getElementById("stats").innerHTML =
         `<span class="k">Companies</span> <b>${s.n}</b>/25 &nbsp; <span class="k">Cost</span> <b>${GOLD_ICON}${s.cost}</b><br>` +
-        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>`;
+        `<span class="k">HP</span> <b>${s.hp}</b> &nbsp; <span class="k">ATK</span> <b>${s.atk}</b> &nbsp; <span class="k">MOV</span> <b>${s.mov}</b>` +
+        (maj ? `<br><span class="k">Type</span> <b>${PIECES[maj].name}</b>` : '');
     }
 
     function compOf(cells) {
@@ -402,20 +417,20 @@
       const cells = cur().cells;
       const empty = emptySlots(cells);
       let html = "";
-      // Standard single-type battalion buttons
-      for (const t in PIECES) {
-        if (t === "hq") continue;
-        const locked = !isUnlocked(t);
-        const disabled = locked || empty < 4;
-        html += `<button class="add-bn" data-type="${t}" ${disabled ? "disabled" : ""}>+ Bn ${PIECES[t].name}</button>`;
-      }
-      // Custom battalion template buttons
+      // Custom battalion template buttons (shown first)
       for (const bn of save.battalionTemplates[me]) {
         const filled = bn.cells.filter(c => c !== null).length;
         if (filled === 0) continue;
         const allUnlocked = bn.cells.every(c => c === null || isUnlocked(c));
         const disabled = !allUnlocked || empty < filled;
         html += `<button class="add-bn custom" data-bnid="${bn.id}" ${disabled ? "disabled" : ""}>+ ${bn.name}</button>`;
+      }
+      // Standard single-type battalion buttons (4 of same type)
+      for (const t in PIECES) {
+        if (t === "hq") continue;
+        const locked = !isUnlocked(t);
+        const disabled = locked || empty < 4;
+        html += `<button class="add-bn" data-type="${t}" ${disabled ? "disabled" : ""}>+ 4× ${PIECES[t].name}</button>`;
       }
       el.innerHTML = html;
       el.querySelectorAll(".add-bn[data-type]").forEach(btn => {
