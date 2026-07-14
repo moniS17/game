@@ -244,6 +244,19 @@
       </div>
       <div class="note" id="aiEngineNote">Built-in algorithmic AI (instant, no setup needed).</div>
       <div id="cpmStatus" style="display:none;font-size:.7rem;margin-top:.3rem;"></div>
+      <div id="cpmDownloadWrap" style="display:none;margin-top:.4rem;">
+        <button type="button" id="cpmDownloadBtn"
+          style="font-size:.72rem;padding:.45rem .9rem;background:#1565c0;color:#fff;
+                 border:none;border-radius:6px;cursor:pointer;">
+          ⬇ Download AI for offline play (656 MB)
+        </button>
+        <div id="cpmProgress" style="display:none;margin-top:.35rem;">
+          <div style="background:#2a2f35;border-radius:4px;height:8px;overflow:hidden;">
+            <div id="cpmBar" style="width:0%;height:100%;background:#1e88e5;transition:width .2s;"></div>
+          </div>
+          <div id="cpmProgressText" style="font-size:.62rem;color:#9aa4ad;margin-top:.2rem;">0%</div>
+        </div>
+      </div>
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
@@ -278,6 +291,7 @@
   <script src="algorithms.js"></script>
   <script src="units.js"></script>
   <script src="state.js"></script>
+  <script src="wasm-cpm.js"></script>
   <script>
     const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
     document.getElementById('rangeHint').textContent =
@@ -443,32 +457,88 @@
       const seg = document.getElementById('aiEngineSeg');
       const note = document.getElementById('aiEngineNote');
       const status = document.getElementById('cpmStatus');
+      const dlWrap = document.getElementById('cpmDownloadWrap');
+      const dlBtn = document.getElementById('cpmDownloadBtn');
+      const progressWrap = document.getElementById('cpmProgress');
+      const bar = document.getElementById('cpmBar');
+      const progressText = document.getElementById('cpmProgressText');
+
       seg.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-v]');
         if (!btn) return;
         for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b === btn);
         if (btn.dataset.v === 'cpm') {
-          note.textContent = 'Local MiniCPM LLM (requires running start-minicpm.sh).';
+          note.textContent = 'MiniCPM LLM — runs locally via server or in your browser.';
           checkCpmStatus();
         } else {
           note.textContent = 'Built-in algorithmic AI (instant, no setup needed).';
           status.style.display = 'none';
+          dlWrap.style.display = 'none';
         }
       });
+
       function checkCpmStatus() {
         status.style.display = '';
         status.textContent = '⏳ Checking MiniCPM server...';
         status.style.color = '#9aa4ad';
+        dlWrap.style.display = 'none';
         fetch('http://127.0.0.1:18766/health', { signal: AbortSignal.timeout(2000) })
           .then(r => {
-            if (r.ok) { status.textContent = '✅ MiniCPM server is running'; status.style.color = '#7cb342'; }
-            else { status.textContent = '❌ Server responded with error'; status.style.color = '#ff7a76'; }
+            if (r.ok) {
+              status.textContent = '✅ MiniCPM server is running';
+              status.style.color = '#7cb342';
+            } else {
+              showOfflineOption();
+            }
           })
-          .catch(() => {
-            status.textContent = '❌ MiniCPM server not found — run ./start-minicpm.sh first';
-            status.style.color = '#ff7a76';
-          });
+          .catch(() => { showOfflineOption(); });
       }
+
+      function showOfflineOption() {
+        if (window.WasmCPM && window.WasmCPM.isCached()) {
+          status.textContent = '✅ AI model ready — runs in your browser';
+          status.style.color = '#7cb342';
+          dlWrap.style.display = 'none';
+        } else if (window.WasmCPM) {
+          status.textContent = 'Server not found — download the AI to play offline:';
+          status.style.color = '#9aa4ad';
+          dlWrap.style.display = '';
+          progressWrap.style.display = 'none';
+          dlBtn.style.display = '';
+          dlBtn.disabled = false;
+          dlBtn.textContent = '⬇ Download AI for offline play (656 MB)';
+        } else {
+          status.textContent = '❌ MiniCPM server not found — run ./start-minicpm.sh first';
+          status.style.color = '#ff7a76';
+        }
+      }
+
+      dlBtn.addEventListener('click', async () => {
+        if (!window.WasmCPM) return;
+        dlBtn.disabled = true;
+        dlBtn.textContent = 'Downloading…';
+        progressWrap.style.display = '';
+        bar.style.width = '0%';
+        progressText.textContent = '0%';
+        try {
+          await window.WasmCPM.download(function (p) {
+            var pct = p.total ? Math.round((p.loaded / p.total) * 100) : 0;
+            bar.style.width = pct + '%';
+            var mb = (p.loaded / 1048576).toFixed(1);
+            var totalMb = p.total ? (p.total / 1048576).toFixed(0) : '?';
+            progressText.textContent = pct + '% (' + mb + ' / ' + totalMb + ' MB)';
+          });
+          status.textContent = '✅ AI model ready — runs in your browser';
+          status.style.color = '#7cb342';
+          dlWrap.style.display = 'none';
+        } catch (err) {
+          console.error('WASM download failed:', err);
+          status.textContent = '❌ Download failed — check your connection and retry';
+          status.style.color = '#ff7a76';
+          dlBtn.disabled = false;
+          dlBtn.textContent = '⬇ Retry download';
+        }
+      });
     })();
     function aiEngine() {
       return document.getElementById('aiEngineSeg').querySelector('button.on').dataset.v;

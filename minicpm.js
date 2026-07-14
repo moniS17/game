@@ -114,18 +114,24 @@ const MiniCPM = (function () {
       stream: false,
     };
 
-    const resp = await fetch(CHAT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!resp.ok) throw new Error('llama-server returned ' + resp.status);
-    const data = await resp.json();
-    const text = (data.choices && data.choices[0] && data.choices[0].message &&
-      data.choices[0].message.content) || '';
-    return text;
+    try {
+      const resp = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!resp.ok) throw new Error('llama-server returned ' + resp.status);
+      const data = await resp.json();
+      return (data.choices && data.choices[0] && data.choices[0].message &&
+        data.choices[0].message.content) || '';
+    } catch (serverErr) {
+      if (window.WasmCPM && window.WasmCPM.isReady()) {
+        console.log('MiniCPM: server offline, using in-browser WASM');
+        return await window.WasmCPM.complete(SYSTEM_PROMPT, userMsg);
+      }
+      throw serverErr;
+    }
   }
 
   function parseResponse(text) {
@@ -251,6 +257,24 @@ const MiniCPM = (function () {
 
   async function ensureRunning() {
     if (await available()) return;
+    if (window.WasmCPM && window.WasmCPM.isCached()) {
+      const toast = document.createElement('div');
+      toast.style.cssText =
+        'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
+        'background:#2e7d32;color:#fff;padding:.8rem 1.4rem;border-radius:8px;' +
+        'font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center;';
+      toast.textContent = '🧠 Loading in-browser AI model…';
+      document.body.appendChild(toast);
+      try {
+        await window.WasmCPM.load();
+        toast.textContent = '✅ In-browser AI ready';
+        setTimeout(() => toast.remove(), 3000);
+        return;
+      } catch (e) {
+        console.error('WASM load failed:', e);
+        toast.remove();
+      }
+    }
     const toast = document.createElement('div');
     toast.style.cssText =
       'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
