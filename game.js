@@ -69,6 +69,7 @@ const Game = {
   winner: null,
   winReason: null,
   orderQueue: [],       // [{id, group, sourceTile, destTile, path, isAttack, attackTarget}]
+  lastCityCapturer: {}, // player -> who captured their last city (for land handover on elimination)
   peaceProposals: [],   // [{from, to}] queued AI peace proposals awaiting human response
   aiEngine: 'algorithm', // 'algorithm' | 'cpm' — which AI drives non-human players
   humanPlayer: 0,        // which player index the human controls in PvE
@@ -599,6 +600,7 @@ function serialize() {
     aiStrategy: (Game.aiStrategy || []).slice(),
     aiEngine: Game.aiEngine || 'algorithm',
     humanPlayer: Game.humanPlayer || 0,
+    lastCityCapturer: { ...Game.lastCityCapturer },
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
   if (Game.customTerrain) out.customTerrain = Game.terrain.map(row => row.slice());
@@ -685,6 +687,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     damageDealt: initDamageDealt(n),
     aiStrategy: new Array(n).fill(null),
     spawnCenters: centers,
+    lastCityCapturer: {},
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
   };
 }
@@ -789,6 +792,7 @@ function buildCustomMapState(mode, customMap, creative, startPlayer, aiPlayer, d
     damageDealt: initDamageDealt(n),
     aiStrategy: new Array(n).fill(null),
     spawnCenters: centers,
+    lastCityCapturer: {},
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
     customTerrain: customMap.terrain,
   };
@@ -991,6 +995,7 @@ function loadIntoGame(st) {
   Game.aiEngine = st.aiEngine || 'algorithm';
   Game.humanPlayer = st.humanPlayer != null ? st.humanPlayer : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
   Game.spawnCenters = st.spawnCenters || [];
+  Game.lastCityCapturer = st.lastCityCapturer || {};
 
   rebuildUnitAt();
   nextId = Game.units.reduce((m, u) => Math.max(m, u.id), 0) + 1;
@@ -1017,9 +1022,13 @@ function villageAt(r, c) {
 function captureIfCity(r, c, owner) {
   const site = cityAt(r, c) || villageAt(r, c);
   if (site && site.owner !== owner) {
+    const prevOwner = site.owner;
     const kind = TERRAIN[Game.terrain[r][c]] ? TERRAIN[Game.terrain[r][c]].name.toLowerCase() : 'site';
     site.owner = owner;
     UI.log(`${PLAYERS[owner].name} captured a ${kind} at r${r}, c${c}.`);
+    if (prevOwner != null && Game.terrain[r][c] === 'city') {
+      Game.lastCityCapturer[prevOwner] = owner;
+    }
   }
 }
 
@@ -1247,50 +1256,61 @@ function updateEliminationStreaks() {
 function eliminatePlayer(p) {
   if (Game.eliminated.has(p)) return;
   Game.eliminated.add(p);
-  // Peace deal: redistribute eliminated player's cities/villages to attackers
-  const attackers = [];
-  for (let i = 0; i < (Game.playerCount || 2); i++) {
-    if (i === p || Game.eliminated.has(i)) continue;
-    const dmg = (Game.damageDealt && Game.damageDealt[i] && Game.damageDealt[i][p]) || 0;
-    if (dmg > 0) attackers.push({ id: i, dmg });
-  }
-  const totalDmg = attackers.reduce((s, a) => s + a.dmg, 0);
-  const sites = Game.cities.concat(Game.villages || []).filter(s => s.owner === p);
-  if (sites.length && attackers.length) {
-    // Score sites: cities worth 2, villages worth 1
-    const scored = sites.map(s => ({ s, score: Game.terrain[s.r] && Game.terrain[s.r][s.c] === 'city' ? 2 : 1 }));
-    scored.sort((a, b) => b.score - a.score);
-    // Distribute proportionally by damage dealt
-    let distributed = 0;
-    for (const site of scored) {
-      const target = attackers.reduce((best, a) => {
-        const share = a.dmg / totalDmg;
-        const owned = sites.filter(ss => ss.s.owner === a.id).length;
-        const deficit = share * scored.length - owned;
-        return deficit > (best ? best.deficit : -Infinity) ? { ...a, deficit } : best;
-        }, null);
-      if (target) { site.s.owner = target.id; distributed++; }
+
+  // Determine who gets the eliminated player's lands: the country that captured their last city,
+  // or fallback to the biggest damage dealer, or any surviving player.
+  let capturer = Game.lastCityCapturer[p];
+  if (capturer == null || Game.eliminated.has(capturer)) {
+    let bestDmg = -1;
+    for (let i = 0; i < (Game.playerCount || 2); i++) {
+      if (i === p || Game.eliminated.has(i)) continue;
+      const dmg = (Game.damageDealt && Game.damageDealt[i] && Game.damageDealt[i][p]) || 0;
+      if (dmg > bestDmg) { bestDmg = dmg; capturer = i; }
     }
-    UI.log(`☮️ Peace deal: ${PLAYERS[p].name} eliminated — ${distributed} site(s) redistributed.`);
-  } else if (sites.length) {
-    for (const s of sites) s.owner = null;
-    UI.log(`${PLAYERS[p].name} eliminated — territories became neutral.`);
-  } else {
-    UI.log(`${PLAYERS[p].name} has been eliminated.`);
   }
-  // Remove eliminated player's remaining units
+  if (capturer == null || Game.eliminated.has(capturer)) {
+    for (let i = 0; i < (Game.playerCount || 2); i++) {
+      if (i !== p && !Game.eliminated.has(i)) { capturer = i; break; }
+    }
+  }
+
+  // Remove all of the eliminated player's units
   for (const u of Game.units.filter(u => u.owner === p)) {
     removeFromStack(u);
   }
   Game.units = Game.units.filter(u => u.owner !== p);
-  // Show peace deal via UI if available
+
+  // Hand over all remaining cities/villages to the capturer
+  const sites = Game.cities.concat(Game.villages || []).filter(s => s.owner === p);
+  for (const s of sites) s.owner = capturer != null ? capturer : null;
+
+  // Hand over all territory tiles to the capturer
+  let tilesTransferred = 0;
+  if (capturer != null && Game.territory) {
+    for (let r = 0; r < Game.territory.length; r++) {
+      for (let c = 0; c < Game.territory[r].length; c++) {
+        if (Game.territory[r][c] === p) {
+          Game.territory[r][c] = capturer;
+          tilesTransferred++;
+        }
+      }
+    }
+  }
+
+  if (capturer != null) {
+    UI.log(`${PLAYERS[p].name} eliminated — all lands and ${sites.length} site(s) handed to ${PLAYERS[capturer].name}.`);
+  } else {
+    for (const s of sites) s.owner = null;
+    UI.log(`${PLAYERS[p].name} eliminated — territories became neutral.`);
+  }
+
   if (window.showPeaceDeal) {
-    const title = `☮️ ${PLAYERS[p].name} Eliminated`;
+    const title = `${PLAYERS[p].name} Eliminated`;
     let body = '';
-    if (attackers.length) {
-      body = attackers.map(a => `<div class="pd-row"><span style="color:${PLAYERS[a.id].color}">${PLAYERS[a.id].name}</span><span>Damage: ${a.dmg} · ${sites.filter(ss => ss.owner === a.id).length} site(s) gained</span></div>`).join('');
+    if (capturer != null) {
+      body = `<div class="pd-row"><span style="color:${PLAYERS[capturer].color}">${PLAYERS[capturer].name}</span><span>Gained ${sites.length} site(s) and ${tilesTransferred} territory tiles</span></div>`;
     } else {
-      body = '<div style="color:#9aa4ad">No attacker claims — territory became neutral.</div>';
+      body = '<div style="color:#9aa4ad">No surviving player — territory became neutral.</div>';
     }
     window.showPeaceDeal(title, body);
   }
