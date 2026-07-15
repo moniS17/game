@@ -25,7 +25,7 @@ window.Algorithms = (function () {
   // the classic 100x100 map yields exactly CITIES_PER_SIDE cities and
   // UNITS_PER_SIDE units for each player; bigger/smaller maps get proportionally
   // more/fewer (always at least 1 so any legal board stays playable).
-  const CITIES_PER_SIDE = 17;    // per player at 100x100
+  const CITIES_PER_SIDE = 5;     // per player at default board size
   const UNITS_PER_SIDE = 34;     // per player at 100x100
   const areaScale = (rows, cols) => (rows * cols) / (GRID * GRID); // 1 at 100x100
   const citiesPerSide = (rows, cols) => Math.max(1, Math.round(CITIES_PER_SIDE * areaScale(rows, cols)));
@@ -36,7 +36,7 @@ window.Algorithms = (function () {
     n = n || 2;
     const perSide = citiesPerSide(rows, cols);
     const total = perSide * n;
-    return Math.max(n, Math.round(total * 0.3));
+    return Math.max(n, Math.round(total * 0.2));
   };
 
   // --- seeded PRNG (mulberry32): deterministic given the seed ---------------

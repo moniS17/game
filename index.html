@@ -125,7 +125,7 @@
     button.small { width: auto; margin: 0; padding: 5px 9px; font-size: .72rem; white-space: nowrap; }
     button.small:disabled { background: #333a41; color: #6b727a; cursor: not-allowed; }
 
-    .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; }
+    .stat-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 2px 0; flex-wrap: wrap; gap: 0 6px; }
     .stat-chip {
       display: inline-block; cursor: pointer; position: relative;
       text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px;
@@ -646,9 +646,9 @@
           for (const t in coCounts) coDropdown += `<div>${PIECES[t].name}: ${coCounts[t]}</div>`;
 
           statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>` +
-            `<span class="stat-chip" data-drop="bn${p}">${uCount} bn<span class="stat-dropdown">${coDropdown || '<div>No units</div>'}</span></span> ` +
-            `${cCount} city ` +
-            `<span class="stat-chip" data-drop="g${p}">${gRound} gold/rnd<span class="stat-dropdown"><div>${vCount} village</div></span></span>` +
+            `<span class="stat-chip" data-drop="bn${p}">${uCount} bn<span class="stat-dropdown">${coDropdown || '<div>No units</div>'}</span></span> · ` +
+            `${cCount} city · ${vCount} vlg · ` +
+            `<span class="stat-chip" data-drop="g${p}">${gRound} g/rnd<span class="stat-dropdown"><div>${vCount} village</div></span></span>` +
             `</span></div>`;
         }
         statsEl.innerHTML = statsHtml;

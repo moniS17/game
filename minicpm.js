@@ -2,9 +2,11 @@
  * minicpm.js — MiniCPM LLM AI integration for Battlegrid.
  *
  * Talks to a local llama-server (OpenAI-compatible) running the MiniCPM5
- * GGUF model. The model receives a compact game-state summary and returns
- * strategic decisions (strategy, purchases, movement targets). The existing
- * algorithmic AI handles pathfinding and combat execution.
+ * GGUF model, with fallback to in-browser WASM inference (wasm-cpm.js).
+ * The model receives a compact game-state summary and returns strategic
+ * decisions: strategy, tech research, purchases, deployment priorities,
+ * and attack targets. The existing algorithmic AI handles pathfinding
+ * and combat execution, guided by the model's target list.
  *
  * Depends on: units.js, board.js, rules.js, game.js (core), ai.js
  */
@@ -37,7 +39,7 @@ const MiniCPM = (function () {
         'background:#23282e;padding:1.5rem 2.5rem;border-radius:12px;' +
         'text-align:center;color:#e6e6e6;font-size:1.1rem;font-weight:600;' +
         'box-shadow:0 8px 30px rgba(0,0,0,.5);';
-      box.innerHTML = '🧠 MiniCPM is thinking<span id="cpmDots">...</span>';
+      box.innerHTML = 'MiniCPM is thinking<span id="cpmDots">...</span>';
       overlay.appendChild(box);
     }
     document.body.appendChild(overlay);
@@ -75,7 +77,34 @@ const MiniCPM = (function () {
       .filter(t => t !== 'hq' && window.isUnlocked(me, t))
       .map(t => ({ type: t, cost: PIECES[t].cost, atk: PIECES[t].attack, hp: PIECES[t].hp }));
 
-    return [
+    // Tech tree state
+    const lockedTech = [];
+    if (typeof TECH !== 'undefined') {
+      for (const t in TECH) {
+        if (t !== 'infantry' && !window.isUnlocked(me, t)) {
+          lockedTech.push({ type: t, cost: TECH[t], atk: PIECES[t].attack, hp: PIECES[t].hp });
+        }
+      }
+    }
+
+    // Diplomacy summary for multiplayer
+    let diploLines = '';
+    if (n > 2) {
+      const rels = [];
+      for (let p = 0; p < n; p++) {
+        if (p === me || Game.eliminated.has(p)) continue;
+        const rel = Game.diplomacy[me] ? Game.diplomacy[me][p] : 'war';
+        const units = Game.units.filter(u => u.owner === p).length;
+        rels.push(`p${p}(${PLAYERS[p].name}): ${rel}, ${units} units`);
+      }
+      diploLines = `Diplomacy: ${rels.join('; ')}`;
+    }
+
+    // Structures
+    const myForts = Game.structures.filter(s => s.owner === me && s.type === 'fort');
+    const mySupply = Game.structures.filter(s => s.owner === me && s.type === 'supply');
+
+    const lines = [
       `Board: ${Board.COLS}x${Board.ROWS}. Round ${Game.round}. You are player ${me} (${PLAYERS[me].name}).`,
       `Gold: ${Game.economy[me]}. Income: ~${Rules.income(Game.cities, Game.villages, me, Game.ecoUpgrades && Game.ecoUpgrades[me])}/turn.`,
       `Your cities (${myCities.length}): ${myCities.slice(0, 15).map(c => `[${c.r},${c.c}]`).join(' ')}`,
@@ -84,19 +113,33 @@ const MiniCPM = (function () {
       `Enemy cities (${enemyCities.length}): ${enemyCities.slice(0, 15).map(c => `[${c.r},${c.c}] p${c.owner}`).join(' ')}`,
       `Your units (${myUnits.length}): ${myUnits.slice(0, 20).map(u => `[${u.r},${u.c}] ${u.type} ${u.hp}/${u.maxHp} x${u.subs}`).join('; ')}`,
       `Enemy units (${enemyUnits.length}): ${enemyUnits.slice(0, 20).map(u => `[${u.r},${u.c}] ${u.type} ${u.hp}/${u.maxHp} p${u.owner}`).join('; ')}`,
-      `Buyable: ${roster.map(r => `${r.type}(${r.cost}g)`).join(', ')}`,
-    ].join('\n');
+      `Buyable: ${roster.map(r => `${r.type}(${r.cost}g,${r.atk}atk,${r.hp}hp)`).join(', ')}`,
+    ];
+    if (lockedTech.length) {
+      lines.push(`Researchable: ${lockedTech.map(t => `${t.type}(${t.cost}g to unlock, ${t.atk}atk, ${t.hp}hp)`).join(', ')}`);
+    }
+    if (myForts.length || mySupply.length) {
+      lines.push(`Your structures: ${myForts.length} forts, ${mySupply.length} supply hubs`);
+    }
+    if (diploLines) lines.push(diploLines);
+    return lines.join('\n');
   }
 
   const SYSTEM_PROMPT =
     'You are the AI for a hex-grid strategy game. Given the board state, ' +
-    'decide your strategy and purchases. Reply with ONLY valid JSON, no markdown.\n' +
-    'Format: {"strategy":"attack|defend|balanced","buy":[{"type":"infantry","size":4}],' +
+    'decide your strategy, tech research, and purchases. Reply with ONLY valid JSON, no markdown.\n' +
+    'Format: {"strategy":"attack|defend|balanced",' +
+    '"research":"unit_type_to_unlock_or_null",' +
+    '"buy":[{"type":"infantry","size":4}],' +
     '"targets":[[row,col]]}.\n' +
-    '"strategy" sets overall aggression. ' +
-    '"buy" lists units to purchase (type + company count per unit; cost = type_cost * size). ' +
-    'Stay within your gold budget. ' +
-    '"targets" lists enemy positions (row,col) to prioritize attacking, most important first.';
+    'Fields:\n' +
+    '- "strategy": overall aggression level for movement.\n' +
+    '- "research": a locked unit type to research (spend gold to unlock), or null if none.\n' +
+    '- "buy": units to purchase. "type" is the unit type, "size" is companies per unit (1-12). Cost = type_cost * size. Stay within gold budget AFTER research.\n' +
+    '- "targets": enemy or neutral positions [row,col] to prioritize attacking/capturing, most important first. Include enemy cities, weak enemy stacks, and neutral cities worth grabbing.\n' +
+    'Tips: In early game (round<5), buy many small scouts (size 1-2) to grab neutral cities. ' +
+    'In mid/late game, buy larger units (size 4-12). Research tanks if enemy has many units. ' +
+    'Research artillery if enemy has tanks. Prioritize capturing cities for income.';
 
   // ── Call the model ────────────────────────────────────────────────────
   async function query(me, extraHint) {
@@ -135,11 +178,8 @@ const MiniCPM = (function () {
   }
 
   function parseResponse(text) {
-    // Strip markdown fences if present
     let clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-    // Strip <think>...</think> blocks
     clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    // Find the first { ... } block
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
     if (start < 0 || end <= start) return null;
@@ -148,11 +188,36 @@ const MiniCPM = (function () {
     } catch { return null; }
   }
 
+  // ── Parse and validate model targets ─────────────────────────────────
+  function parseTargets(raw) {
+    if (!Array.isArray(raw)) return [];
+    const targets = [];
+    for (const t of raw) {
+      if (!Array.isArray(t) || t.length < 2) continue;
+      const r = parseInt(t[0]), c = parseInt(t[1]);
+      if (isNaN(r) || isNaN(c)) continue;
+      if (!Board.inBounds(r, c)) continue;
+      targets.push([r, c]);
+    }
+    return targets;
+  }
+
   // ── Execute model decisions using the existing AI engine ──────────────
   function applyDecisions(me, decisions) {
     const strategy = ['attack', 'defend', 'balanced'].includes(decisions.strategy)
       ? decisions.strategy : 'balanced';
     Game.aiStrategy[me] = strategy;
+
+    // Tech research
+    if (decisions.research && typeof decisions.research === 'string' && decisions.research !== 'null') {
+      const techType = decisions.research;
+      if (typeof TECH !== 'undefined' && TECH[techType] && !window.isUnlocked(me, techType)) {
+        if (Game.economy[me] >= TECH[techType]) {
+          window.unlockType(me, techType);
+          UI.log(`${PLAYERS[me].name} (CPM) researched ${PIECES[techType].name}.`);
+        }
+      }
+    }
 
     // Purchases
     if (Array.isArray(decisions.buy) && decisions.buy.length) {
@@ -177,8 +242,11 @@ const MiniCPM = (function () {
       }
     }
 
-    // Movement: use existing runAiFor with model-selected strategy
-    window.runAiFor(me, strategy);
+    // Parse targets from model response
+    const targets = parseTargets(decisions.targets);
+
+    // Movement: use model-provided targets to guide the algorithmic movement
+    window.runAiFor(me, strategy, targets.length ? targets : undefined);
   }
 
   // ── Public turn drivers ───────────────────────────────────────────────
@@ -263,11 +331,11 @@ const MiniCPM = (function () {
         'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
         'background:#2e7d32;color:#fff;padding:.8rem 1.4rem;border-radius:8px;' +
         'font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center;';
-      toast.textContent = '🧠 Loading in-browser AI model…';
+      toast.textContent = 'Loading in-browser AI model...';
       document.body.appendChild(toast);
       try {
         await window.WasmCPM.load();
-        toast.textContent = '✅ In-browser AI ready';
+        toast.textContent = 'In-browser AI ready';
         setTimeout(() => toast.remove(), 3000);
         return;
       } catch (e) {
@@ -280,7 +348,7 @@ const MiniCPM = (function () {
       'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
       'background:#b8412f;color:#fff;padding:.8rem 1.4rem;border-radius:8px;' +
       'font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center;';
-    toast.textContent = '⚠ MiniCPM server not reachable — run ./start-minicpm.sh then reload';
+    toast.textContent = 'MiniCPM server not reachable — run ./start-minicpm.sh then reload';
     document.body.appendChild(toast);
     for (let i = 0; i < 5; i++) {
       await new Promise(r => setTimeout(r, 3000));

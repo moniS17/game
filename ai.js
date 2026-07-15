@@ -624,10 +624,25 @@ function aiFindOverwhelmTarget(group, r, c, me) {
 }
 
 // ---------------------------------------------------------------------------
+// Model-target lookup — for CPM (LLM-guided) AI
+// ---------------------------------------------------------------------------
+
+function aiNearestModelTarget(r, c, modelTargets) {
+  if (!modelTargets || !modelTargets.length) return null;
+  let best = null, bestD = Infinity;
+  for (const t of modelTargets) {
+    if (!Board.inBounds(t[0], t[1])) continue;
+    const d = Rules.hexDist(r, c, t[0], t[1]);
+    if (d < bestD) { bestD = d; best = { r: t[0], c: t[1] }; }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
 // Main AI loop — move and fight
 // ---------------------------------------------------------------------------
 
-function runAiFor(me, strategy) {
+function runAiFor(me, strategy, modelTargets) {
   strategy = strategy || Game.aiStrategy[me] || 'balanced';
   const tiles = [];
   for (const [k, s] of Game.unitAt) if (s.length && s[0].owner === me) tiles.push(k);
@@ -708,7 +723,9 @@ function runAiFor(me, strategy) {
     }
 
     let target;
-    if (noCities || fewCities) {
+    if (modelTargets && modelTargets.length) {
+      target = aiNearestModelTarget(r, c, modelTargets) || aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
+    } else if (noCities || fewCities) {
       target = nearestUnownedCityOrVillage(r, c, me) || aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
     } else if (shouldConcentrate) {
       target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
@@ -739,7 +756,9 @@ function runAiFor(me, strategy) {
         window._moveGroup(group, chosen[0], chosen[1]);
         r = chosen[0]; c = chosen[1];
         group = window._stackAt(r, c).filter(u => u.owner === me);
-        if (noCities || fewCities) {
+        if (modelTargets && modelTargets.length) {
+          target = aiNearestModelTarget(r, c, modelTargets) || aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
+        } else if (noCities || fewCities) {
           target = nearestUnownedCityOrVillage(r, c, me) || aiBestTarget(r, c, me) || nearestEnemyTile(r, c, me);
         } else if (shouldConcentrate) {
           target = aiLargestEnemyCluster(me) || nearestEnemyTile(r, c, me);
@@ -914,3 +933,4 @@ window.aiDeployUnits = aiDeployUnits;
 window.aiDiplomacy = aiDiplomacy;
 window.aiSendGold = aiSendGold;
 window.aiSplitForExpansion = aiSplitForExpansion;
+window.aiResearchTech = aiResearchTech;
