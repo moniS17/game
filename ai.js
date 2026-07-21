@@ -425,9 +425,54 @@ function aiDeployUnits(me, specs) {
   return placed;
 }
 
+function aiHqThreatened(me) {
+  const hqs = Game.units.filter(u => u.owner === me && window.isHqUnit(u));
+  if (!hqs.length) return true;
+  for (const hq of hqs) {
+    const enemyNear = Game.units.some(u => {
+      if (u.owner === me || !window.isAtWar(me, u.owner)) return false;
+      return Rules.hexDist(u.r, u.c, hq.r, hq.c) <= 4;
+    });
+    if (!enemyNear) return false;
+    Game.reachable = Rules.reachable(Game.terrain, Game.unitAt, [hq]);
+    for (const kk of Game.reachable.keys()) {
+      const [rr, cc] = kk.split(',').map(Number);
+      const safe = !Game.units.some(u => {
+        if (u.owner === me || !window.isAtWar(me, u.owner)) return false;
+        return Rules.hexDist(u.r, u.c, rr, cc) <= 4;
+      });
+      if (safe) return false;
+    }
+  }
+  return true;
+}
+
+function aiEmergencyHqBuy(me) {
+  const HQ_COST = PIECES.hq.cost;
+  if (Game.economy[me] < HQ_COST) return;
+  if (!aiHqThreatened(me)) return;
+  Game.economy[me] -= HQ_COST;
+  const hqTmpl = (Game.templates[me] || []).find(t => t.isHq) || window._makeHqTemplate();
+  const safeCities = Game.cities
+    .filter(c => c.owner === me)
+    .map(c => ({ r: c.r, c: c.c, eDist: aiNearestEnemyDist(c.r, c.c, me) }))
+    .sort((a, b) => b.eDist - a.eDist);
+  const dest = safeCities.find(c => {
+    const s = window._stackAt(c.r, c.c);
+    return s.length < Rules.STACK_LIMIT;
+  });
+  if (!dest) { Game.economy[me] += HQ_COST; return; }
+  const u = window._makeUnit(me, hqTmpl, dest.r, dest.c, { acted: true, movesLeft: 0 });
+  if (!u) { Game.economy[me] += HQ_COST; return; }
+  Game.units.push(u);
+  window._addToStack(u);
+  UI.log(`${PLAYERS[me].name} deployed a backup HQ.`);
+}
+
 function aiSpendAndReinforce(me) {
   if (Game.economy[me] < 1) return;
   aiResearchTech(me);
+  aiEmergencyHqBuy(me);
   const specs = aiBuyUnits(me);
   const placed = aiDeployUnits(me, specs);
   if (placed) {

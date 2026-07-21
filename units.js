@@ -52,7 +52,7 @@ window.PIECES = {
   hq: {
     // Headquarters: unique command unit (1 per side). Rally ability.
     name: 'HQ', code: 'H', art: null,
-    hp: 20, attack: 5, movement_speed: 3, cost: 0,
+    hp: 20, attack: 5, movement_speed: 3, cost: 100,
   },
 };
 

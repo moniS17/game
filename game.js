@@ -997,7 +997,7 @@ function loadIntoGame(st) {
   Game.aiEngine = st.aiEngine || 'algorithm';
   Game.llmServer = st.llmServer || null;
   if (Game.llmServer && window.MiniCPM && window.MiniCPM.configure) {
-    window.MiniCPM.configure(Game.llmServer.baseUrl, Game.llmServer.model, Game.llmServer.serverName);
+    window.MiniCPM.configure(Game.llmServer.baseUrl, Game.llmServer.model, Game.llmServer.serverName, Game.llmServer.apiKey);
   }
   Game.humanPlayer = st.humanPlayer != null ? st.humanPlayer : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
   Game.spawnCenters = st.spawnCenters || [];
@@ -1954,7 +1954,7 @@ function boot() {
     st.llmServer = intent.llmServer || null;
     st.humanPlayer = humanPlayer;
     if (st.llmServer && window.MiniCPM && window.MiniCPM.configure) {
-      window.MiniCPM.configure(st.llmServer.baseUrl, st.llmServer.model, st.llmServer.serverName);
+      window.MiniCPM.configure(st.llmServer.baseUrl, st.llmServer.model, st.llmServer.serverName, st.llmServer.apiKey);
     }
     if (st.aiEngine === 'cpm' && window.MiniCPM) window.MiniCPM.ensureRunning();
     SaveState.save(st);
@@ -2026,6 +2026,7 @@ window._moveGroup = moveGroup;
 window._doAttack = doAttack;
 window._addToStack = addToStack;
 window._makeUnit = makeUnitFromTemplate;
+window._makeHqTemplate = makeHqTemplate;
 window._persist = persist;
 window._advanceTo = advanceTo;
 window._nearOwnedSite = nearOwnedSite;

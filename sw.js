@@ -24,6 +24,7 @@ const ASSETS = [
   'minicpm.js',
   'llm-scan.js',
   'wasm-cpm.js',
+  'ai-background.txt',
   'manifest.json',
   'assets/infantry.svg',
   'assets/motorized.svg',

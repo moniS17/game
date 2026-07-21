@@ -15,14 +15,16 @@ const MiniCPM = (function () {
   let _apiBase = 'http://127.0.0.1:18766';
   let _modelName = 'minicpm';
   let _serverLabel = 'MiniCPM';
+  let _apiKey = null;
 
   function chatUrl() { return _apiBase + '/v1/chat/completions'; }
   function healthUrl() { return _apiBase + '/health'; }
 
-  function configure(baseUrl, modelName, serverName) {
+  function configure(baseUrl, modelName, serverName, apiKey) {
     _apiBase = baseUrl.replace(/\/+$/, '');
     _modelName = modelName || 'default';
     _serverLabel = serverName || 'LLM';
+    _apiKey = apiKey || null;
   }
 
   // ── Health check ──────────────────────────────────────────────────────
@@ -83,7 +85,7 @@ const MiniCPM = (function () {
     }
 
     const roster = Object.keys(PIECES)
-      .filter(t => t !== 'hq' && window.isUnlocked(me, t))
+      .filter(t => window.isUnlocked(me, t) || t === 'hq')
       .map(t => ({ type: t, cost: PIECES[t].cost, atk: PIECES[t].attack, hp: PIECES[t].hp }));
 
     // Tech tree state
@@ -134,9 +136,13 @@ const MiniCPM = (function () {
     return lines.join('\n');
   }
 
-  const SYSTEM_PROMPT =
-    'You are the AI for a hex-grid strategy game. Given the board state, ' +
-    'decide your strategy, tech research, and purchases. Reply with ONLY valid JSON, no markdown.\n' +
+  let _background = '';
+  (function loadBackground() {
+    fetch('ai-background.txt').then(r => r.ok ? r.text() : '').then(t => { _background = t; }).catch(() => {});
+  })();
+
+  const RESPONSE_FORMAT =
+    'Reply with ONLY valid JSON, no markdown.\n' +
     'Format: {"strategy":"attack|defend|balanced",' +
     '"research":"unit_type_to_unlock_or_null",' +
     '"buy":[{"type":"infantry","size":4}],' +
@@ -145,10 +151,11 @@ const MiniCPM = (function () {
     '- "strategy": overall aggression level for movement.\n' +
     '- "research": a locked unit type to research (spend gold to unlock), or null if none.\n' +
     '- "buy": units to purchase. "type" is the unit type, "size" is companies per unit (1-12). Cost = type_cost * size. Stay within gold budget AFTER research.\n' +
-    '- "targets": enemy or neutral positions [row,col] to prioritize attacking/capturing, most important first. Include enemy cities, weak enemy stacks, and neutral cities worth grabbing.\n' +
-    'Tips: In early game (round<5), buy many small scouts (size 1-2) to grab neutral cities. ' +
-    'In mid/late game, buy larger units (size 4-12). Research tanks if enemy has many units. ' +
-    'Research artillery if enemy has tanks. Prioritize capturing cities for income.';
+    '- "targets": enemy or neutral positions [row,col] to prioritize attacking/capturing, most important first. Include enemy cities, weak enemy stacks, and neutral cities worth grabbing.';
+
+  function systemPrompt() {
+    return (_background ? _background + '\n\n' : '') + RESPONSE_FORMAT;
+  }
 
   // ── Call the model ────────────────────────────────────────────────────
   async function query(me, extraHint) {
@@ -158,7 +165,7 @@ const MiniCPM = (function () {
     const body = {
       model: _modelName,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt() },
         { role: 'user', content: userMsg },
       ],
       temperature: 0.3,
@@ -167,9 +174,11 @@ const MiniCPM = (function () {
     };
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (_apiKey) headers['Authorization'] = 'Bearer ' + _apiKey;
       const resp = await fetch(chatUrl(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(30000),
       });
@@ -180,7 +189,7 @@ const MiniCPM = (function () {
     } catch (serverErr) {
       if (window.WasmCPM && window.WasmCPM.isReady()) {
         console.log('MiniCPM: server offline, using in-browser WASM');
-        return await window.WasmCPM.complete(SYSTEM_PROMPT, userMsg);
+        return await window.WasmCPM.complete(systemPrompt(), userMsg);
       }
       throw serverErr;
     }
@@ -234,7 +243,7 @@ const MiniCPM = (function () {
       let budget = Game.economy[me];
       for (const item of decisions.buy) {
         const type = (item.type && PIECES[item.type]) ? item.type : 'infantry';
-        if (type === 'hq' || !window.isUnlocked(me, type)) continue;
+        if (type !== 'hq' && !window.isUnlocked(me, type)) continue;
         const size = Math.max(1, Math.min(25, parseInt(item.size) || 4));
         const cost = PIECES[type].cost * size;
         if (cost > budget) continue;
@@ -333,6 +342,7 @@ const MiniCPM = (function () {
   }
 
   async function ensureRunning() {
+    if (_apiKey) return;
     if (await available()) return;
     if (window.WasmCPM && window.WasmCPM.isCached()) {
       const toast = document.createElement('div');

@@ -125,7 +125,7 @@
     const queueEl = document.getElementById("queue");
     const grid = document.getElementById("grid");
     const qty = {};
-    for (const t of save.templates[buyer]) if (!t.isHq) qty[t.id] = 1;
+    for (const t of save.templates[buyer]) qty[t.id] = 1;
 
     function refresh() {
       goldEl.textContent = save.economy[buyer];
@@ -177,7 +177,6 @@
       const list = save.templates[buyer];
       document.getElementById("noTemplates").style.display = list.length ? "none" : "";
       for (const tmpl of list) {
-        if (tmpl.isHq) continue;
         const s = statsOf(tmpl);
         const card = document.createElement("div");
         card.className = "card";
