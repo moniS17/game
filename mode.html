@@ -257,6 +257,16 @@
           <div id="cpmProgressText" style="font-size:.62rem;color:#9aa4ad;margin-top:.2rem;">0%</div>
         </div>
       </div>
+
+      <div id="llmScanWrap" style="display:none;margin-top:.6rem;">
+        <button type="button" id="llmScanBtn"
+          style="font-size:.72rem;padding:.45rem .9rem;background:#37474f;color:#cfd8dc;
+                 border:1px solid #546e7a;border-radius:6px;cursor:pointer;">
+          🔍 Scan for local LLM servers
+        </button>
+        <div id="llmScanStatus" style="display:none;font-size:.7rem;margin-top:.3rem;color:#9aa4ad;"></div>
+        <div id="llmScanResults" style="display:none;margin-top:.5rem;"></div>
+      </div>
     </div>
 
     <label class="creative"><input type="checkbox" id="creativeChk" /> 🎨 Creative mode</label>
@@ -292,6 +302,7 @@
   <script src="units.js"></script>
   <script src="state.js"></script>
   <script src="wasm-cpm.js"></script>
+  <script src="llm-scan.js"></script>
   <script>
     const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
     document.getElementById('rangeHint').textContent =
@@ -470,10 +481,15 @@
         if (btn.dataset.v === 'cpm') {
           note.textContent = 'MiniCPM LLM — runs locally via server or in your browser.';
           checkCpmStatus();
+          scanWrap.style.display = '';
         } else {
           note.textContent = 'Built-in algorithmic AI (instant, no setup needed).';
           status.style.display = 'none';
           dlWrap.style.display = 'none';
+          scanWrap.style.display = 'none';
+          scanResults.style.display = 'none';
+          scanStatus.style.display = 'none';
+          chosenLLM = null;
         }
       });
 
@@ -539,7 +555,74 @@
           dlBtn.textContent = '⬇ Retry download';
         }
       });
+
+      // LLM server scanning
+      const scanWrap = document.getElementById('llmScanWrap');
+      const scanBtn = document.getElementById('llmScanBtn');
+      const scanStatus = document.getElementById('llmScanStatus');
+      const scanResults = document.getElementById('llmScanResults');
+
+      scanBtn.addEventListener('click', async () => {
+        if (!window.LLMScanner) return;
+        scanBtn.disabled = true;
+        scanBtn.textContent = '⏳ Scanning...';
+        scanStatus.style.display = '';
+        scanStatus.textContent = 'Checking known ports for LLM servers...';
+        scanStatus.style.color = '#9aa4ad';
+        scanResults.style.display = 'none';
+        scanResults.innerHTML = '';
+        try {
+          const servers = await window.LLMScanner.scanAll();
+          scanBtn.disabled = false;
+          scanBtn.textContent = '🔍 Scan for local LLM servers';
+          if (!servers.length) {
+            scanStatus.textContent = 'No compatible LLM servers found on this device.';
+            scanStatus.style.color = '#ff7a76';
+            return;
+          }
+          scanStatus.textContent = 'Found ' + servers.length + ' server(s):';
+          scanStatus.style.color = '#7cb342';
+          scanResults.style.display = '';
+          for (const srv of servers) {
+            const card = document.createElement('div');
+            card.style.cssText = 'background:#1b2026;border:1px solid #333;border-radius:8px;padding:.6rem .8rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;';
+            const label = document.createElement('span');
+            label.style.cssText = 'font-size:.72rem;font-weight:600;color:#e0e0e0;min-width:6rem;';
+            label.textContent = srv.name + ' (' + srv.baseUrl.split(':').pop() + ')';
+            card.appendChild(label);
+            const sel = document.createElement('select');
+            sel.style.cssText = 'font-size:.68rem;background:#2a2f35;color:#cfd8dc;border:1px solid #444;border-radius:4px;padding:.2rem .4rem;flex:1;min-width:6rem;';
+            for (const m of srv.models) {
+              const opt = document.createElement('option');
+              opt.value = m.id;
+              opt.textContent = m.id;
+              sel.appendChild(opt);
+            }
+            card.appendChild(sel);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.style.cssText = 'font-size:.68rem;padding:.3rem .7rem;background:#1565c0;color:#fff;border:none;border-radius:5px;cursor:pointer;';
+            btn.textContent = 'Use';
+            btn.addEventListener('click', () => {
+              chosenLLM = { baseUrl: srv.baseUrl, model: sel.value, serverName: srv.name };
+              for (const c of scanResults.querySelectorAll('div')) c.style.borderColor = '#333';
+              card.style.borderColor = '#1e88e5';
+              scanStatus.textContent = '✅ Using ' + srv.name + ' — model: ' + sel.value;
+              scanStatus.style.color = '#7cb342';
+            });
+            card.appendChild(btn);
+            scanResults.appendChild(card);
+          }
+        } catch (err) {
+          console.error('LLM scan error:', err);
+          scanBtn.disabled = false;
+          scanBtn.textContent = '🔍 Scan for local LLM servers';
+          scanStatus.textContent = 'Scan failed — ' + err.message;
+          scanStatus.style.color = '#ff7a76';
+        }
+      });
     })();
+    let chosenLLM = null;
     function aiEngine() {
       return document.getElementById('aiEngineSeg').querySelector('button.on').dataset.v;
     }
@@ -567,6 +650,7 @@
         playerCount: playerCount,
         playerNames: playerNames,
         aiEngine: aiEngine() };
+      if (chosenLLM) intentObj.llmServer = chosenLLM;
       if (playerCount > 2) {
         intentObj.mode = 'pve';
         intentObj.human = selectedHuman;

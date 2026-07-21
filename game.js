@@ -72,6 +72,7 @@ const Game = {
   lastCityCapturer: {}, // player -> who captured their last city (for land handover on elimination)
   peaceProposals: [],   // [{from, to}] queued AI peace proposals awaiting human response
   aiEngine: 'algorithm', // 'algorithm' | 'cpm' — which AI drives non-human players
+  llmServer: null,        // {baseUrl, model, serverName} if using a discovered LLM server
   humanPlayer: 0,        // which player index the human controls in PvE
 };
 let nextOrderId = 1;
@@ -599,6 +600,7 @@ function serialize() {
     damageDealt: Game.damageDealt.map(row => row.slice()),
     aiStrategy: (Game.aiStrategy || []).slice(),
     aiEngine: Game.aiEngine || 'algorithm',
+    llmServer: Game.llmServer || null,
     humanPlayer: Game.humanPlayer || 0,
     lastCityCapturer: { ...Game.lastCityCapturer },
     players: PLAYERS.map(p => ({ name: p.name, color: p.color })),
@@ -993,6 +995,10 @@ function loadIntoGame(st) {
   Game.aiStrategy = (st.aiStrategy || new Array(n).fill(null)).slice();
   while (Game.aiStrategy.length < n) Game.aiStrategy.push(null);
   Game.aiEngine = st.aiEngine || 'algorithm';
+  Game.llmServer = st.llmServer || null;
+  if (Game.llmServer && window.MiniCPM && window.MiniCPM.configure) {
+    window.MiniCPM.configure(Game.llmServer.baseUrl, Game.llmServer.model, Game.llmServer.serverName);
+  }
   Game.humanPlayer = st.humanPlayer != null ? st.humanPlayer : (Game.aiPlayer != null ? (1 - Game.aiPlayer) : 0);
   Game.spawnCenters = st.spawnCenters || [];
   Game.lastCityCapturer = st.lastCityCapturer || {};
@@ -1945,7 +1951,11 @@ function boot() {
       st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames, humanPlayer);
     }
     st.aiEngine = intent.aiEngine || 'algorithm';
+    st.llmServer = intent.llmServer || null;
     st.humanPlayer = humanPlayer;
+    if (st.llmServer && window.MiniCPM && window.MiniCPM.configure) {
+      window.MiniCPM.configure(st.llmServer.baseUrl, st.llmServer.model, st.llmServer.serverName);
+    }
     if (st.aiEngine === 'cpm' && window.MiniCPM) window.MiniCPM.ensureRunning();
     SaveState.save(st);
   } else {

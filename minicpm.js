@@ -12,14 +12,23 @@
  */
 
 const MiniCPM = (function () {
-  const API = 'http://127.0.0.1:18766';
-  const CHAT_URL = API + '/v1/chat/completions';
-  const HEALTH_URL = API + '/health';
+  let _apiBase = 'http://127.0.0.1:18766';
+  let _modelName = 'minicpm';
+  let _serverLabel = 'MiniCPM';
+
+  function chatUrl() { return _apiBase + '/v1/chat/completions'; }
+  function healthUrl() { return _apiBase + '/health'; }
+
+  function configure(baseUrl, modelName, serverName) {
+    _apiBase = baseUrl.replace(/\/+$/, '');
+    _modelName = modelName || 'default';
+    _serverLabel = serverName || 'LLM';
+  }
 
   // ── Health check ──────────────────────────────────────────────────────
   async function available() {
     try {
-      const r = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(2000) });
+      const r = await fetch(healthUrl(), { signal: AbortSignal.timeout(2000) });
       return r.ok;
     } catch { return false; }
   }
@@ -39,7 +48,7 @@ const MiniCPM = (function () {
         'background:#23282e;padding:1.5rem 2.5rem;border-radius:12px;' +
         'text-align:center;color:#e6e6e6;font-size:1.1rem;font-weight:600;' +
         'box-shadow:0 8px 30px rgba(0,0,0,.5);';
-      box.innerHTML = 'MiniCPM is thinking<span id="cpmDots">...</span>';
+      box.innerHTML = _serverLabel + ' is thinking<span id="cpmDots">...</span>';
       overlay.appendChild(box);
     }
     document.body.appendChild(overlay);
@@ -147,7 +156,7 @@ const MiniCPM = (function () {
     const userMsg = state + (extraHint ? '\n' + extraHint : '');
 
     const body = {
-      model: 'minicpm',
+      model: _modelName,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userMsg },
@@ -158,7 +167,7 @@ const MiniCPM = (function () {
     };
 
     try {
-      const resp = await fetch(CHAT_URL, {
+      const resp = await fetch(chatUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -348,7 +357,7 @@ const MiniCPM = (function () {
       'position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:9999;' +
       'background:#b8412f;color:#fff;padding:.8rem 1.4rem;border-radius:8px;' +
       'font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.5);text-align:center;';
-    toast.textContent = 'MiniCPM server not reachable — run ./start-minicpm.sh then reload';
+    toast.textContent = _serverLabel + ' server not reachable — run ./start-minicpm.sh then reload';
     document.body.appendChild(toast);
     for (let i = 0; i < 5; i++) {
       await new Promise(r => setTimeout(r, 3000));
@@ -356,7 +365,7 @@ const MiniCPM = (function () {
     }
   }
 
-  return { available, ensureRunning, runCpmTurn, runCpmTakeover };
+  return { available, ensureRunning, runCpmTurn, runCpmTakeover, configure };
 })();
 
 window.MiniCPM = MiniCPM;
