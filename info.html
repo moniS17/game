@@ -128,6 +128,30 @@
       </ul>
     </div>
 
+    <h2>Map Seed</h2>
+    <div class="panel">
+      <ul>
+        <li id="currentSeedInfo" style="font-size:.95rem; font-weight:600;"></li>
+        <li>Every map is generated from a <b>seed number</b>. The same seed + board size + terrain weights always produces the <b>exact same map</b>.</li>
+        <li>You can enter a <b>numeric seed</b> or any <b>text string</b> (it will be hashed into a number). Leave blank for a random seed.</li>
+        <li>Click <b>🎲 Roll</b> to generate a random seed you can share with friends to play the same map.</li>
+        <li>The seed is saved with the game state, so continuing a game always restores the same map.</li>
+      </ul>
+    </div>
+
+    <h2>Terrain Density</h2>
+    <div class="panel">
+      <ul>
+        <li>Four sliders control how much of each terrain type the map generator places: <b>Forest</b>, <b>Water</b> (lakes &amp; rivers), <b>City</b>, and <b>Village</b>.</li>
+        <li>Each slider ranges from <b>0×</b> (none) to <b>3.0×</b> (triple density). Default is <b>1.0×</b>.</li>
+        <li><b>Forest 0×</b>: open battlefield with no cover. <b>Forest 3×</b>: dense woodland with heavy concealment.</li>
+        <li><b>Water 0×</b>: no lakes or rivers. <b>Water 3×</b>: many waterways creating chokepoints.</li>
+        <li><b>City 0×</b>: minimal settlements (at least 1 per player guaranteed). <b>City 3×</b>: urban-heavy maps with more income sources.</li>
+        <li><b>Village 0×</b>: no villages. <b>Village 3×</b>: dense villages clustered around cities.</li>
+        <li>Terrain weights are saved with the game, so the map regenerates identically when you continue.</li>
+      </ul>
+    </div>
+
     <h2>Diplomacy &amp; alliances</h2>
     <div class="panel">
       <ul>
@@ -155,6 +179,7 @@
   <script src="board.js"></script>
   <script src="units.js"></script>
   <script src="rules.js"></script>
+  <script src="state.js"></script>
   <script>
     const arts = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
 
@@ -310,6 +335,26 @@
       `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>Supply Hub</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}. Extends the <b>supply network</b> for healing and refit (village range: ${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>` +
       `<li>Structures can be <b>captured</b> when an enemy moves onto the tile — they then buff the new owner instead.</li>` +
       `<li>The structure icon appears in the <b>top-right corner</b> of the tile, tinted with the owner's colour.</li>`;
+
+    // --- Current map seed ---
+    const savedGame = SaveState.load();
+    const seedEl = document.getElementById('currentSeedInfo');
+    if (savedGame && savedGame.seed != null) {
+      const w = savedGame.terrainWeights;
+      let weightStr = '';
+      if (w) {
+        const parts = [];
+        if (w.forest != null && w.forest !== 1) parts.push('Forest ' + w.forest + '×');
+        if (w.water != null && w.water !== 1) parts.push('Water ' + w.water + '×');
+        if (w.city != null && w.city !== 1) parts.push('City ' + w.city + '×');
+        if (w.village != null && w.village !== 1) parts.push('Village ' + w.village + '×');
+        if (parts.length) weightStr = ' · Weights: ' + parts.join(', ');
+      }
+      seedEl.innerHTML = '🗺️ Current map — Seed: <code style="background:#1b1f23;padding:2px 8px;border-radius:4px;user-select:all">' +
+        savedGame.seed + '</code> · Size: ' + (savedGame.rows || '?') + '×' + (savedGame.cols || '?') + weightStr;
+    } else {
+      seedEl.textContent = 'No active game — start a new map to see its seed here.';
+    }
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

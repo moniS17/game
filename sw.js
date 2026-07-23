@@ -1,4 +1,4 @@
-const CACHE_NAME = 'battlegrid-v3';
+const CACHE_NAME = 'battlegrid-v5';
 const ASSETS = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   'units.js',
   'board.js',
   'algorithms.js',
+  'terrain-weights.js',
   'rules.js',
   'render.js',
   'game.js',

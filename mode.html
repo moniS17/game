@@ -119,6 +119,45 @@
     .seg button.on[data-v="0"] { background: #1e88e5; border-color: #1e88e5; color: #fff; }
     .seg button.on[data-v="1"] { background: #e53935; border-color: #e53935; color: #fff; }
 
+    /* Seed input */
+    .seed { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+    .seed h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
+    .seed-row { display: flex; align-items: center; gap: .5rem; }
+    .seed-row input[type="text"] {
+      flex: 1; padding: .55rem; font-size: .92rem; text-align: center; color: #e6e6e6;
+      background: #0f1216; border: 1px solid #3a3f45; border-radius: 6px; font-family: monospace;
+    }
+    .seed-row input[type="text"]:focus { outline: none; border-color: #3a5bd9; }
+    .seed-row button {
+      width: auto; margin: 0; padding: .5rem .8rem; font-size: .78rem; font-weight: 600;
+      background: #f5c542; color: #1b2026;
+    }
+    .seed-row button:hover { background: #ffd75e; transform: none; }
+
+    /* Terrain weight sliders */
+    .weights { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
+    .weights h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
+    .weight-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+    .weight-row label { font-size: .78rem; color: #cfd6dd; min-width: 4.5rem; }
+    .weight-row input[type="range"] {
+      flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
+      background: #3a3f45; border-radius: 3px; outline: none; cursor: pointer;
+    }
+    .weight-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: #3a5bd9; cursor: pointer;
+    }
+    .weight-row input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px; border-radius: 50%; border: none;
+      background: #3a5bd9; cursor: pointer;
+    }
+    .weight-row .weight-val { font-size: .72rem; color: #9aa4ad; min-width: 2.5rem; text-align: right; }
+    .weights .reset-btn {
+      width: auto; margin: .5rem auto 0; padding: .35rem .8rem; font-size: .72rem;
+      background: #2b3138; color: #cfd6dd; display: block;
+    }
+    .weights .reset-btn:hover { background: #363d45; transform: none; }
+
     /* Starting units */
     .spawn { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
     .spawn h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #9aa4ad; margin-bottom: .7rem; }
@@ -197,6 +236,39 @@
         <button type="button" class="step" id="plus10Btn">+10</button>
       </div>
       <div id="sizeErr"></div>
+    </div>
+
+    <div class="seed">
+      <h2>Map Seed</h2>
+      <div class="seed-row">
+        <input type="text" id="seedInput" placeholder="Leave blank for random" maxlength="20" />
+        <button type="button" id="seedRollBtn">🎲 Roll</button>
+      </div>
+    </div>
+
+    <div class="weights">
+      <h2>Terrain Density</h2>
+      <div class="weight-row">
+        <label>🌲 Forest</label>
+        <input type="range" id="wForest" min="0" max="300" step="10" value="100" />
+        <span class="weight-val" id="wForestVal">1.0×</span>
+      </div>
+      <div class="weight-row">
+        <label>💧 Water</label>
+        <input type="range" id="wWater" min="0" max="300" step="10" value="100" />
+        <span class="weight-val" id="wWaterVal">1.0×</span>
+      </div>
+      <div class="weight-row">
+        <label>🏙️ City</label>
+        <input type="range" id="wCity" min="0" max="300" step="10" value="100" />
+        <span class="weight-val" id="wCityVal">1.0×</span>
+      </div>
+      <div class="weight-row">
+        <label>🏘️ Village</label>
+        <input type="range" id="wVillage" min="0" max="300" step="10" value="100" />
+        <span class="weight-val" id="wVillageVal">1.0×</span>
+      </div>
+      <button type="button" class="reset-btn" id="weightsResetBtn">↺ Reset to default</button>
     </div>
 
     <div class="spawn">
@@ -331,12 +403,57 @@
   <script src="algorithms.js"></script>
   <script src="units.js"></script>
   <script src="state.js"></script>
+  <script src="terrain-weights.js"></script>
   <script src="wasm-cpm.js"></script>
   <script src="llm-scan.js"></script>
   <script>
     const MIN = Algorithms.MIN, MAX = Algorithms.MAX;
     document.getElementById('rangeHint').textContent =
       `A fresh map is generated at the chosen size (${MIN}–${MAX} each side).`;
+
+    // --- Seed input ---
+    const seedInput = document.getElementById('seedInput');
+    document.getElementById('seedRollBtn').addEventListener('click', () => {
+      seedInput.value = String(Math.floor(Math.random() * 1e9));
+    });
+    function getSeed() {
+      const v = seedInput.value.trim();
+      if (!v) return Math.floor(Math.random() * 1e9);
+      const n = parseInt(v, 10);
+      return Number.isFinite(n) ? Math.abs(n) : hashString(v);
+    }
+    function hashString(s) {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) {
+        h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h);
+    }
+
+    // --- Terrain weight sliders ---
+    function wireWeight(id) {
+      const slider = document.getElementById(id);
+      const label = document.getElementById(id + 'Val');
+      function sync() { label.textContent = (slider.value / 100).toFixed(1) + '×'; }
+      slider.addEventListener('input', sync);
+      sync();
+      return () => Number(slider.value) / 100;
+    }
+    const getWForest  = wireWeight('wForest');
+    const getWWater   = wireWeight('wWater');
+    const getWCity    = wireWeight('wCity');
+    const getWVillage = wireWeight('wVillage');
+    document.getElementById('weightsResetBtn').addEventListener('click', () => {
+      for (const id of ['wForest', 'wWater', 'wCity', 'wVillage']) {
+        const s = document.getElementById(id);
+        s.value = '100';
+        s.dispatchEvent(new Event('input'));
+      }
+    });
+    function getWeights() {
+      return { forest: getWForest(), water: getWWater(), city: getWCity(), village: getWVillage() };
+    }
+
     const widthInput = document.getElementById('widthInput');
     const heightInput = document.getElementById('heightInput');
     const errEl = document.getElementById('sizeErr');
@@ -390,9 +507,11 @@
       startSlider.value = startInput.value;
     }
     function syncNote() {
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      const t = modeI18n && modeI18n[lang] ? modeI18n[lang] : null;
       spawnNote.textContent = randomChk.checked
-        ? "Countries spawn at random positions on the board (with minimum separation)."
-        : "Countries spawn at corners and edges of the board.";
+        ? (t ? t.randomNote : "Countries spawn at random positions on the board (with minimum separation).")
+        : (t ? t.fixedNote : "Countries spawn at corners and edges of the board.");
     }
     startInput.addEventListener('input', () => {
       const mx = calcMaxUnits();
@@ -715,7 +834,9 @@
         randomStart: randomChk.checked,
         playerCount: playerCount,
         playerNames: playerNames,
-        aiEngine: aiEngine() };
+        aiEngine: aiEngine(),
+        seed: getSeed(),
+        terrainWeights: getWeights() };
       if (chosenLLM) intentObj.llmServer = chosenLLM;
       const apiToggle = document.getElementById('cpmModeToggle');
       if (aiEngine() === 'cpm' && apiToggle && apiToggle.checked) {
@@ -813,6 +934,99 @@
       SaveState.setIntent({ action: 'editor', rows, cols });
       window.location.href = 'editor.html';
     });
+
+    // --- Mode page i18n ---
+    const modeI18n = {
+      en: {
+        title: '🗺️ New map', sub: 'Set the board size, then pick your opponent to start.',
+        boardSize: 'Board size (tiles)', width: 'Width', height: 'Height',
+        defaultSize: '↺ Default 100 × 100',
+        mapSeed: 'Map Seed', seedPlaceholder: 'Leave blank for random', roll: '🎲 Roll',
+        terrainDensity: 'Terrain Density', forest: '🌲 Forest', water: '💧 Water',
+        city: '🏙️ City', village: '🏘️ Village', resetDefault: '↺ Reset to default',
+        startUnits: 'Starting units (per side)', randomSpawn: '🎲 Random spawn positions',
+        randomNote: 'Countries spawn at random positions on the board (with minimum separation).',
+        fixedNote: 'Countries spawn at corners and edges of the board.',
+        firstMove: 'First move', youPlay: 'You play (vs AI)',
+        youPlayNote: 'Only applies to Player vs AI — the AI takes the other side.',
+        aiEngine: 'AI Engine', algorithm: '🔧 Algorithm', miniCpm: '🧠 MiniCPM',
+        creative: '🎨 Creative mode', creativeNote: 'This is for in-game free money',
+        editorBtn: '🎨 Creative Mode', editMap: 'Edit Map →',
+        loadMap: '📂 Load Map',
+        pvp: '🧑‍🤝‍🧑 Start — Player vs Player', pve: '🤖 Start — Player vs AI',
+        back: '← Back to menu',
+        chooseDiff: 'Choose difficulty',
+        easy: '🟢 Easy', easyDesc: 'You earn +10% gold',
+        normal: '🟡 Normal', normalDesc: 'No bonuses — a fair fight',
+        hard: '🔴 Hard', hardDesc: 'The AI earns +17% gold',
+        diffBack: '← Change opponent',
+      },
+      zh: {
+        title: '🗺️ 新地图', sub: '设置棋盘大小，然后选择对手开始。',
+        boardSize: '棋盘大小（格数）', width: '宽度', height: '高度',
+        defaultSize: '↺ 默认 100 × 100',
+        mapSeed: '地图种子', seedPlaceholder: '留空则随机生成', roll: '🎲 随机',
+        terrainDensity: '地形密度', forest: '🌲 森林', water: '💧 水域',
+        city: '🏙️ 城市', village: '🏘️ 村庄', resetDefault: '↺ 恢复默认',
+        startUnits: '初始单位（每方）', randomSpawn: '🎲 随机出生点',
+        randomNote: '各国随机分布在棋盘上（保持最小间距）。',
+        fixedNote: '各国在棋盘的角落和边缘出生。',
+        firstMove: '先手', youPlay: '你的阵营（对战AI）',
+        youPlayNote: '仅适用于人机对战 — AI控制另一方。',
+        aiEngine: 'AI 引擎', algorithm: '🔧 算法', miniCpm: '🧠 MiniCPM',
+        creative: '🎨 创意模式', creativeNote: '游戏内无限金币',
+        editorBtn: '🎨 创意模式', editMap: '编辑地图 →',
+        loadMap: '📂 加载地图',
+        pvp: '🧑‍🤝‍🧑 开始 — 玩家对战', pve: '🤖 开始 — 人机对战',
+        back: '← 返回菜单',
+        chooseDiff: '选择难度',
+        easy: '🟢 简单', easyDesc: '你获得+10%金币',
+        normal: '🟡 普通', normalDesc: '无加成 — 公平对战',
+        hard: '🔴 困难', hardDesc: 'AI获得+17%金币',
+        diffBack: '← 更换对手',
+      }
+    };
+    function applyModeLang() {
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      const t = modeI18n[lang] || modeI18n.en;
+      document.querySelector('h1').textContent = t.title;
+      document.querySelector('.sub').textContent = t.sub;
+      document.querySelector('.size h2').textContent = t.boardSize;
+      document.querySelector('label[for="widthInput"]').textContent = t.width;
+      document.querySelector('label[for="heightInput"]').textContent = t.height;
+      document.getElementById('defaultBtn').textContent = t.defaultSize;
+      document.querySelector('.seed h2').textContent = t.mapSeed;
+      document.getElementById('seedInput').placeholder = t.seedPlaceholder;
+      document.getElementById('seedRollBtn').textContent = t.roll;
+      document.querySelector('.weights h2').textContent = t.terrainDensity;
+      document.querySelectorAll('.weight-row label')[0].textContent = t.forest;
+      document.querySelectorAll('.weight-row label')[1].textContent = t.water;
+      document.querySelectorAll('.weight-row label')[2].textContent = t.city;
+      document.querySelectorAll('.weight-row label')[3].textContent = t.village;
+      document.getElementById('weightsResetBtn').textContent = t.resetDefault;
+      document.querySelector('.spawn h2').textContent = t.startUnits;
+      document.querySelector('.spawn-check').lastChild.textContent = ' ' + t.randomSpawn;
+      document.querySelector('#firstMoveOpt h2').textContent = t.firstMove;
+      document.querySelector('#sideOpt h2').textContent = t.youPlay;
+      document.querySelector('#sideOpt .note').textContent = t.youPlayNote;
+      document.querySelector('#aiEngineOpt h2').textContent = t.aiEngine;
+      const creativeLabel = document.querySelector('.creative');
+      if (creativeLabel) creativeLabel.lastChild.textContent = ' ' + t.creative;
+      const creativeNote = document.querySelector('.note[style*="text-align:center"]');
+      if (creativeNote) creativeNote.textContent = t.creativeNote;
+      document.getElementById('editorBtn').innerHTML = t.editorBtn + ' <small>' + t.editMap + '</small>';
+      document.getElementById('pvpBtn').textContent = t.pvp;
+      document.getElementById('pveBtn').textContent = t.pve;
+      document.getElementById('backBtn').textContent = t.back;
+      document.querySelector('#diffPanel h2').textContent = t.chooseDiff;
+      const diffBtns = document.querySelectorAll('#diffPanel button[data-d]');
+      diffBtns[0].innerHTML = '<span>' + t.easy + '<br><small>' + t.easyDesc + '</small></span>';
+      diffBtns[1].innerHTML = '<span>' + t.normal + '<br><small>' + t.normalDesc + '</small></span>';
+      diffBtns[2].innerHTML = '<span>' + t.hard + '<br><small>' + t.hardDesc + '</small></span>';
+      document.getElementById('diffBackBtn').textContent = t.diffBack;
+      syncNote();
+    }
+    applyModeLang();
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

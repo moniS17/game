@@ -162,11 +162,13 @@ window.Algorithms = (function () {
   }
 
   // --- 4. CITIES: per player, clustered in each player's column band ----------
-  function placeCities(t, rng, rows, cols, playerCount) {
+  function placeCities(t, rng, rows, cols, playerCount, overrideCPS) {
     const n = playerCount || 2;
     const cities = [];
     const occupied = new Set();
-    const perSide = citiesPerSide(rows, cols);
+    const perSide = overrideCPS != null
+      ? Math.max(1, Math.round(overrideCPS * areaScale(rows, cols)))
+      : citiesPerSide(rows, cols);
     const half = Math.max(1, Math.round(cols * 0.12));
     const clampC = (c) => Math.max(1, Math.min(cols - 2, c));
     for (let owner = 0; owner < n; owner++) {
@@ -189,10 +191,11 @@ window.Algorithms = (function () {
   }
 
   // --- 4b. NEUTRAL CITIES: unowned cities scattered across the map ------
-  function placeNeutralCities(t, rng, rows, cols, occupied, playerCount) {
+  function placeNeutralCities(t, rng, rows, cols, occupied, playerCount, cityWeight) {
     const n = playerCount || 2;
     const cities = [];
-    const count = neutralCount(rows, cols, n);
+    const cw = (cityWeight != null && cityWeight >= 0) ? cityWeight : 1;
+    const count = cw === 0 ? 0 : Math.max(n, Math.round(neutralCount(rows, cols, n) * cw));
     let placed = 0, attempts = 0;
     const cap = count * 300 + 500;
     while (placed < count && attempts < cap) {
@@ -217,10 +220,13 @@ window.Algorithms = (function () {
   // is a target; fewer land if the ring is crowded. Returns the placed positions
   // as capturable, income-generating sites (each village pays 50% of a city).
   const RING8 = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-  function generateVillages(t, rng, cities, rows, cols, inB) {
+  function generateVillages(t, rng, cities, rows, cols, inB, villageWeight) {
     const villages = [];
+    const vw = (villageWeight != null && villageWeight >= 0) ? villageWeight : 1;
+    if (vw === 0) return villages;
+    const maxPerCity = Math.max(0, Math.round(6 * vw));
     for (const city of cities) {
-      const want = randInt(rng, 0, 6);            // 0..6 per city
+      const want = randInt(rng, 0, maxPerCity);            // 0..6 per city
       if (!want) continue;
       // Fisher–Yates shuffle the 8 neighbours so which sides get villages varies.
       const ring = RING8.map(([dr, dc]) => [city.r + dr, city.c + dc]);
@@ -241,20 +247,34 @@ window.Algorithms = (function () {
   }
 
   // --- top-level: build a full map from a seed + dimensions -----------------
-  function generateMap(seed, rows, cols, playerCount) {
+  function generateMap(seed, rows, cols, playerCount, weights) {
     rows = clampDim(rows == null ? GRID : rows);
     cols = clampDim(cols == null ? GRID : cols);
+    const w = (weights && typeof weights === 'object') ? weights : {};
+    const wWater   = Math.max(0, Math.min(3, w.water   != null ? Number(w.water)   : 1));
+    const wForest  = Math.max(0, Math.min(3, w.forest  != null ? Number(w.forest)  : 1));
+    const wCity    = Math.max(0, Math.min(3, w.city    != null ? Number(w.city)    : 1));
+    const wVillage = Math.max(0, Math.min(3, w.village != null ? Number(w.village) : 1));
     const inB = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols;
     const rng = makeRng(seed);
     const t = blankTerrain(rows, cols);
-    const scale = (rows * cols) / (GRID * GRID); // 1 at 100x100
-    const lakes = generateLakes(t, rng, Math.max(1, Math.round(randInt(rng, 3, 6) * scale)), rows, cols, inB);
-    generateRivers(t, rng, lakes, Math.max(1, Math.round(randInt(rng, 3, 5) * scale)), rows, cols, inB);
-    generateForests(t, rng, Math.max(2, Math.round(randInt(rng, 18, 28) * scale)), rows, cols);
-    const { cities, occupied } = placeCities(t, rng, rows, cols, playerCount);
-    const neutral = placeNeutralCities(t, rng, rows, cols, occupied, playerCount);
+    const scale = (rows * cols) / (GRID * GRID);
+    const baseLakes  = randInt(rng, 3, 6);
+    const baseRivers = randInt(rng, 3, 5);
+    const baseForest = randInt(rng, 18, 28);
+    const lakeCount  = Math.max(0, Math.round(baseLakes  * scale * wWater));
+    const riverCount = Math.max(0, Math.round(baseRivers * scale * wWater));
+    const lakes = generateLakes(t, rng, lakeCount, rows, cols, inB);
+    generateRivers(t, rng, lakes, riverCount, rows, cols, inB);
+    const forestCount = Math.max(0, Math.round(baseForest * scale * wForest));
+    generateForests(t, rng, forestCount, rows, cols);
+    const cityScale = wCity;
+    const origCPS = CITIES_PER_SIDE;
+    const scaledCPS = Math.max(1, Math.round(origCPS * cityScale));
+    const { cities, occupied } = placeCities(t, rng, rows, cols, playerCount, scaledCPS);
+    const neutral = placeNeutralCities(t, rng, rows, cols, occupied, playerCount, wCity);
     for (const nc of neutral) cities.push(nc);
-    const villages = generateVillages(t, rng, cities, rows, cols, inB);
+    const villages = generateVillages(t, rng, cities, rows, cols, inB, wVillage);
     return { terrain: t, cities, villages };
   }
 

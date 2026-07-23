@@ -565,6 +565,7 @@ function serialize() {
   const n = Game.playerCount || 2;
   const out = {
     seed: Game.seed,
+    terrainWeights: Game.terrainWeights || null,
     rows: Board.ROWS,
     cols: Board.COLS,
     mode: Game.mode,
@@ -631,12 +632,12 @@ function migrateUnit(u) {
 function persist() { SaveState.save(serialize()); }
 
 // Build a brand-new game for the given mode, seed and board size.
-function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames, humanPlayer) {
+function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlayer, difficulty, startUnits, randomStart, playerCount, playerNames, humanPlayer, terrainWeights) {
   const maxP = Algorithms.maxPlayers(rows || Algorithms.GRID, cols || Algorithms.GRID);
   const n = Math.min(maxP, playerCount || 2);
   if (playerNames) window.initPlayers(n, playerNames);
   else window.initPlayers(n);
-  const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID, n);
+  const { terrain, cities, villages } = Board.fromSeed(seed, rows || Algorithms.GRID, cols || Algorithms.GRID, n, terrainWeights);
   const templates = [];
   for (let i = 0; i < n; i++) { templates.push(defaultTemplates()); templates[i].push(makeHqTemplate()); }
   const count = (startUnits != null && startUnits >= 0) ? startUnits : 1;
@@ -671,7 +672,7 @@ function buildInitialState(mode, seed, rows, cols, creative, startPlayer, aiPlay
     for (let i = 0; i < n; i++) if (i !== hp) startGold[i] = 170;
   }
   return {
-    seed, mode, rows: Board.ROWS, cols: Board.COLS, playerCount: n,
+    seed, terrainWeights: terrainWeights || null, mode, rows: Board.ROWS, cols: Board.COLS, playerCount: n,
     turn: startPlayer === 1 ? 1 : 0, round: 1,
     creative: !!creative, aiPlayer: ai,
     difficulty: diff, incomeMult,
@@ -934,6 +935,7 @@ function loadIntoGame(st) {
     window.initPlayers(n);
   }
   Game.seed = st.seed;
+  Game.terrainWeights = st.terrainWeights || null;
   Game.mode = st.mode || 'pvp';
   Game.aiPlayer = (st.aiPlayer != null && st.aiPlayer >= 0) ? st.aiPlayer : (Game.mode === 'pve' ? 1 : null);
   Game.creative = !!st.creative;
@@ -951,7 +953,7 @@ function loadIntoGame(st) {
     Game.terrain = st.customTerrain.map(row => row.slice());
     Game.customTerrain = true;
   } else {
-    Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID, st.playerCount || 2).terrain;
+    Game.terrain = Board.fromSeed(st.seed, st.rows || Algorithms.GRID, st.cols || Algorithms.GRID, st.playerCount || 2, st.terrainWeights).terrain;
     Game.customTerrain = false;
   }
   Game.territory = deserializeTerritory(Board.ROWS, Board.COLS, st.territory);
@@ -1948,7 +1950,7 @@ function boot() {
     if (intent.customMap) {
       st = buildCustomMapState(mode, intent.customMap, intent.creative, start, aiPlayer, intent.difficulty, pc, intent.playerNames, humanPlayer);
     } else {
-      st = buildInitialState(mode, Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames, humanPlayer);
+      st = buildInitialState(mode, intent.seed || Math.floor(Math.random() * 1e9), intent.rows, intent.cols, intent.creative, start, aiPlayer, intent.difficulty, intent.startUnits, intent.randomStart, pc, intent.playerNames, humanPlayer, intent.terrainWeights);
     }
     st.aiEngine = intent.aiEngine || 'algorithm';
     st.llmServer = intent.llmServer || null;
@@ -1966,6 +1968,7 @@ function boot() {
   Render.resize();
   Render.autoZoom();
   UI.refresh();
+  if (typeof applyGameI18n === 'function') applyGameI18n();
   // If the AI is set to move first, let it take its opening turn immediately.
   const isAi = Game.mode === 'pve' && Game.winner === null &&
     Game.turn !== Game.humanPlayer;

@@ -42,9 +42,17 @@
     .cont { background: #2e7d46; } .cont:hover { background: #266b3b; }
     button:disabled { background: #3a3f45; color: #6b727a; cursor: not-allowed; }
     .hint { font-size: .72rem; color: #6b727a; margin-top: 1rem; }
+    .lang-btn {
+      position: fixed; top: 16px; right: 16px;
+      padding: 6px 14px; font-size: .85rem; font-weight: 600;
+      background: rgba(255,255,255,.12); color: #e6e6e6; border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px; cursor: pointer; transition: background .2s;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,.22); }
   </style>
 </head>
 <body>
+  <button class="lang-btn" id="langBtn">中文</button>
   <div class="menu">
     <div class="greeting" id="greeting"></div>
     <div class="btn-row">
@@ -77,6 +85,29 @@
       SaveState.setIntent({ action: "continue" });
       window.location.href = "index.html";
     });
+
+    // Language toggle
+    const menuI18n = {
+      en: { hello: 'hello: ', newMap: '🗺️ Start new map', cont: '▶️ Continue', ended: '🏁 Last game ended', langLabel: '中文' },
+      zh: { hello: '你好: ', newMap: '🗺️ 开始新地图', cont: '▶️ 继续游戏', ended: '🏁 上局已结束', langLabel: 'EN' }
+    };
+    function getLang() { return localStorage.getItem('battlegrid.lang') || 'en'; }
+    function setMenuLang(lang) {
+      localStorage.setItem('battlegrid.lang', lang);
+      applyMenuLang(lang);
+    }
+    function applyMenuLang(lang) {
+      const t = menuI18n[lang] || menuI18n.en;
+      document.getElementById('greeting').textContent = t.hello + user;
+      document.getElementById('newBtn').textContent = t.newMap;
+      if (!hasEnded) contBtn.textContent = t.cont;
+      else contBtn.innerHTML = t.ended;
+      document.getElementById('langBtn').textContent = t.langLabel;
+    }
+    document.getElementById('langBtn').addEventListener('click', () => {
+      setMenuLang(getLang() === 'en' ? 'zh' : 'en');
+    });
+    applyMenuLang(getLang());
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

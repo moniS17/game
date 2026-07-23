@@ -84,9 +84,19 @@
 
     .message.error { color: #d93025; }
     .message.success { color: #188038; }
+
+    .lang-btn {
+      position: fixed; top: 16px; right: 16px;
+      padding: 6px 14px; font-size: .85rem; font-weight: 600;
+      background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.3);
+      border-radius: 6px; cursor: pointer; backdrop-filter: blur(6px);
+      transition: background .2s;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,.25); }
   </style>
 </head>
 <body>
+  <button class="lang-btn" id="langBtn">中文</button>
   <form class="login-card" id="loginForm" novalidate>
     <h1>Sign in</h1>
 
@@ -117,13 +127,15 @@
       const password = form.password.value;
 
       if (!username || !password) {
-        message.textContent = "Please enter both username and password.";
+        const t = i18n[getLang()] || i18n.en;
+        message.textContent = t.both;
         message.className = "message error";
         return;
       }
 
       // Validate against the credentials in users.txt (see auth.js).
-      message.textContent = "Checking…";
+      const t = i18n[getLang()] || i18n.en;
+      message.textContent = t.checking;
       message.className = "message";
       let ok = false;
       try {
@@ -135,18 +147,63 @@
       }
 
       if (!ok) {
-        message.textContent = "Incorrect username or password.";
+        const t2 = i18n[getLang()] || i18n.en;
+        message.textContent = t2.incorrect;
         message.className = "message error";
         return;
       }
 
-      message.textContent = "Signing in as " + username + "...";
+      const t3 = i18n[getLang()] || i18n.en;
+      message.textContent = t3.signing + username + "...";
       message.className = "message success";
 
       // Remember who's playing, then go to the main menu.
       try { localStorage.setItem("battlegrid.user", username); } catch (e) {}
       setTimeout(function () { window.location.href = "menu.html"; }, 400);
     });
+
+    // Language toggle
+    const i18n = {
+      en: {
+        title: 'Sign in',
+        username: 'Username',
+        password: 'Password',
+        submit: 'Log in',
+        both: 'Please enter both username and password.',
+        checking: 'Checking…',
+        incorrect: 'Incorrect username or password.',
+        signing: 'Signing in as ',
+        langLabel: '中文',
+      },
+      zh: {
+        title: '登录',
+        username: '用户名',
+        password: '密码',
+        submit: '登录',
+        both: '请输入用户名和密码。',
+        checking: '验证中…',
+        incorrect: '用户名或密码错误。',
+        signing: '正在登录 ',
+        langLabel: 'EN',
+      }
+    };
+    function getLang() { return localStorage.getItem('battlegrid.lang') || 'en'; }
+    function setLang(lang) {
+      localStorage.setItem('battlegrid.lang', lang);
+      applyLang(lang);
+    }
+    function applyLang(lang) {
+      const t = i18n[lang] || i18n.en;
+      document.querySelector('.login-card h1').textContent = t.title;
+      document.querySelector('label[for="username"]').textContent = t.username;
+      document.querySelector('label[for="password"]').textContent = t.password;
+      document.querySelector('button[type="submit"]').textContent = t.submit;
+      document.getElementById('langBtn').textContent = t.langLabel;
+    }
+    document.getElementById('langBtn').addEventListener('click', () => {
+      setLang(getLang() === 'en' ? 'zh' : 'en');
+    });
+    applyLang(getLang());
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

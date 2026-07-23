@@ -293,7 +293,7 @@
       <button class="ai-takeover-btn" id="aiTakeoverBtn">AI takeover this turn</button>
       <h2>Turn</h2>
       <div class="turn-line">
-        <span>Now playing: <span id="turnBadge">—</span> &nbsp; <span class="muted">Round <span id="roundNum">1</span></span></span>
+        <span><span id="nowPlayingLabel">Now playing:</span> <span id="turnBadge">—</span> &nbsp; <span class="muted"><span id="roundLabel">Round</span> <span id="roundNum">1</span></span></span>
         <!-- compact economy read-out for the current player, tucked to the right of the round -->
         <span class="econ-mini"><img src="assets/gold.svg" alt="gold"> <span id="econ">0</span></span>
       </div>
@@ -444,12 +444,12 @@
         `<div class="stat-row"><span>${n}</span><span>×${counts[n]}</span></div>`).join('');
       const totHp = stack.reduce((a, u) => a + u.hp, 0);
       const totAtk = stack.reduce((a, u) => a + Rules.unitAttack(u), 0);
-      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} — ${stack.length} unit${stack.length > 1 ? 's' : ''}</b></span><span>${stack.length}/${Rules.STACK_LIMIT}</span></div>` +
+      return `<div class="stat-row"><span><b>${PLAYERS[owner].name} — ${stack.length} ${_t('units')}</b></span><span>${stack.length}/${Rules.STACK_LIMIT}</span></div>` +
         lines +
-        `<div class="stat-row"><span>Total HP / ATK</span><span>${totHp} / ${totAtk}</span></div>` +
+        `<div class="stat-row"><span>${_t('totalHpAtk')}</span><span>${totHp} / ${totAtk}</span></div>` +
         (owner === Game.turn
-          ? `<p class="hint" style="margin-top:6px">Whole stack selected. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`
-          : `<p class="hint" style="margin-top:6px">Enemy units.</p>`);
+          ? `<p class="hint" style="margin-top:6px">${_t('stackHint')}</p>`
+          : `<p class="hint" style="margin-top:6px">${_t('enemyUnits')}</p>`);
     }
 
     function stackChecklistHtml(stack) {
@@ -461,9 +461,9 @@
           `<span><input type="checkbox" data-uid="${u.id}" ${checked} style="width:auto; margin-right:6px;"> ${label}</span>` +
           `<span>${u.hp}/${u.maxHp} hp${u.acted ? ' ·acted' : ''}</span></label>`;
       }).join('');
-      return `<div class="stat-row"><span><b>Pick units</b></span><span>${Game.selUnits.length}/${stack.length}</span></div>` +
+      return `<div class="stat-row"><span><b>${_t('pickUnits')}</b></span><span>${Game.selUnits.length}/${stack.length}</span></div>` +
         rows +
-        `<p class="hint" style="margin-top:6px">Checked units move/attack together. Tap a yellow tile to move, or an adjacent enemy to attack.</p>`;
+        `<p class="hint" style="margin-top:6px">${_t('pickHint')}</p>`;
     }
 
     // HP colour: green when healthy, amber when hurt, red when near death.
@@ -493,7 +493,7 @@
           `<div class="thp" style="color:${hpColor(u)}">${u.hp}/${u.maxHp}</div></div>`;
       }).join('');
       box.innerHTML =
-        `<div class="tl-head">${PLAYERS[owner].name} · ${stack.length} unit${stack.length > 1 ? 's' : ''} on tile</div>` +
+        `<div class="tl-head">${PLAYERS[owner].name} · ${stack.length} ${_t('units')} ${_t('onTile')}</div>` +
         `<div class="tl-figs">${figs}</div>`;
       box.style.display = 'flex';
       // Tapping a figure opens its unit's template blueprint in a pop-up.
@@ -1192,6 +1192,221 @@
       if (saved !== null) chk.checked = saved === '1';
       chk.addEventListener('change', () => localStorage.setItem('battlegrid.logPopup', chk.checked ? '1' : '0'));
     })();
+
+    // --- i18n for game page ---
+    window.GAME_I18N = {
+      en: {
+        selection: 'Selection',
+        selectWholeStack: 'Select whole stack',
+        next: 'Next',
+        attack: 'Attack',
+        combine: '⊕ Combine',
+        clickTile: 'Click a tile to select its units.',
+        refit: '⚙ Refit',
+        split: '✂ Split',
+        build: '🏗 Build',
+        rally: '📯 Rally',
+        rallyHint: 'Click a tile to rally all units toward it.',
+        aiTakeover: 'AI takeover this turn',
+        turn: 'Turn',
+        nowPlaying: 'Now playing:',
+        round: 'Round',
+        creativeGold: '🎁 +171,717 gold',
+        countryToolbox: 'Country Toolbox',
+        addCountry: '+ Country',
+        rmCountry: '− Country',
+        buy: '🛒 Buy',
+        tech: '⚗️ Tech',
+        template: '▦ Template',
+        combatLog: 'Combat log',
+        nextRound: 'Next ▶',
+        logHint: "When checked, the enemy's move is shown as a pop-up after each turn.",
+        diplomacy: '🤝 Diplomacy',
+        fieldManual: '📖 Field manual',
+        mainMenu: 'Main menu',
+        deploy: 'Deploy divisions',
+        enemyMove: "Enemy's move",
+        ok: 'OK',
+        unit: 'Unit',
+        close: 'Close',
+        refitUnits: 'Refit units',
+        refitHint: 'Swap selected units to another template. Requires supply range, no encirclement.',
+        cancel: 'Cancel',
+        combineUnits: 'Combine units',
+        combineHint: 'Fill a unit with units from another, up to 25 total.',
+        buildStructure: 'Build structure',
+        buildHint: 'Place a structure on the selected tile (not water, no existing structure).',
+        aiStrategy: 'AI Takeover — Choose Strategy',
+        aiStratHint: 'How should the AI play this turn?',
+        focusAttack: '⚔️ Focus Attack',
+        focusAttackDesc: '— aggressive, low caution',
+        focusDefend: '🛡️ Focus Defend',
+        focusDefendDesc: '— hold terrain, cautious',
+        balanced: '⚖️ Balanced',
+        balancedDesc: '— default behavior',
+        peaceDeal: 'Peace Deal',
+        peaceAccept: 'Accept',
+        peaceReject: 'Reject',
+        totalHpAtk: 'Total HP / ATK',
+        stackHint: 'Whole stack selected. Tap a yellow tile to move, or an adjacent enemy to attack.',
+        enemyUnits: 'Enemy units.',
+        pickUnits: 'Pick units',
+        pickHint: 'Checked units move/attack together. Tap a yellow tile to move, or an adjacent enemy to attack.',
+        onTile: 'on tile',
+        units: 'units',
+      },
+      zh: {
+        selection: '选择',
+        selectWholeStack: '选择整个部队',
+        next: '下一个',
+        attack: '攻击',
+        combine: '⊕ 合并',
+        clickTile: '点击一个格子来选择单位。',
+        refit: '⚙ 改装',
+        split: '✂ 拆分',
+        build: '🏗 建造',
+        rally: '📯 集结',
+        rallyHint: '点击一个格子，所有单位将向该处集结。',
+        aiTakeover: 'AI接管本回合',
+        turn: '回合',
+        nowPlaying: '当前玩家:',
+        round: '回合',
+        creativeGold: '🎁 +171,717 金币',
+        countryToolbox: '国家工具箱',
+        addCountry: '+ 添加国家',
+        rmCountry: '− 移除国家',
+        buy: '🛒 购买',
+        tech: '⚗️ 科技',
+        template: '▦ 模板',
+        combatLog: '战斗日志',
+        nextRound: '下一回合 ▶',
+        logHint: '勾选后，敌方回合结束时将弹出战斗日志。',
+        diplomacy: '🤝 外交',
+        fieldManual: '📖 作战手册',
+        mainMenu: '主菜单',
+        deploy: '部署师',
+        enemyMove: '敌方行动',
+        ok: '确定',
+        unit: '单位',
+        close: '关闭',
+        refitUnits: '改装单位',
+        refitHint: '将选中单位切换为其他模板。需要补给范围内且未被包围。',
+        cancel: '取消',
+        combineUnits: '合并单位',
+        combineHint: '将一个单位的兵力补充到另一个中，最多25个。',
+        buildStructure: '建造设施',
+        buildHint: '在选中格子上建造设施（非水域，无已有设施）。',
+        aiStrategy: 'AI接管 — 选择策略',
+        aiStratHint: 'AI本回合如何行动？',
+        focusAttack: '⚔️ 主攻',
+        focusAttackDesc: '— 激进，低谨慎',
+        focusDefend: '🛡️ 主守',
+        focusDefendDesc: '— 固守阵地，谨慎',
+        balanced: '⚖️ 均衡',
+        balancedDesc: '— 默认行为',
+        peaceDeal: '和平协议',
+        peaceAccept: '接受',
+        peaceReject: '拒绝',
+        totalHpAtk: '总血量 / 攻击力',
+        stackHint: '已选择整个部队。点击黄色格子移动，或点击相邻敌人攻击。',
+        enemyUnits: '敌方单位。',
+        pickUnits: '选择单位',
+        pickHint: '勾选的单位一起移动/攻击。点击黄色格子移动，或点击相邻敌人攻击。',
+        onTile: '在格子上',
+        units: '个单位',
+      }
+    };
+    function _t(key) {
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      return (GAME_I18N[lang] && GAME_I18N[lang][key]) || GAME_I18N.en[key] || key;
+    }
+    function applyGameI18n() {
+      const q = (sel) => document.querySelector(sel);
+      const qi = (id) => document.getElementById(id);
+      // Sidebar static text
+      const selH2 = q('#sidebar .panel:first-child h2');
+      if (selH2) selH2.textContent = _t('selection');
+      const stackLabel = q('label[style*="gap:8px"]');
+      if (stackLabel) {
+        const chk = stackLabel.querySelector('input');
+        if (chk) { stackLabel.innerHTML = ''; stackLabel.appendChild(chk); stackLabel.append(' ' + _t('selectWholeStack')); }
+      }
+      if (qi('nextBtn')) qi('nextBtn').textContent = _t('next');
+      if (qi('executeBtnLabel')) qi('executeBtnLabel').textContent = _t('attack');
+      if (qi('combineBtn')) qi('combineBtn').textContent = _t('combine');
+      if (qi('selInfo')) qi('selInfo').textContent = _t('clickTile');
+      if (qi('refitBtn')) qi('refitBtn').innerHTML = _t('refit');
+      if (qi('splitBtn')) qi('splitBtn').textContent = _t('split');
+      if (qi('buildBtn')) qi('buildBtn').textContent = _t('build');
+      if (qi('rallyBtn')) qi('rallyBtn').textContent = _t('rally');
+      if (qi('rallyHint')) qi('rallyHint').textContent = _t('rallyHint');
+      if (qi('aiTakeoverBtn')) qi('aiTakeoverBtn').textContent = _t('aiTakeover');
+      // Turn panel
+      const turnH2 = q('#sidebar .panel:nth-child(2) h2');
+      if (turnH2) turnH2.textContent = _t('turn');
+      if (qi('creativeBtn')) qi('creativeBtn').textContent = _t('creativeGold');
+      if (qi('addCountryBtn')) qi('addCountryBtn').textContent = _t('addCountry');
+      if (qi('rmCountryBtn')) qi('rmCountryBtn').textContent = _t('rmCountry');
+      if (qi('buyBtn')) qi('buyBtn').textContent = _t('buy');
+      if (qi('techBtn')) qi('techBtn').textContent = _t('tech');
+      if (qi('templateBtn')) qi('templateBtn').textContent = _t('template');
+      if (qi('nextRoundBtn')) qi('nextRoundBtn').textContent = _t('nextRound');
+      if (qi('diplomacyBtn')) qi('diplomacyBtn').textContent = _t('diplomacy');
+      if (qi('infoBtn')) qi('infoBtn').textContent = _t('fieldManual');
+      if (qi('menuBtn')) qi('menuBtn').textContent = _t('mainMenu');
+      // Log checkbox
+      const logLabel = q('#logChk');
+      if (logLabel && logLabel.parentElement) {
+        const parent = logLabel.parentElement;
+        const chk2 = parent.querySelector('input');
+        if (chk2) { parent.innerHTML = ''; parent.appendChild(chk2); parent.append(' ' + _t('combatLog')); }
+      }
+      const logHintP = q('.log-row + p.hint');
+      if (logHintP) logHintP.textContent = _t('logHint');
+      // Deploy panel
+      const deployH2 = q('#placePanel h2');
+      if (deployH2) deployH2.textContent = _t('deploy');
+      // Modals
+      const logModalH2 = q('#logModal .modal-box h2');
+      if (logModalH2) logModalH2.textContent = _t('enemyMove');
+      if (qi('logModalOk')) qi('logModalOk').textContent = _t('ok');
+      const unitModalH2 = q('#unitModal .modal-box h2');
+      if (qi('unitModalOk')) qi('unitModalOk').textContent = _t('close');
+      const refitH2 = q('#refitModal .modal-box h2');
+      if (refitH2) refitH2.textContent = _t('refitUnits');
+      const refitHintP = q('#refitModal .hint');
+      if (refitHintP) refitHintP.textContent = _t('refitHint');
+      if (qi('refitModalClose')) qi('refitModalClose').textContent = _t('cancel');
+      const combH2 = q('#combineModal .modal-box h2');
+      if (combH2) combH2.textContent = _t('combineUnits');
+      const combHintP = q('#combineModal .hint');
+      if (combHintP) combHintP.textContent = _t('combineHint');
+      if (qi('combineModalClose')) qi('combineModalClose').textContent = _t('cancel');
+      const buildH2 = q('#buildModal .modal-box h2');
+      if (buildH2) buildH2.textContent = _t('buildStructure');
+      const buildHintP = q('#buildModal .hint');
+      if (buildHintP) buildHintP.textContent = _t('buildHint');
+      if (qi('buildModalClose')) qi('buildModalClose').textContent = _t('cancel');
+      const aiH2 = q('#aiStratModal .modal-box h2');
+      if (aiH2) aiH2.textContent = _t('aiStrategy');
+      const aiHintP = q('#aiStratModal .modal-box .hint');
+      if (aiHintP) aiHintP.textContent = _t('aiStratHint');
+      if (qi('aiStratCancel')) qi('aiStratCancel').textContent = _t('cancel');
+      if (qi('peaceDealOk')) qi('peaceDealOk').textContent = _t('ok');
+      if (qi('peaceAcceptBtn')) qi('peaceAcceptBtn').textContent = _t('peaceAccept');
+      if (qi('peaceRejectBtn')) qi('peaceRejectBtn').textContent = _t('peaceReject');
+      // Turn line
+      if (qi('nowPlayingLabel')) qi('nowPlayingLabel').textContent = _t('nowPlaying');
+      if (qi('roundLabel')) qi('roundLabel').textContent = _t('round');
+      // Strategy buttons
+      q('#aiStratModal .strat-btns')?.querySelectorAll('button[data-strat]').forEach(b => {
+        if (b.dataset.strat === 'attack') b.innerHTML = _t('focusAttack') + ' <small style="opacity:.7">' + _t('focusAttackDesc') + '</small>';
+        if (b.dataset.strat === 'defend') b.innerHTML = _t('focusDefend') + ' <small style="opacity:.7">' + _t('focusDefendDesc') + '</small>';
+        if (b.dataset.strat === 'balanced') b.innerHTML = _t('balanced') + ' <small style="opacity:.7">' + _t('balancedDesc') + '</small>';
+      });
+    }
+    // Apply on load; game.js will call applyGameI18n() again after init.
+    applyGameI18n();
   </script>
   <script src="input.js"></script>
   <script src="wasm-cpm.js"></script>
