@@ -25,12 +25,26 @@ window.Auth = (function () {
     return users;
   }
 
-  return {
-    // Resolves true when username/password match an entry in users.txt.
-    async check(username, password) {
-      const res = await fetch('users.txt', { cache: 'no-store' });
+  function loadFile(url) {
+    if (location.protocol === 'file:') {
+      return new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onload = function () { resolve(xhr.responseText || ''); };
+        xhr.onerror = function () { reject(new Error('Could not load ' + url)); };
+        xhr.send();
+      });
+    }
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
       if (!res.ok) throw new Error('Could not load credentials (HTTP ' + res.status + ')');
-      const users = parse(await res.text());
+      return res.text();
+    });
+  }
+
+  return {
+    async check(username, password) {
+      const text = await loadFile('users.txt');
+      const users = parse(text);
       return Object.prototype.hasOwnProperty.call(users, username) &&
              users[username] === password;
     },
