@@ -1,0 +1,43 @@
+#!/bin/sh
+# Gradle wrapper stub — downloads Gradle on first run.
+# For full wrapper, run: gradle wrapper --gradle-version 8.5
+
+set -e
+
+APP_NAME="Gradle"
+APP_BASE_NAME=$(basename "$0")
+DIRNAME=$(dirname "$0")
+CLASSPATH="$DIRNAME/gradle/wrapper/gradle-wrapper.jar"
+
+# Check for Java
+if [ -n "$JAVA_HOME" ]; then
+    JAVACMD="$JAVA_HOME/bin/java"
+else
+    JAVACMD="java"
+fi
+
+if ! command -v "$JAVACMD" >/dev/null 2>&1; then
+    echo "ERROR: JAVA_HOME is not set and 'java' not found in PATH." >&2
+    echo "Install JDK 17+: https://adoptium.net/" >&2
+    exit 1
+fi
+
+# If the wrapper jar doesn't exist, download it
+if [ ! -f "$CLASSPATH" ]; then
+    echo "Downloading Gradle wrapper jar..."
+    mkdir -p "$DIRNAME/gradle/wrapper"
+    WRAPPER_URL="https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar"
+    if command -v curl >/dev/null 2>&1; then
+        curl -sL -o "$CLASSPATH" "$WRAPPER_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$CLASSPATH" "$WRAPPER_URL"
+    else
+        echo "ERROR: Need curl or wget to download Gradle wrapper." >&2
+        exit 1
+    fi
+fi
+
+exec "$JAVACMD" \
+    -classpath "$CLASSPATH" \
+    org.gradle.wrapper.GradleWrapperMain \
+    "$@"

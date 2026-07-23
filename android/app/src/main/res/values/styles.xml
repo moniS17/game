@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Battlegrid" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">#1b1f23</item>
+        <item name="android:statusBarColor">#1b1f23</item>
+        <item name="android:navigationBarColor">#1b1f23</item>
+    </style>
+</resources>
