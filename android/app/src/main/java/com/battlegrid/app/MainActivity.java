@@ -54,16 +54,6 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
             }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                if (url.startsWith("https://appassets.androidplatform.net/")) {
-                    view.loadUrl(url);
-                    return true;
-                }
-                return false;
-            }
         });
 
         webView.setWebChromeClient(new WebChromeClient());
