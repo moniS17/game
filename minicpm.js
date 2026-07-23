@@ -138,7 +138,10 @@ const MiniCPM = (function () {
 
   let _background = '';
   (function loadBackground() {
-    fetch('ai-background.txt').then(r => r.ok ? r.text() : '').then(t => { _background = t; }).catch(() => {});
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'ai-background.txt', true);
+    xhr.onload = function () { _background = xhr.responseText || ''; };
+    xhr.send();
   })();
 
   const RESPONSE_FORMAT =
