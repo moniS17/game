@@ -1,4 +1,4 @@
-const CACHE_NAME = 'battlegrid-v5';
+const CACHE_NAME = 'battlegrid-v6';
 const ASSETS = [
   './',
   'index.html',
