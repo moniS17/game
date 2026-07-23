@@ -25,26 +25,11 @@ window.Auth = (function () {
     return users;
   }
 
-  function loadFile(url) {
-    if (location.protocol === 'file:') {
-      return new Promise(function (resolve, reject) {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.onload = function () { resolve(xhr.responseText || ''); };
-        xhr.onerror = function () { reject(new Error('Could not load ' + url)); };
-        xhr.send();
-      });
-    }
-    return fetch(url, { cache: 'no-store' }).then(function (res) {
-      if (!res.ok) throw new Error('Could not load credentials (HTTP ' + res.status + ')');
-      return res.text();
-    });
-  }
-
   return {
     async check(username, password) {
-      const text = await loadFile('users.txt');
-      const users = parse(text);
+      const res = await fetch('users.txt', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Could not load credentials (HTTP ' + res.status + ')');
+      const users = parse(await res.text());
       return Object.prototype.hasOwnProperty.call(users, username) &&
              users[username] === password;
     },
