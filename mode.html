@@ -385,6 +385,7 @@
         <button class="pve" id="pveBtn">🤖 Start — Player vs AI</button>
       </div>
       <button class="back" id="backBtn">← Back to menu</button>
+      <button class="back" id="manualBtn" style="background:#5a6570">📖 Field Manual</button>
     </div>
 
     <div class="diff" id="diffPanel" style="display:none;">
@@ -882,6 +883,9 @@
     document.getElementById('backBtn').addEventListener('click', () => {
       window.location.href = 'menu.html';
     });
+    document.getElementById('manualBtn').addEventListener('click', () => {
+      window.location.href = 'info.html';
+    });
 
     // --- Map editor + Load map ---
     let loadedMap = null;
@@ -955,6 +959,7 @@
         loadMap: '📂 Load Map',
         pvp: '🧑‍🤝‍🧑 Start — Player vs Player', pve: '🤖 Start — Player vs AI',
         back: '← Back to menu',
+        manual: '📖 Field Manual',
         chooseDiff: 'Choose difficulty',
         easy: '🟢 Easy', easyDesc: 'You earn +10% gold',
         normal: '🟡 Normal', normalDesc: 'No bonuses — a fair fight',
@@ -979,6 +984,7 @@
         loadMap: '📂 加载地图',
         pvp: '🧑‍🤝‍🧑 开始 — 玩家对战', pve: '🤖 开始 — 人机对战',
         back: '← 返回菜单',
+        manual: '📖 战地手册',
         chooseDiff: '选择难度',
         easy: '🟢 简单', easyDesc: '你获得+10%金币',
         normal: '🟡 普通', normalDesc: '无加成 — 公平对战',
@@ -1018,6 +1024,7 @@
       document.getElementById('pvpBtn').textContent = t.pvp;
       document.getElementById('pveBtn').textContent = t.pve;
       document.getElementById('backBtn').textContent = t.back;
+      document.getElementById('manualBtn').textContent = t.manual;
       document.querySelector('#diffPanel h2').textContent = t.chooseDiff;
       const diffBtns = document.querySelectorAll('#diffPanel button[data-d]');
       diffBtns[0].innerHTML = '<span>' + t.easy + '<br><small>' + t.easyDesc + '</small></span>';
