@@ -449,6 +449,7 @@
     };
 
     function updateTerrainPreview() {
+      if (!Algorithms.estimateProportions) return;
       const hEl = document.getElementById('heightInput');
       const wEl = document.getElementById('widthInput');
       if (!hEl || !wEl) return;
@@ -483,14 +484,14 @@
       const slider = document.getElementById(id);
       const label = document.getElementById(id + 'Val');
       function sync() {
-        const v = slider.value / 100;
+        var v = slider.value / 100;
         if (type === 'area') {
-          const base = id === 'wForest' ? 15 : 10;
+          var base = id === 'wForest' ? 15 : 10;
           label.textContent = '~' + Math.round(Math.min(id === 'wForest' ? 45 : 30, base * v)) + '%';
         } else {
           label.textContent = v.toFixed(1) + '×';
         }
-        updateTerrainPreview();
+        try { updateTerrainPreview(); } catch(e) {}
       }
       slider.addEventListener('input', sync);
       sync();
