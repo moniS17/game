@@ -478,7 +478,7 @@ function aiSpendAndReinforce(me) {
   if (placed) {
     const counts = {};
     for (let i = 0; i < placed; i++) counts[specs[i].type] = (counts[specs[i].type] || 0) + specs[i].size;
-    const names = Object.keys(counts).map(t => `${PIECES[t].name} ×${counts[t]}`);
+    const names = Object.keys(counts).map(t => `${localName(PIECES[t])} ×${counts[t]}`);
     UI.log(`${PLAYERS[me].name} reinforced with ${names.join(', ')}.`);
   }
 }
@@ -875,17 +875,26 @@ function aiDiplomacy(me) {
       // Declare war on much weaker neighbor (2× units advantage)
       if (theirUnits > 0 && myUnits >= theirUnits * 2 && myCities >= 3) {
         window.setDiplomacy(me, p, 'war');
-        UI.log(`${PLAYERS[me].name} declares war on ${PLAYERS[p].name}!`);
+        const _zh = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+        UI.log(_zh
+          ? `${PLAYERS[me].name} 向 ${PLAYERS[p].name} 宣战！`
+          : `${PLAYERS[me].name} declares war on ${PLAYERS[p].name}!`);
       } else if (strongestEnemy !== null && strongestCount > myUnits * 1.5) {
         // Ally against a dominant threat
         if (p !== strongestEnemy && theirUnits >= myUnits * 0.5) {
           window.setDiplomacy(me, p, 'alliance');
-          UI.log(`${PLAYERS[me].name} forms alliance with ${PLAYERS[p].name} against ${PLAYERS[strongestEnemy].name}.`);
+          const _zh2 = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+          UI.log(_zh2
+            ? `${PLAYERS[me].name} 与 ${PLAYERS[p].name} 结盟对抗 ${PLAYERS[strongestEnemy].name}。`
+            : `${PLAYERS[me].name} forms alliance with ${PLAYERS[p].name} against ${PLAYERS[strongestEnemy].name}.`);
         }
       }
     } else if (rel === 'alliance' && enemies.length === 0) {
       window.setDiplomacy(me, p, 'war');
-      UI.log(`${PLAYERS[me].name} breaks alliance with ${PLAYERS[p].name}!`);
+      const _zh3 = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+      UI.log(_zh3
+        ? `${PLAYERS[me].name} 解除了与 ${PLAYERS[p].name} 的同盟！`
+        : `${PLAYERS[me].name} breaks alliance with ${PLAYERS[p].name}!`);
     }
   }
 
@@ -899,7 +908,10 @@ function aiDiplomacy(me) {
     }
     if (target !== null) {
       window.setDiplomacy(me, target, 'war');
-      UI.log(`${PLAYERS[me].name} declares war on ${PLAYERS[target].name}!`);
+      const _zh = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+      UI.log(_zh
+        ? `${PLAYERS[me].name} 向 ${PLAYERS[target].name} 宣战！`
+        : `${PLAYERS[me].name} declares war on ${PLAYERS[target].name}!`);
     }
   }
 }
@@ -919,7 +931,10 @@ function aiSendGold(me) {
       if (gift > 0) {
         Game.economy[me] -= gift;
         Game.economy[ally] += gift;
-        UI.log(`${PLAYERS[me].name} sends ${gift} gold to ${PLAYERS[ally].name}.`);
+        const _zhG = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+        UI.log(_zhG
+          ? `${PLAYERS[me].name} 向 ${PLAYERS[ally].name} 赠送了 ${gift} 金币。`
+          : `${PLAYERS[me].name} sends ${gift} gold to ${PLAYERS[ally].name}.`);
       }
     }
   }

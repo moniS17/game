@@ -235,7 +235,7 @@ const MiniCPM = (function () {
       if (typeof TECH !== 'undefined' && TECH[techType] && !window.isUnlocked(me, techType)) {
         if (Game.economy[me] >= TECH[techType]) {
           window.unlockType(me, techType);
-          UI.log(`${PLAYERS[me].name} (CPM) researched ${PIECES[techType].name}.`);
+          UI.log(`${PLAYERS[me].name} (CPM) researched ${localName(PIECES[techType])}.`);
         }
       }
     }
@@ -258,7 +258,7 @@ const MiniCPM = (function () {
         window.aiDeployUnits(me, specs);
         const counts = {};
         for (const s of specs) counts[s.type] = (counts[s.type] || 0) + s.size;
-        const names = Object.keys(counts).map(t => `${PIECES[t].name} x${counts[t]}`);
+        const names = Object.keys(counts).map(t => `${localName(PIECES[t])} x${counts[t]}`);
         UI.log(`${PLAYERS[me].name} (CPM) reinforced with ${names.join(', ')}.`);
       }
     }
@@ -378,7 +378,14 @@ const MiniCPM = (function () {
     }
   }
 
-  return { available, ensureRunning, runCpmTurn, runCpmTakeover, configure };
+  return {
+    available, ensureRunning, runCpmTurn, runCpmTakeover, configure,
+    serializeState,
+    getBackground: function () { return _background; },
+    getApiBase: function () { return _apiBase; },
+    getApiKey: function () { return _apiKey; },
+    getModelName: function () { return _modelName; },
+  };
 })();
 
 window.MiniCPM = MiniCPM;

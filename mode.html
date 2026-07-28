@@ -577,6 +577,9 @@
     startSlider.addEventListener('input', () => {
       startInput.value = startSlider.value;
     });
+    startSlider.addEventListener('change', () => {
+      startInput.value = startSlider.value;
+    });
     widthInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
     heightInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
     randomChk.addEventListener('change', syncNote);
@@ -883,7 +886,7 @@
         start: firstMove(), human: humanSide(),
         difficulty: difficulty || 'normal',
         creative: document.getElementById('creativeChk').checked,
-        startUnits: Math.max(0, Math.floor(Number(startInput.value)) || 0),
+        startUnits: Math.max(0, parseInt(startSlider.value) || 0),
         randomStart: randomChk.checked,
         playerCount: playerCount,
         playerNames: playerNames,

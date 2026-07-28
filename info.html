@@ -261,7 +261,9 @@
 
     // --- Units table ---
     const ut = document.getElementById("unitTable");
-    const roles = {
+    const lang = localStorage.getItem('battlegrid.lang') || 'en';
+    const infoT = infoI18n[lang] || infoI18n.en;
+    const roles = infoT.roles || {
       infantry: "Cheap frontline body; storms cannon, holds cities & forest.",
       motorized: "Truck-borne troops: fast, outmaneuvers cavalry & cannon.",
       cavalry: "Fast flanker, hard hitter.",
@@ -273,7 +275,7 @@
       const visual = d.art ? `<img class="swatch" src="${d.art}" alt="">` : `<span class="icon">${d.code}</span>`;
       const tr = document.createElement("tr");
       tr.innerHTML =
-        `<td><span class="name">${visual}${d.name} (${d.code})</span></td>` +
+        `<td><span class="name">${visual}${localName(d)} (${d.code})</span></td>` +
         `<td>${d.hp}</td><td>${d.attack}</td><td>${d.movement_speed}</td><td>${GOLD_ICON}${d.cost}</td>` +
         `<td style="text-align:left; color:#c5ccd3">${roles[k] || ""}</td>`;
       ut.appendChild(tr);
@@ -283,7 +285,7 @@
     const tct = document.getElementById("terrainCombatTable");
     const terrCols = Object.keys(TERRAIN);
     const header = document.createElement("tr");
-    header.innerHTML = `<th>Unit</th>` + terrCols.map((k) => `<th>${TERRAIN[k].name}</th>`).join("");
+    header.innerHTML = `<th>Unit</th>` + terrCols.map((k) => `<th>${localName(TERRAIN[k])}</th>`).join("");
     tct.appendChild(header);
     for (const k in PIECES) {
       const row = TERRAIN_COMBAT[k];
@@ -297,7 +299,7 @@
         return `<td><span class="${m < 1 ? "debuff" : "buff"}">${pct}</span></td>`;
       }).join("");
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><span class="name">${visual}${d.name}</span></td>` + cells;
+      tr.innerHTML = `<td><span class="name">${visual}${localName(d)}</span></td>` + cells;
       tct.appendChild(tr);
     }
 
@@ -305,7 +307,7 @@
     const uct = document.getElementById("unitCombatTable");
     const unitCols = Object.keys(PIECES);
     const uHeader = document.createElement("tr");
-    uHeader.innerHTML = `<th>Attacker \\ Defender</th>` + unitCols.map((k) => `<th>${PIECES[k].name}</th>`).join("");
+    uHeader.innerHTML = `<th>Attacker \\ Defender</th>` + unitCols.map((k) => `<th>${localName(PIECES[k])}</th>`).join("");
     uct.appendChild(uHeader);
     for (const k in PIECES) {
       const row = (typeof UNIT_COMBAT !== "undefined") && UNIT_COMBAT[k];
@@ -319,7 +321,7 @@
         return `<td><span class="${m < 1 ? "debuff" : "buff"}">${pct}</span></td>`;
       }).join("");
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><span class="name">${visual}${d.name}</span></td>` + cells;
+      tr.innerHTML = `<td><span class="name">${visual}${localName(d)}</span></td>` + cells;
       uct.appendChild(tr);
     }
 

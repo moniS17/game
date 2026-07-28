@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
   <title>Battlegrid — Turn-Based Strategy</title>
+  <link rel="stylesheet" href="chat.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -318,6 +319,7 @@
         <button class="shop" id="buyBtn">🛒 Buy</button>
         <button class="tech-btn" id="techBtn">⚗️ Tech</button>
         <button class="tmpl-btn" id="templateBtn">▦ Template</button>
+        <button class="ghost" id="diplomacyBtn" style="font-size:.78rem;">🤝 Diplomacy</button>
       </div>
 
       <div class="log-row">
@@ -330,9 +332,9 @@
       <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
 
       <div class="btn-grid">
-        <button class="ghost" id="diplomacyBtn">🤝 Diplomacy</button>
-        <button class="ghost" id="infoBtn">📖 Field manual</button>
         <button class="ghost" id="menuBtn">Main menu</button>
+        <button class="ghost" id="infoBtn">📖 Field manual</button>
+        <button class="ghost" id="advisorBtn" style="background:#1a4a7a;border:1px solid #2a6aaa;">💬 Advisor</button>
       </div>
     </div>
 
@@ -439,7 +441,7 @@
     function stackSummaryHtml(stack, owner) {
       // Group units by their template name (each board piece is a unit).
       const counts = {};
-      for (const u of stack) { const n = u.name || PIECES[u.type].name; counts[n] = (counts[n] || 0) + 1; }
+      for (const u of stack) { const n = u.name || localName(PIECES[u.type]); counts[n] = (counts[n] || 0) + 1; }
       const lines = Object.keys(counts).map((n) =>
         `<div class="stat-row"><span>${n}</span><span>×${counts[n]}</span></div>`).join('');
       const totHp = stack.reduce((a, u) => a + u.hp, 0);
@@ -455,7 +457,7 @@
     function stackChecklistHtml(stack) {
       const selIds = new Set(Game.selUnits.map((u) => u.id));
       const rows = stack.map((u) => {
-        const label = u.name || PIECES[u.type].name;
+        const label = u.name || localName(PIECES[u.type]);
         const checked = selIds.has(u.id) ? 'checked' : '';
         return `<label class="stat-row" style="cursor:pointer">` +
           `<span><input type="checkbox" data-uid="${u.id}" ${checked} style="width:auto; margin-right:6px;"> ${label}</span>` +
@@ -486,9 +488,9 @@
         const d = PIECES[u.type];
         const color = PLAYERS[u.owner].color;
         const inner = d.art
-          ? `<img src="${d.art}" alt="${d.name}">`
+          ? `<img src="${d.art}" alt="${localName(d)}">`
           : d.code;
-        return `<div class="tunit" data-i="${i}" title="${d.name} — tap for template" style="z-index:${sorted.length - i}">` +
+        return `<div class="tunit" data-i="${i}" title="${localName(d)}" style="z-index:${sorted.length - i}">` +
           `<div class="tfig" style="background:${color}">${inner}</div>` +
           `<div class="thp" style="color:${hpColor(u)}">${u.hp}/${u.maxHp}</div></div>`;
       }).join('');
@@ -516,7 +518,7 @@
       let grid = '';
       for (let i = 0; i < 25; i++) {
         const t = cells[i];
-        const inner = t ? (PIECES[t].art ? `<img src="${PIECES[t].art}" alt="${PIECES[t].name}">` : PIECES[t].code) : '';
+        const inner = t ? (PIECES[t].art ? `<img src="${PIECES[t].art}" alt="${localName(PIECES[t])}">` : PIECES[t].code) : '';
         grid += t ? `<i style="background:${color}">${inner}</i>` : `<i></i>`;
       }
       const atk = Rules.unitAttack(u);
@@ -526,14 +528,14 @@
         const bn = Math.floor(p.count / 4);
         const co = p.count % 4;
         let label = '';
-        if (bn > 0) label += `${bn} Bn`;
+        if (bn > 0) label += `${bn} ${_t('statBn')}`;
         if (bn > 0 && co > 0) label += ' + ';
         if (co > 0 || !bn) label += `${co || p.count} Co`;
-        return `${PIECES[p.type].name} ${label}`;
+        return `${localName(PIECES[p.type])} ${label}`;
       }).join(' · ');
       const showSplit = window.canSplitUnit && window.canSplitUnit(u);
       document.getElementById('unitModalTitle').innerHTML =
-        `<span style="color:${color}">${PLAYERS[u.owner].name}</span> — ${u.name || PIECES[u.type].name}`;
+        `<span style="color:${color}">${PLAYERS[u.owner].name}</span> — ${u.name || localName(PIECES[u.type])}`;
       document.getElementById('unitModalBody').innerHTML =
         `<div class="utmpl-grid">${grid}</div>` +
         `<div class="utmpl-stats">` +
@@ -564,7 +566,7 @@
         for (let i = 0; i < 25; i++) {
           const t = cells[i];
           if (!t) { grid += `<i></i>`; continue; }
-          const inner = PIECES[t].art ? `<img src="${PIECES[t].art}" alt="${PIECES[t].name}">` : PIECES[t].code;
+          const inner = PIECES[t].art ? `<img src="${PIECES[t].art}" alt="${localName(PIECES[t])}">` : PIECES[t].code;
           const cls = selected.has(i) ? 'split-pick split-sel' : 'split-pick';
           grid += `<i class="${cls}" data-ci="${i}" style="background:${color}">${inner}</i>`;
         }
@@ -605,7 +607,7 @@
       }
 
       document.getElementById('unitModalTitle').innerHTML =
-        `<span style="color:${color}">Split</span> — ${u.name || PIECES[u.type].name}`;
+        `<span style="color:${color}">Split</span> — ${u.name || localName(PIECES[u.type])}`;
       document.getElementById('unitModalOk').style.display = 'none';
       renderSplitGrid();
     }
@@ -643,7 +645,7 @@
           const coCounts = {};
           for (const u of units) for (const pt of (u.parts || [])) coCounts[pt.type] = (coCounts[pt.type] || 0) + pt.count;
           let coDropdown = '';
-          for (const t in coCounts) coDropdown += `<div>${PIECES[t].name}: ${coCounts[t]}</div>`;
+          for (const t in coCounts) coDropdown += `<div>${localName(PIECES[t])}: ${coCounts[t]}</div>`;
 
           statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>` +
             `<span class="stat-chip" data-drop="bn${p}">${uCount} ${_t('statBn')}<span class="stat-dropdown">${coDropdown || '<div>' + _t('statNoUnits') + '</div>'}</span></span> · ` +
@@ -944,14 +946,18 @@
       if (idx === -1) return;
       const proposal = Game.peaceProposals[idx];
       document.getElementById('peaceProposalTitle').textContent =
-        PLAYERS[proposal.from].name + ' proposes peace';
+        PLAYERS[proposal.from].name + (_t('peaceDeal') === '和平协议' ? ' 提议和平' : ' proposes peace');
       document.getElementById('peaceProposalBody').textContent =
-        PLAYERS[proposal.from].name + ' wants to end the war with ' + PLAYERS[proposal.to].name + '. Do you accept?';
+        PLAYERS[proposal.from].name + (_t('peaceDeal') === '和平协议'
+          ? ' 想与 ' + PLAYERS[proposal.to].name + ' 结束战争。你接受吗？'
+          : ' wants to end the war with ' + PLAYERS[proposal.to].name + '. Do you accept?');
       document.getElementById('peaceProposalPopup').style.display = 'flex';
 
       document.getElementById('peaceAcceptBtn').onclick = () => {
         window.setDiplomacy(proposal.from, proposal.to, 'peace');
-        UI.log(PLAYERS[proposal.to].name + ' accepts peace with ' + PLAYERS[proposal.from].name + '.');
+        UI.log(PLAYERS[proposal.to].name + (_t('peaceDeal') === '和平协议'
+          ? ' 接受了与 ' + PLAYERS[proposal.from].name + ' 的和平。'
+          : ' accepts peace with ' + PLAYERS[proposal.from].name + '.'));
         Game.peaceProposals.splice(idx, 1);
         document.getElementById('peaceProposalPopup').style.display = 'none';
         UI.refresh();
@@ -959,7 +965,9 @@
         showNextPeaceProposal();
       };
       document.getElementById('peaceRejectBtn').onclick = () => {
-        UI.log(PLAYERS[proposal.to].name + ' rejects peace with ' + PLAYERS[proposal.from].name + '.');
+        UI.log(PLAYERS[proposal.to].name + (_t('peaceDeal') === '和平协议'
+          ? ' 拒绝了与 ' + PLAYERS[proposal.from].name + ' 的和平。'
+          : ' rejects peace with ' + PLAYERS[proposal.from].name + '.'));
         Game.peaceProposals.splice(idx, 1);
         document.getElementById('peaceProposalPopup').style.display = 'none';
         showNextPeaceProposal();
@@ -1005,7 +1013,7 @@
           totalDiff += newCost - Math.round(unitCostFromParts(u) * hpRatio);
         }
         const affordable = totalDiff <= 0 || Game.economy[Game.turn] >= totalDiff;
-        const compStr = (s.parts || []).map((p) => `${PIECES[p.type].name} ×${p.count}`).join(', ');
+        const compStr = (s.parts || []).map((p) => `${localName(PIECES[p.type])} ×${p.count}`).join(', ');
         let costHtml;
         if (totalDiff > 0) costHtml = `<span class="refit-spend">Cost: ${totalDiff} ${GOLD_ICON}</span>`;
         else if (totalDiff < 0) costHtml = `<span class="refit-gain">Refund: ${-totalDiff} ${GOLD_ICON}</span>`;
@@ -1100,7 +1108,7 @@
         let html = '<div style="font-size:.84rem; margin:6px 0 4px; color:#b0b8c1;"><b>1.</b> Pick the unit to fill:</div>';
         html += '<div class="combine-pair">';
         for (const u of mine) {
-          const label = u.name || PIECES[u.type].name;
+          const label = u.name || localName(PIECES[u.type]);
           const sub = window.totalSubunits(u);
           const active = fillId === u.id ? ' combine-active' : '';
           const full = sub >= 25 ? ' style="opacity:.5;"' : '';
@@ -1114,7 +1122,7 @@
           html += '<div style="font-size:.84rem; margin:6px 0 4px; color:#b0b8c1;"><b>2.</b> Pick the material unit:</div>';
           html += '<div class="combine-pair">';
           for (const u of others) {
-            const label = u.name || PIECES[u.type].name;
+            const label = u.name || localName(PIECES[u.type]);
             const sub = window.totalSubunits(u);
             const active = matId === u.id ? ' combine-active' : '';
             html += `<div class="combine-unit${active}" data-mat="${u.id}">` +
@@ -1260,6 +1268,7 @@
         statGold: 'g/rnd',
         statNoUnits: 'No units',
         statVillage: 'village',
+        advisor: '💬 Advisor',
       },
       zh: {
         selection: '选择',
@@ -1326,6 +1335,7 @@
         statGold: '金/回合',
         statNoUnits: '无单位',
         statVillage: '村庄',
+        advisor: '💬 顾问',
       }
     };
     function _t(key) {
@@ -1365,6 +1375,7 @@
       if (qi('nextRoundBtn')) qi('nextRoundBtn').textContent = _t('nextRound');
       if (qi('diplomacyBtn')) qi('diplomacyBtn').textContent = _t('diplomacy');
       if (qi('infoBtn')) qi('infoBtn').textContent = _t('fieldManual');
+      if (qi('advisorBtn')) qi('advisorBtn').textContent = _t('advisor');
       if (qi('menuBtn')) qi('menuBtn').textContent = _t('mainMenu');
       // Log checkbox
       const logLabel = q('#logChk');
@@ -1420,9 +1431,31 @@
     // Apply on load; game.js will call applyGameI18n() again after init.
     applyGameI18n();
   </script>
+  <!-- AI Advisor Chat Panel (slide-out drawer) -->
+  <div id="chatPanel">
+    <div class="chat-header">
+      <h3>AI Advisor</h3>
+      <div>
+        <button class="chat-clear">Clear</button>
+        <button class="chat-close">&times;</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <button class="chat-stop" id="chatStopBtn">Stop</button>
+    <div class="chat-input-area">
+      <textarea class="chat-input" id="chatInput" rows="1" placeholder="Ask about strategy..."></textarea>
+      <button class="chat-send" id="chatSendBtn">Send</button>
+    </div>
+  </div>
+
   <script src="input.js"></script>
   <script src="wasm-cpm.js"></script>
   <script src="minicpm.js"></script>
+  <script src="chat.js"></script>
+  <script>
+    AdvisorChat.init();
+    document.getElementById('advisorBtn').addEventListener('click', function () { AdvisorChat.toggle(); });
+  </script>
   <script src="ai.js"></script>
   <script src="game.js"></script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>

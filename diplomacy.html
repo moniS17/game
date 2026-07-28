@@ -48,9 +48,10 @@
   </style>
 </head>
 <body>
+  <button class="lang-btn" id="langBtn" style="position:fixed;top:16px;right:16px;padding:6px 14px;font-size:.85rem;font-weight:600;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;cursor:pointer;backdrop-filter:blur(6px);z-index:100;">中文</button>
   <div class="page">
-    <h1>🤝 Diplomacy</h1>
-    <div class="sub">Manage relationships with other countries.</div>
+    <h1 id="pageTitle">🤝 Diplomacy</h1>
+    <div class="sub" id="pageSub">Manage relationships with other countries.</div>
     <div id="cards"></div>
     <button class="back" id="backBtn">← Back to battle</button>
   </div>
@@ -60,6 +61,45 @@
   <script src="rules.js"></script>
   <script src="state.js"></script>
   <script>
+    const diploI18n = {
+      en: {
+        title: '🤝 Diplomacy',
+        sub: 'Manage relationships with other countries.',
+        back: '← Back to battle',
+        you: 'You',
+        eliminated: '(Eliminated)',
+        war: 'War', peace: 'Peace', alliance: 'Alliance',
+        proposePeace: '🕊 Propose Peace',
+        proposeAlliance: '🤝 Propose Alliance',
+        formAlliance: '🤝 Form Alliance',
+        declareWar: '⚔️ Declare War',
+        breakAlliance: '⚔️ Break Alliance',
+        sendGold: '💰 Send Gold',
+        joinWar: '⚔️ Join war vs',
+        units: 'units', cities: 'cities', villages: 'villages', gold: 'gold',
+        langLabel: '中文',
+      },
+      zh: {
+        title: '🤝 外交',
+        sub: '管理与其他国家的关系。',
+        back: '← 返回战场',
+        you: '你',
+        eliminated: '（已淘汰）',
+        war: '交战', peace: '和平', alliance: '同盟',
+        proposePeace: '🕊 提议和平',
+        proposeAlliance: '🤝 提议结盟',
+        formAlliance: '🤝 结为同盟',
+        declareWar: '⚔️ 宣战',
+        breakAlliance: '⚔️ 解除同盟',
+        sendGold: '💰 赠送金币',
+        joinWar: '⚔️ 加入对抗',
+        units: '单位', cities: '城市', villages: '村庄', gold: '金币',
+        langLabel: 'EN',
+      }
+    };
+    function getLang() { return localStorage.getItem('battlegrid.lang') || 'en'; }
+    function dt(key) { const l = getLang(); return (diploI18n[l] && diploI18n[l][key]) || diploI18n.en[key] || key; }
+
     const save = SaveState.load();
     if (!save) { window.location.href = 'index.html'; }
 
@@ -78,7 +118,7 @@
         const isSelf = p === me;
         const cls = (isElim ? ' eliminated' : '') + (isSelf ? ' self' : '');
         const rel = diplomacy[me] && diplomacy[me][p] ? diplomacy[me][p] : (isSelf ? '-' : 'war');
-        const relLabel = isSelf ? 'You' : rel.charAt(0).toUpperCase() + rel.slice(1);
+        const relLabel = isSelf ? dt('you') : dt(rel);
         const relCls = isSelf ? '' : rel;
 
         const units = (save.units || []).filter(u => u.owner === p).length;
@@ -87,21 +127,21 @@
         const gold = save.economy ? save.economy[p] : 0;
 
         html += `<div class="country-card${cls}" style="border-left-color:${PLAYERS[p].color}">`;
-        html += `<div class="cc-head"><span class="cc-swatch" style="background:${PLAYERS[p].color}"></span><span class="cc-name">${PLAYERS[p].name}</span>${isElim ? '<span style="color:#ff5a52;font-size:.75rem;"> (Eliminated)</span>' : ''}</div>`;
-        html += `<div class="cc-stats">${units} units · ${cities} cities · ${villages} villages · ${gold} gold</div>`;
+        html += `<div class="cc-head"><span class="cc-swatch" style="background:${PLAYERS[p].color}"></span><span class="cc-name">${PLAYERS[p].name}</span>${isElim ? '<span style="color:#ff5a52;font-size:.75rem;"> ' + dt('eliminated') + '</span>' : ''}</div>`;
+        html += `<div class="cc-stats">${units} ${dt('units')} · ${cities} ${dt('cities')} · ${villages} ${dt('villages')} · ${gold} ${dt('gold')}</div>`;
         html += `<div class="cc-rel ${relCls}">${relLabel}</div>`;
 
         if (!isSelf && !isElim) {
           html += '<div class="cc-actions">';
           if (rel === 'war') {
-            html += `<button class="btn-peace" data-p="${p}" data-act="peace">🕊 Propose Peace</button>`;
-            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">🤝 Propose Alliance</button>`;
+            html += `<button class="btn-peace" data-p="${p}" data-act="peace">${dt('proposePeace')}</button>`;
+            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">${dt('proposeAlliance')}</button>`;
           } else if (rel === 'peace') {
-            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">🤝 Form Alliance</button>`;
-            html += `<button class="btn-war" data-p="${p}" data-act="war">⚔️ Declare War</button>`;
+            html += `<button class="btn-ally" data-p="${p}" data-act="alliance">${dt('formAlliance')}</button>`;
+            html += `<button class="btn-war" data-p="${p}" data-act="war">${dt('declareWar')}</button>`;
           } else if (rel === 'alliance') {
-            html += `<button class="btn-war" data-p="${p}" data-act="war">⚔️ Break Alliance</button>`;
-            html += `<button class="btn-gold" data-p="${p}" data-act="gold">💰 Send Gold</button>`;
+            html += `<button class="btn-war" data-p="${p}" data-act="war">${dt('breakAlliance')}</button>`;
+            html += `<button class="btn-gold" data-p="${p}" data-act="gold">${dt('sendGold')}</button>`;
             html += `<input type="number" class="gold-input" id="goldAmt${p}" min="1" max="${gold}" value="10" />`;
           }
           // Join war: if ally is at war with someone, offer to join
@@ -109,7 +149,7 @@
             for (let e = 0; e < PLAYERS.length; e++) {
               if (e === me || e === p || eliminated.has(e)) continue;
               if (diplomacy[p] && diplomacy[p][e] === 'war' && diplomacy[me] && diplomacy[me][e] !== 'war') {
-                html += `<button class="btn-join" data-p="${e}" data-act="joinwar">⚔️ Join war vs ${PLAYERS[e].name}</button>`;
+                html += `<button class="btn-join" data-p="${e}" data-act="joinwar">${dt('joinWar')} ${PLAYERS[e].name}</button>`;
               }
             }
           }
@@ -153,8 +193,20 @@
       diplomacy[b] = save.diplomacy[b];
     }
 
-    render();
+    function applyDiploLang() {
+      document.getElementById('pageTitle').textContent = dt('title');
+      document.getElementById('pageSub').textContent = dt('sub');
+      document.getElementById('backBtn').textContent = dt('back');
+      document.getElementById('langBtn').textContent = dt('langLabel');
+      render();
+    }
+
+    applyDiploLang();
     document.getElementById('backBtn').addEventListener('click', () => { window.location.href = 'index.html'; });
+    document.getElementById('langBtn').addEventListener('click', () => {
+      localStorage.setItem('battlegrid.lang', getLang() === 'en' ? 'zh' : 'en');
+      applyDiploLang();
+    });
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

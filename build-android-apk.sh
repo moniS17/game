@@ -64,8 +64,8 @@ log "Android SDK: $SDK"
 info "Syncing game files into APK assets..."
 mkdir -p "$ASSETS_DIR/assets"
 
-# Copy HTML, JS, JSON, TXT
-for ext in html js json txt; do
+# Copy HTML, JS, CSS, JSON, TXT
+for ext in html js css json txt; do
     for f in "$SCRIPT_DIR"/*.$ext; do
         [ -f "$f" ] && cp "$f" "$ASSETS_DIR/"
     done

@@ -26,32 +26,27 @@
  */
 window.PIECES = {
   infantry: {
-    name: 'Infantry', code: 'i', art: 'assets/infantry.svg',
+    name: 'Infantry', nameZh: '步兵', code: 'i', art: 'assets/infantry.svg',
     hp: 10, attack: 10, movement_speed: 3, cost: 10,
   },
   motorized: {
-    // Truck-borne infantry: quick, ranged-value attacker.
-    name: 'Motorized', code: 'm', art: 'assets/motorized.svg',
+    name: 'Motorized', nameZh: '摩托化', code: 'm', art: 'assets/motorized.svg',
     hp: 20, attack: 30, movement_speed: 6, cost: 50,
   },
   cavalry: {
-    // Formerly the chess "knight": fast and hard-hitting.
-    name: 'Cavalry', code: 'c', art: 'assets/cavalry.svg',
+    name: 'Cavalry', nameZh: '骑兵', code: 'c', art: 'assets/cavalry.svg',
     hp: 10, attack: 20, movement_speed: 4, cost: 30,
   },
   cannon: {
-    // Siege gun: heavy hitter, slow.
-    name: 'Artillery', code: 'n', art: 'assets/artillery.svg',
+    name: 'Artillery', nameZh: '炮兵', code: 'n', art: 'assets/artillery.svg',
     hp: 9, attack: 40, movement_speed: 2, cost: 30,
   },
   tank: {
-    // Heavy: high hp and attack, decent speed, most expensive.
-    name: 'Tank', code: 't', art: 'assets/tank.svg',
+    name: 'Tank', nameZh: '坦克', code: 't', art: 'assets/tank.svg',
     hp: 50, attack: 50, movement_speed: 6, cost: 100,
   },
   hq: {
-    // Headquarters: unique command unit (1 per side). Rally ability.
-    name: 'HQ', code: 'H', art: null,
+    name: 'HQ', nameZh: '指挥部', code: 'H', art: null,
     hp: 20, attack: 5, movement_speed: 3, cost: 100,
   },
 };
@@ -144,9 +139,9 @@ window.REGEN = {
 // (so 170, 340, 680, ...). Gold and combat stats are ×10-scaled (see PIECES);
 // movement is not, so its gain stays 1.
 window.UPGRADES = {
-  atk: { label: 'Attack',   gain: 10, baseCost: 170 },
-  hp:  { label: 'Health',   gain: 20, baseCost: 170 },
-  mov: { label: 'Movement', gain: 1,  baseCost: 170 },
+  atk: { label: 'Attack', labelZh: '攻击',   gain: 10, baseCost: 170 },
+  hp:  { label: 'Health', labelZh: '生命',   gain: 20, baseCost: 170 },
+  mov: { label: 'Movement', labelZh: '移动', gain: 1,  baseCost: 170 },
 };
 
 // Economy upgrades — raise a player's gold income for THIS game only (per-player,
@@ -180,6 +175,12 @@ window.GOLD_ICON = '<img src="assets/gold.svg" alt="gold" class="gold-coin" ' +
 // Fort: reduces incoming damage to the defender by `defense` fraction.
 // Supply hub: extends the supply network for healing / refit (village-range).
 window.STRUCTURES = {
-  fort:   { name: 'Fort',       cost: 1,  defense: 0.1, art: 'assets/fort.svg' },
-  supply: { name: 'Supply Hub', cost: 10, art: 'assets/supply.svg' },
+  fort:   { name: 'Fort',       nameZh: '堡垒',     cost: 1,  defense: 0.1, art: 'assets/fort.svg' },
+  supply: { name: 'Supply Hub', nameZh: '补给站', cost: 10, art: 'assets/supply.svg' },
+};
+
+window.localName = function (obj) {
+  if (!obj) return '';
+  const lang = localStorage.getItem('battlegrid.lang') || 'en';
+  return (lang === 'zh' && obj.nameZh) ? obj.nameZh : obj.name;
 };

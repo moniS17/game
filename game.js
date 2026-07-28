@@ -314,12 +314,17 @@ function setDiplomacy(a, b, state) {
   Game.diplomacy[b][a] = state;
 }
 function proposePeace(from, to) {
+  const _zh = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
   if (Game.aiPlayer != null && to !== Game.aiPlayer && !Game.eliminated.has(to)) {
     Game.peaceProposals.push({ from, to });
-    UI.log(`${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
+    UI.log(_zh
+      ? `${PLAYERS[from].name} 向 ${PLAYERS[to].name} 提议和平。`
+      : `${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
   } else {
     setDiplomacy(from, to, 'peace');
-    UI.log(`${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
+    UI.log(_zh
+      ? `${PLAYERS[from].name} 向 ${PLAYERS[to].name} 提议和平。`
+      : `${PLAYERS[from].name} proposes peace with ${PLAYERS[to].name}.`);
   }
 }
 function getEnemies(player) {
@@ -1031,9 +1036,12 @@ function captureIfCity(r, c, owner) {
   const site = cityAt(r, c) || villageAt(r, c);
   if (site && site.owner !== owner) {
     const prevOwner = site.owner;
-    const kind = TERRAIN[Game.terrain[r][c]] ? TERRAIN[Game.terrain[r][c]].name.toLowerCase() : 'site';
+    const kind = TERRAIN[Game.terrain[r][c]] ? localName(TERRAIN[Game.terrain[r][c]]).toLowerCase() : 'site';
+    const _zh = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
     site.owner = owner;
-    UI.log(`${PLAYERS[owner].name} captured a ${kind} at r${r}, c${c}.`);
+    UI.log(_zh
+      ? `${PLAYERS[owner].name} 占领了 [${r},${c}] 的${kind}。`
+      : `${PLAYERS[owner].name} captured a ${kind} at r${r}, c${c}.`);
     if (prevOwner != null && Game.terrain[r][c] === 'city') {
       Game.lastCityCapturer[prevOwner] = owner;
     }
@@ -1056,7 +1064,10 @@ function buildStructure(r, c, type) {
   if (!canBuild(r, c, type)) return false;
   Game.economy[Game.turn] -= STRUCTURES[type].cost;
   Game.structures.push({ type, r, c, owner: Game.turn });
-  UI.log(`${PLAYERS[Game.turn].name} built a ${STRUCTURES[type].name} at r${r}, c${c}.`);
+  const _zhB = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+  UI.log(_zhB
+    ? `${PLAYERS[Game.turn].name} 在 [${r},${c}] 建造了${localName(STRUCTURES[type])}。`
+    : `${PLAYERS[Game.turn].name} built a ${STRUCTURES[type].name} at r${r}, c${c}.`);
   persist();
   return true;
 }
@@ -1064,7 +1075,10 @@ function captureIfStructure(r, c, owner) {
   const s = structureAt(r, c);
   if (s && s.owner !== owner) {
     s.owner = owner;
-    UI.log(`${PLAYERS[owner].name} captured a ${STRUCTURES[s.type].name} at r${r}, c${c}.`);
+    const _zh = (localStorage.getItem('battlegrid.lang') || 'en') === 'zh';
+    UI.log(_zh
+      ? `${PLAYERS[owner].name} 占领了 [${r},${c}] 的${localName(STRUCTURES[s.type])}。`
+      : `${PLAYERS[owner].name} captured a ${STRUCTURES[s.type].name} at r${r}, c${c}.`);
   }
 }
 
@@ -1213,9 +1227,9 @@ function doAttack(attackers, tr, tc) {
     if (seen.has(u.type)) continue;
     seen.add(u.type);
     const m = Rules.terrainAtkMult(u.type, aTerr);
-    if (m !== 1) mods.push(`${PIECES[u.type].name} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
+    if (m !== 1) mods.push(`${localName(PIECES[u.type])} ${m < 1 ? '−' : '+'}${Math.round(Math.abs(1 - m) * 100)}%`);
   }
-  const terrainNote = mods.length ? ` [${TERRAIN[aTerr].name}: ${mods.join(', ')}]` : '';
+  const terrainNote = mods.length ? ` [${localName(TERRAIN[aTerr])}: ${mods.join(', ')}]` : '';
   const fortNote = (defFort && defFort.type === 'fort' && defFort.owner === defenders[0].owner)
     ? ` [Fort: −${Math.round(STRUCTURES.fort.defense * 100)}% dmg]` : '';
   // Surrounded-territory double-damage notes.
@@ -1579,7 +1593,7 @@ function combineUnits(fill, material) {
     material.type = mPrimary;
   }
 
-  UI.log(`${PLAYERS[fill.owner].name} combined ${taken} unit(s) from ${material.name || PIECES[material.type].name} into ${fill.name || PIECES[fill.type].name}.`);
+  UI.log(`${PLAYERS[fill.owner].name} combined ${taken} unit(s) from ${material.name || localName(PIECES[material.type])} into ${fill.name || localName(PIECES[fill.type])}.`);
   persist();
   return taken;
 }

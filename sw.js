@@ -1,4 +1,4 @@
-const CACHE_NAME = 'battlegrid-v8';
+const CACHE_NAME = 'battlegrid-v10';
 const ASSETS = [
   './',
   'index.html',
@@ -23,6 +23,8 @@ const ASSETS = [
   'input.js',
   'auth.js',
   'minicpm.js',
+  'chat.js',
+  'chat.css',
   'llm-scan.js',
   'wasm-cpm.js',
   'ai-background.txt',

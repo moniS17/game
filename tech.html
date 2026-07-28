@@ -265,7 +265,7 @@
           const d = PIECES[type];
           chipsHtml += `<span class="hq-chip">`;
           if (d.art) chipsHtml += `<img src="${d.art}" alt="" style="width:1em;height:1em;vertical-align:-0.15em"> `;
-          chipsHtml += `${d.name} ×${count}</span>`;
+          chipsHtml += `${localName(d)} ×${count}</span>`;
         }
       }
       if (!chipsHtml) chipsHtml = '<span class="hq-chip">Empty</span>';
@@ -278,7 +278,7 @@
         const canRemove = count > 0 && total > 1;
         const icon = d.art ? `<img src="${d.art}" alt="" style="width:1em;height:1em;vertical-align:-0.15em"> ` : '';
         rowsHtml += `<div class="hq-row">` +
-          `<span class="hq-label">${icon}${d.name} (${count})</span>` +
+          `<span class="hq-label">${icon}${localName(d)} (${count})</span>` +
           `<button class="hq-add" data-type="${type}" ${canAdd ? '' : 'disabled'}>+ Add ${GOLD_ICON}${d.cost}</button>` +
           `<button class="hq-rem" data-type="${type}" ${canRemove ? '' : 'disabled'}>− Remove</button>` +
           `</div>`;
@@ -377,13 +377,13 @@
         const card = document.createElement("div");
         card.className = "card" + (unlocked ? " unlocked" : " locked") + (open ? " open" : "");
         const visual = d.art
-          ? `<img src="${d.art}" alt="${d.name}"><div class="icon-small"><img src="${d.art}" alt="${d.name}"></div>`
+          ? `<img src="${d.art}" alt="${localName(d)}"><div class="icon-small"><img src="${d.art}" alt="${localName(d)}"></div>`
           : `<div class="icon">${d.code}</div><div class="icon-small" style="font-size:.6rem;font-weight:700">${d.code}</div>`;
         const status = unlocked
           ? `<div class="status unlocked">${open ? "▲" : "⚙ upgrade"}</div>`
           : "";
         card.innerHTML =
-          `<div class="top" data-type="${k}">${visual}<div><h3>${d.name}</h3>` +
+          `<div class="top" data-type="${k}">${visual}<div><h3>${localName(d)}</h3>` +
             (unlocked ? `<div class="owned">Own ${ownedOf(k)}</div>` : "") + `</div>${status}</div>` +
           (unlocked
             ? (open ? upsHtml(k)
