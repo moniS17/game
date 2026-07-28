@@ -510,7 +510,7 @@
     }
     function syncNote() {
       const lang = localStorage.getItem('battlegrid.lang') || 'en';
-      const t = modeI18n && modeI18n[lang] ? modeI18n[lang] : null;
+      const t = typeof modeI18n !== 'undefined' && modeI18n[lang] ? modeI18n[lang] : null;
       spawnNote.textContent = randomChk.checked
         ? (t ? t.randomNote : "Countries spawn at random positions on the board (with minimum separation).")
         : (t ? t.fixedNote : "Countries spawn at corners and edges of the board.");
