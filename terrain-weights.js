@@ -36,5 +36,12 @@ window.TerrainWeights = (function () {
     return { seed, rows, cols, playerCount, weights: w };
   }
 
-  return { DEFAULTS, sanitize, applyToGeneration };
+  function toProportions(weights, rows, cols, playerCount) {
+    if (typeof Algorithms !== 'undefined' && Algorithms.estimateProportions) {
+      return Algorithms.estimateProportions(rows, cols, weights, playerCount);
+    }
+    return { plains: 60, forest: 15, water: 10, city: 5, village: 10 };
+  }
+
+  return { DEFAULTS, sanitize, applyToGeneration, toProportions };
 })();

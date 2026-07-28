@@ -247,6 +247,67 @@ window.Algorithms = (function () {
   }
 
   // --- top-level: build a full map from a seed + dimensions -----------------
+  function countTerrain(t, rows, cols) {
+    const counts = { plains: 0, forest: 0, water: 0, city: 0, village: 0 };
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        counts[t[r][c]] = (counts[t[r][c]] || 0) + 1;
+    return counts;
+  }
+
+  function targetWaterTiles(area, wWater) {
+    return Math.round(area * 0.10 * wWater);
+  }
+  function targetForestTiles(area, wForest) {
+    return Math.round(area * 0.15 * wForest);
+  }
+
+  function adjustWaterCoverage(t, rng, rows, cols, target) {
+    const area = rows * cols;
+    let current = 0;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        if (t[r][c] === 'water') current++;
+    if (current < target * 0.8) {
+      let toAdd = target - current;
+      let attempts = 0;
+      while (toAdd > 0 && attempts < area * 2) {
+        attempts++;
+        const r = Math.floor(rng() * rows);
+        const c = Math.floor(rng() * cols);
+        if (t[r][c] === 'plains') { t[r][c] = 'water'; toAdd--; }
+      }
+    } else if (current > target * 1.15) {
+      let toRemove = current - target;
+      for (let r = 0; r < rows && toRemove > 0; r++)
+        for (let c = 0; c < cols && toRemove > 0; c++)
+          if (t[r][c] === 'water' && rng() < 0.7) { t[r][c] = 'plains'; toRemove--; }
+    }
+  }
+
+  function adjustForestCoverage(t, rng, rows, cols, target) {
+    const area = rows * cols;
+    let current = 0;
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        if (t[r][c] === 'forest') current++;
+    if (current < target * 0.8) {
+      let toAdd = target - current;
+      let attempts = 0;
+      while (toAdd > 0 && attempts < area * 2) {
+        attempts++;
+        const r = Math.floor(rng() * rows);
+        const c = Math.floor(rng() * cols);
+        if (t[r][c] === 'plains') { t[r][c] = 'forest'; toAdd--; }
+      }
+    } else if (current > target * 1.15) {
+      let toRemove = current - target;
+      for (let r = 0; r < rows && toRemove > 0; r++)
+        for (let c = 0; c < cols && toRemove > 0; c++)
+          if (t[r][c] === 'forest' && rng() < 0.7) { t[r][c] = 'plains'; toRemove--; }
+    }
+  }
+
   function generateMap(seed, rows, cols, playerCount, weights) {
     rows = clampDim(rows == null ? GRID : rows);
     cols = clampDim(cols == null ? GRID : cols);
@@ -258,7 +319,8 @@ window.Algorithms = (function () {
     const inB = (r, c) => r >= 0 && r < rows && c >= 0 && c < cols;
     const rng = makeRng(seed);
     const t = blankTerrain(rows, cols);
-    const scale = (rows * cols) / (GRID * GRID);
+    const area = rows * cols;
+    const scale = area / (GRID * GRID);
     const baseLakes  = randInt(rng, 3, 6);
     const baseRivers = randInt(rng, 3, 5);
     const baseForest = randInt(rng, 18, 28);
@@ -266,8 +328,10 @@ window.Algorithms = (function () {
     const riverCount = Math.max(0, Math.round(baseRivers * scale * wWater));
     const lakes = generateLakes(t, rng, lakeCount, rows, cols, inB);
     generateRivers(t, rng, lakes, riverCount, rows, cols, inB);
+    adjustWaterCoverage(t, rng, rows, cols, targetWaterTiles(area, wWater));
     const forestCount = Math.max(0, Math.round(baseForest * scale * wForest));
     generateForests(t, rng, forestCount, rows, cols);
+    adjustForestCoverage(t, rng, rows, cols, targetForestTiles(area, wForest));
     const cityScale = wCity;
     const origCPS = CITIES_PER_SIDE;
     const scaledCPS = Math.max(1, Math.round(origCPS * cityScale));
@@ -280,8 +344,42 @@ window.Algorithms = (function () {
 
   const maxPlayers = (rows, cols) => Math.min(8, Math.max(2, Math.floor(Math.min(rows, cols) / 3)));
 
+  function estimateProportions(rows, cols, weights, playerCount) {
+    rows = clampDim(rows == null ? GRID : rows);
+    cols = clampDim(cols == null ? GRID : cols);
+    const area = rows * cols;
+    const w = (weights && typeof weights === 'object') ? weights : {};
+    const wWater   = Math.max(0, Math.min(3, w.water   != null ? Number(w.water)   : 1));
+    const wForest  = Math.max(0, Math.min(3, w.forest  != null ? Number(w.forest)  : 1));
+    const wCity    = Math.max(0, Math.min(3, w.city    != null ? Number(w.city)    : 1));
+    const wVillage = Math.max(0, Math.min(3, w.village != null ? Number(w.village) : 1));
+    const n = playerCount || 2;
+
+    const waterPct = Math.min(30, 10 * wWater);
+    const forestPct = Math.min(45, 15 * wForest);
+
+    const perSide = Math.max(1, Math.round(CITIES_PER_SIDE * wCity * areaScale(rows, cols)));
+    const neutralC = wCity === 0 ? 0 : Math.max(n, Math.round(neutralCount(rows, cols, n) * wCity));
+    const cityTiles = perSide * n + neutralC;
+    const cityPct = Math.min(5, (cityTiles / area) * 100);
+
+    const villageTiles = wVillage === 0 ? 0 : cityTiles * 3 * wVillage;
+    const villagePct = Math.min(10, (villageTiles / area) * 100);
+
+    const usedPct = waterPct + forestPct + cityPct + villagePct;
+    const plainsPct = Math.max(20, 100 - usedPct);
+
+    return {
+      plains: Math.round(plainsPct * 10) / 10,
+      forest: Math.round(forestPct * 10) / 10,
+      water: Math.round(waterPct * 10) / 10,
+      city: Math.round(cityPct * 10) / 10,
+      village: Math.round(villagePct * 10) / 10,
+    };
+  }
+
   return {
-    GRID, MIN, MAX, clampDim, makeRng, generateMap, maxPlayers,
+    GRID, MIN, MAX, clampDim, makeRng, generateMap, maxPlayers, estimateProportions,
     CITIES_PER_SIDE, UNITS_PER_SIDE, areaScale, citiesPerSide, unitsPerSide, neutralCount,
     generateLakes, generateRivers, carveRiver, generateForests, placeCities, placeNeutralCities, generateVillages,
   };

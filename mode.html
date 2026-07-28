@@ -152,12 +152,18 @@
       width: 16px; height: 16px; border-radius: 50%; border: none;
       background: #3a5bd9; cursor: pointer;
     }
-    .weight-row .weight-val { font-size: .72rem; color: #9aa4ad; min-width: 2.5rem; text-align: right; }
+    .weight-row .weight-val { font-size: .72rem; color: #9aa4ad; min-width: 3.2rem; text-align: right; }
     .weights .reset-btn {
       width: auto; margin: .5rem auto 0; padding: .35rem .8rem; font-size: .72rem;
       background: #2b3138; color: #cfd6dd; display: block;
     }
     .weights .reset-btn:hover { background: #363d45; transform: none; }
+    .terrain-preview { margin-top: .8rem; }
+    .terrain-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; border: 1px solid #444; }
+    .terrain-bar span { transition: flex-basis .2s; }
+    .terrain-legend { display: flex; flex-wrap: wrap; gap: .3rem .8rem; margin-top: .4rem; font-size: .65rem; color: #9aa4ad; }
+    .terrain-legend span { display: flex; align-items: center; gap: .25rem; }
+    .terrain-legend .dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 
     /* Starting units */
     .spawn { background: #1b2026; border: 1px solid #333; border-radius: 8px; padding: 1rem; margin-bottom: 1.2rem; }
@@ -270,6 +276,10 @@
         <span class="weight-val" id="wVillageVal">1.0×</span>
       </div>
       <button type="button" class="reset-btn" id="weightsResetBtn">↺ Reset to default</button>
+      <div class="terrain-preview" id="terrainPreview">
+        <div class="terrain-bar" id="terrainBar"></div>
+        <div class="terrain-legend" id="terrainLegend"></div>
+      </div>
     </div>
 
     <div class="spawn">
@@ -433,18 +443,63 @@
     }
 
     // --- Terrain weight sliders ---
-    function wireWeight(id) {
+    function wireWeight(id, type) {
       const slider = document.getElementById(id);
       const label = document.getElementById(id + 'Val');
-      function sync() { label.textContent = (slider.value / 100).toFixed(1) + '×'; }
+      function sync() {
+        const v = slider.value / 100;
+        if (type === 'area') {
+          const base = id === 'wForest' ? 15 : 10;
+          label.textContent = '~' + Math.round(Math.min(id === 'wForest' ? 45 : 30, base * v)) + '%';
+        } else {
+          label.textContent = v.toFixed(1) + '×';
+        }
+        updateTerrainPreview();
+      }
       slider.addEventListener('input', sync);
       sync();
       return () => Number(slider.value) / 100;
     }
-    const getWForest  = wireWeight('wForest');
-    const getWWater   = wireWeight('wWater');
-    const getWCity    = wireWeight('wCity');
-    const getWVillage = wireWeight('wVillage');
+    const getWForest  = wireWeight('wForest', 'area');
+    const getWWater   = wireWeight('wWater', 'area');
+    const getWCity    = wireWeight('wCity', 'count');
+    const getWVillage = wireWeight('wVillage', 'count');
+
+    const TERRAIN_COLORS = {
+      plains: '#c8b87a', forest: '#2e7d32', water: '#1565c0',
+      city: '#ff8f00', village: '#8d6e63'
+    };
+    function updateTerrainPreview() {
+      const hEl = document.getElementById('heightInput');
+      const wEl = document.getElementById('widthInput');
+      if (!hEl || !wEl) return;
+      const rows = Math.floor(Number(hEl.value)) || Algorithms.GRID;
+      const cols = Math.floor(Number(wEl.value)) || Algorithms.GRID;
+      const ccEl = document.getElementById('countryCountInput');
+      const n = ccEl ? (parseInt(ccEl.value) || 2) : 2;
+      const weights = {
+        forest: Number(document.getElementById('wForest').value) / 100,
+        water: Number(document.getElementById('wWater').value) / 100,
+        city: Number(document.getElementById('wCity').value) / 100,
+        village: Number(document.getElementById('wVillage').value) / 100,
+      };
+      const p = Algorithms.estimateProportions(rows, cols, weights, n);
+      const bar = document.getElementById('terrainBar');
+      const legend = document.getElementById('terrainLegend');
+      if (!bar || !legend) return;
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      const names = lang === 'zh'
+        ? { plains: '平原', forest: '森林', water: '水域', city: '城市', village: '村庄' }
+        : { plains: 'Plains', forest: 'Forest', water: 'Water', city: 'City', village: 'Village' };
+      const order = ['plains', 'forest', 'water', 'city', 'village'];
+      bar.innerHTML = order.map(k =>
+        `<span style="flex-basis:${p[k]}%;background:${TERRAIN_COLORS[k]}" title="${names[k]} ~${p[k]}%"></span>`
+      ).join('');
+      legend.innerHTML = order.map(k =>
+        `<span><span class="dot" style="background:${TERRAIN_COLORS[k]}"></span>${names[k]} ${p[k]}%</span>`
+      ).join('');
+    }
+
     document.getElementById('weightsResetBtn').addEventListener('click', () => {
       for (const id of ['wForest', 'wWater', 'wCity', 'wVillage']) {
         const s = document.getElementById(id);
@@ -473,6 +528,7 @@
       errEl.textContent = '';
       syncStartUnits();
       if (typeof syncCountryMax === 'function') syncCountryMax();
+      updateTerrainPreview();
     });
 
     // Adjust BOTH width and height by `delta`, clamped to [MIN, MAX]. A blank or
@@ -485,6 +541,7 @@
       errEl.textContent = '';
       syncStartUnits();
       if (typeof syncCountryMax === 'function') syncCountryMax();
+      updateTerrainPreview();
     }
     document.getElementById('minus10Btn').addEventListener('click', () => stepBoth(-10));
     document.getElementById('plus10Btn').addEventListener('click', () => stepBoth(10));
@@ -515,7 +572,7 @@
         defaultSize: '↺ Default 100 × 100',
         mapSeed: 'Map Seed', seedPlaceholder: 'Leave blank for random', roll: '🎲 Roll',
         terrainDensity: 'Terrain Density', forest: '🌲 Forest', water: '💧 Water',
-        city: '🏙️ City', village: '🏘️ Village', resetDefault: '↺ Reset to default',
+        city: '🏙️ City', village: '🏘️ Village', plains: '🟫 Plains', resetDefault: '↺ Reset to default',
         startUnits: 'Starting units (per side)', randomSpawn: '🎲 Random spawn positions',
         randomNote: 'Countries spawn at random positions on the board (with minimum separation).',
         fixedNote: 'Countries spawn at corners and edges of the board.',
@@ -540,7 +597,7 @@
         defaultSize: '↺ 默认 100 × 100',
         mapSeed: '地图种子', seedPlaceholder: '留空则随机生成', roll: '🎲 随机',
         terrainDensity: '地形密度', forest: '🌲 森林', water: '💧 水域',
-        city: '🏙️ 城市', village: '🏘️ 村庄', resetDefault: '↺ 恢复默认',
+        city: '🏙️ 城市', village: '🏘️ 村庄', plains: '🟫 平原', resetDefault: '↺ 恢复默认',
         startUnits: '初始单位（每方）', randomSpawn: '🎲 随机出生点',
         randomNote: '各国随机分布在棋盘上（保持最小间距）。',
         fixedNote: '各国在棋盘的角落和边缘出生。',
@@ -580,8 +637,8 @@
     startSlider.addEventListener('change', () => {
       startInput.value = startSlider.value;
     });
-    widthInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
-    heightInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); });
+    widthInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); updateTerrainPreview(); });
+    heightInput.addEventListener('input', () => { syncStartUnits(); syncCountryMax(); updateTerrainPreview(); });
     randomChk.addEventListener('change', syncNote);
     syncStartUnits();
 
@@ -647,10 +704,12 @@
       else if (v > mx) ccInput.value = String(mx);
       ccSlider.value = ccInput.value;
       renderCountryList();
+      updateTerrainPreview();
     });
     ccSlider.addEventListener('input', () => {
       ccInput.value = ccSlider.value;
       renderCountryList();
+      updateTerrainPreview();
     });
     syncCountryMax();
     renderCountryList();
