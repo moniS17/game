@@ -261,9 +261,7 @@
 
     // --- Units table ---
     const ut = document.getElementById("unitTable");
-    const lang = localStorage.getItem('battlegrid.lang') || 'en';
-    const infoT = infoI18n[lang] || infoI18n.en;
-    const roles = infoT.roles || {
+    const roles = {
       infantry: "Cheap frontline body; storms cannon, holds cities & forest.",
       motorized: "Truck-borne troops: fast, outmaneuvers cavalry & cannon.",
       cavalry: "Fast flanker, hard hitter.",
@@ -359,7 +357,7 @@
           `<li>Deploy bought divisions anywhere in your own deployment zone (Country1 = left, Country2 = right).</li>`;
 
       // Economy, tech tree & upgrades
-      const techList = Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ");
+      const techList = Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${localName(PIECES[t])} ${GOLD_ICON}${TECH[t]}`).join(", ");
       document.getElementById("econRules").innerHTML = zh
         ? `<li>每个玩家以<b>${ECONOMY.start}</b>金币开局，初始师数量可配置（最多<b>3×棋盘高度</b>）。</li>` +
           `<li><b>科技树</b>：游戏开始只解锁<b>步兵</b>。用金币研发其他兵种（${techList}）才能在模板中使用——每玩家每局独立。</li>` +
@@ -670,6 +668,6 @@
     });
     applyInfoLang();
   </script>
-<script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
+<script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js?v=14")</script>
 </body>
 </html>
