@@ -36,7 +36,7 @@ function handleTapAt(r, c) {
     const group = movers.filter(u => u.movesLeft > 0);
     const selR = Game.selTile.r, selC = Game.selTile.c;
 
-    if (tileStack.length && tileStack[0].owner !== Game.turn && group.length) {
+    if (tileStack.length && tileStack[0].owner !== Game.turn && window.isAtWar(Game.turn, tileStack[0].owner) && group.length) {
       if (Rules.isHexNeighbor(selR, selC, r, c)) {
         const path = [{ r: selR, c: selC }];
         window._addOrder(group, { r: selR, c: selC }, { r: selR, c: selC }, path, true, { r, c });

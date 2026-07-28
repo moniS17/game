@@ -47,76 +47,84 @@
     @media (min-width: 600px) {
       .bar { max-width: 600px; margin-left: auto; margin-right: auto; }
     }
+    .lang-btn {
+      position: fixed; top: 16px; right: 16px; width: auto;
+      padding: 6px 14px; font-size: .85rem; font-weight: 600;
+      background: rgba(255,255,255,.12); color: #e6e6e6; border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px; cursor: pointer; transition: background .2s; z-index: 999;
+    }
+    .lang-btn:hover { background: rgba(255,255,255,.22); }
   </style>
 </head>
 <body>
+  <button class="lang-btn" id="langBtn">中文</button>
   <div class="wrap">
     <h1>📖 field manual</h1>
     <div class="sub">Buffs, debuffs and rules for terrain, units and combat.</div>
 
-    <h2>Controls</h2>
+    <h2 id="hControls">Controls</h2>
     <div class="panel">
-      <ul>
+      <ul id="controlsList">
         <li>Drag or use <b>one finger</b> to pan the map; <b>scroll or pinch</b> to zoom.</li>
         <li>Tap a tile to select its stack, then tap a <b>yellow tile</b> to move, or an <b>adjacent enemy</b> to attack.</li>
       </ul>
     </div>
 
-    <h2>Income</h2>
+    <h2 id="hIncome">Income</h2>
     <div class="panel">
       <ul id="incomeRules"></ul>
     </div>
 
-    <h2>Healing &amp; supply</h2>
+    <h2 id="hHealing">Healing &amp; supply</h2>
     <div class="panel">
       <ul id="healRules"></ul>
     </div>
 
-    <h2>Units</h2>
+    <h2 id="hUnits">Units</h2>
     <div class="panel">
       <table id="unitTable">
         <tr><th>Unit</th><th>HP</th><th>ATK</th><th>MOV</th><th>Cost</th><th>Role</th></tr>
       </table>
     </div>
 
-    <h2>Unit vs terrain (attack)</h2>
+    <h2 id="hTerrainAtk">Unit vs terrain (attack)</h2>
     <div class="panel">
       <p class="sub" style="margin:0 0 8px">How much each unit's ATK changes based on the tile it fights <b>from</b> (the tile it stands on) — applied both attacking and defending. Blank = no change.</p>
       <table id="terrainCombatTable"></table>
     </div>
 
-    <h2>Unit vs unit (attack)</h2>
+    <h2 id="hUnitAtk">Unit vs unit (attack)</h2>
     <div class="panel">
       <p class="sub" style="margin:0 0 8px">How much each attacker's ATK changes versus the defending stack's lead unit type. Blank = no change.</p>
       <table id="unitCombatTable"></table>
     </div>
 
-    <h2>Combat &amp; stacking</h2>
+    <h2 id="hCombat">Combat &amp; stacking</h2>
     <div class="panel">
       <ul id="combatRules"></ul>
     </div>
 
-    <h2>Economy &amp; upgrades</h2>
+    <h2 id="hEconomy">Economy &amp; upgrades</h2>
     <div class="panel">
       <ul id="econRules"></ul>
     </div>
 
-    <h2>Unit actions</h2>
+    <h2 id="hActions">Unit actions</h2>
     <div class="panel">
       <ul id="actionRules"></ul>
     </div>
 
-    <h2>HQ (Headquarters)</h2>
+    <h2 id="hHQ">HQ (Headquarters)</h2>
     <div class="panel">
       <ul id="hqRules"></ul>
     </div>
 
-    <h2>Structures</h2>
+    <h2 id="hStructures">Structures</h2>
     <div class="panel">
       <ul id="structureRules"></ul>
     </div>
 
-    <h2>Spawn &amp; starting positions</h2>
+    <h2 id="hSpawn">Spawn &amp; starting positions</h2>
     <div class="panel">
       <ul>
         <li>Each country starts inside a <b>circular territory</b> proportional to the board size. The circle's radius scales so every country gets a fair footprint.</li>
@@ -128,7 +136,7 @@
       </ul>
     </div>
 
-    <h2>Map Seed</h2>
+    <h2 id="hMapSeed">Map Seed</h2>
     <div class="panel">
       <ul>
         <li id="currentSeedInfo" style="font-size:.95rem; font-weight:600;"></li>
@@ -139,7 +147,7 @@
       </ul>
     </div>
 
-    <h2>Terrain Density</h2>
+    <h2 id="hTerrainDensity">Terrain Density</h2>
     <div class="panel">
       <ul>
         <li>Four sliders control how much of each terrain type the map generator places: <b>Forest</b>, <b>Water</b> (lakes &amp; rivers), <b>City</b>, and <b>Village</b>.</li>
@@ -152,7 +160,7 @@
       </ul>
     </div>
 
-    <h2>Diplomacy &amp; alliances</h2>
+    <h2 id="hDiplomacy">Diplomacy &amp; alliances</h2>
     <div class="panel">
       <ul>
         <li>Games with <b>3–8 countries</b> include a full diplomacy system. Access it from the 🤝 Diplomacy button.</li>
@@ -183,43 +191,73 @@
   <script>
     const arts = { city: 'assets/city.svg', village: 'assets/village.svg', forest: 'assets/forest.svg', water: 'assets/water.svg', plains: 'assets/grass.svg' };
 
-    // --- Income (cities & villages) ---
+    // --- Dynamic content (bilingual) ---
     const villageInc = Math.round(ECONOMY.city_income * 0.5);
-    document.getElementById("incomeRules").innerHTML =
-      `<li>Each player earns gold at the start of every round: <b>${ECONOMY.base_income}</b> base income, no matter what.</li>` +
-      `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
-      `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
-      `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
-      `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Country1; those in the <b>right third</b> start owned by Country2. The middle third remains neutral.</li>`;
+    function buildDynamicRules() {
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      const zh = lang === 'zh';
 
-    // --- PvE difficulty ---
-    const diffPanel = document.createElement("div");
-    diffPanel.className = "panel";
-    const diffTitle = document.createElement("h2");
-    diffTitle.textContent = "PvE Difficulty";
-    const incomeSection = document.getElementById("incomeRules").parentNode;
-    incomeSection.after(diffPanel);
-    incomeSection.after(diffTitle);
-    diffPanel.innerHTML =
-      `<ul>` +
-      `<li>In PvE, the AI starts with <b>170 gold</b> (player starts with ${ECONOMY.start}).</li>` +
-      `<li><b>Hard</b>: AI earns <span class="buff">1.7×</span> income per round — 70% more gold from all sources.</li>` +
-      `<li><b>Normal</b>: AI earns <b>1×</b> income — same rate as the player.</li>` +
-      `<li><b>Easy</b>: AI earns <span class="debuff">0.17×</span> income — only 17% of normal gold.</li>` +
-      `<li><b>Early expansion</b>: in the first few rounds the AI deploys <b>single-company scouts</b> spread across its territory and <b>splits</b> larger units near uncaptured settlements to grab cities and villages for income as fast as possible.</li>` +
-      `<li><b>Battalion doctrine</b>: once the AI has a stable economy (round 5+), it switches to buying <b>battalion-sized units</b> (4 companies each) for superior combat power. Fewer but stronger divisions.</li>` +
-      `<li><b>Aggression</b>: when the AI has <b>~40% more units</b> than the player, it plays aggressively — attacking into defended positions (cities, forests, villages) instead of holding back.</li>` +
-      `<li><b>Adaptation</b>: the AI mirrors the player's formation — if the player <b>spreads out</b> (5+ stacks), the AI spreads to match; if the player <b>concentrates</b> into few stacks (≤3), the AI converges on the largest enemy group.</li>` +
-      `<li><b>HQ escort</b>: the AI protects its HQ by choosing between two strategies — <b>flee</b> toward its own edge when enemies are close and no escort is available, or <b>escort</b> by moving the HQ toward its largest friendly stack (≥4 divisions) for protection when the stack is nearby and in a safe area.</li>` +
-      `<li><b>Terrain-aware combat</b>: the AI evaluates attacks using <b>terrain-modified ATK</b> — e.g. tanks on plains hit harder, tanks in forests hit softer — and factors in the defender's <b>terrain defense</b> when deciding whether to engage.</li>` +
-      `<li><b>Numeric superiority</b>: the AI becomes more willing to attack when it has a <b>HP advantage</b> over the target. At <b>1.25×</b> HP it lowers its caution threshold; at <b>1.5×</b> and <b>1.75×</b> it becomes increasingly aggressive. At <b>2× HP</b> advantage, the AI attacks <b>unconditionally</b> — even across difficult terrain or into fortified positions.</li>` +
-      `</ul>`;
+      // Income
+      document.getElementById("incomeRules").innerHTML = zh
+        ? `<li>每个玩家每回合开始时获得金币：<b>${ECONOMY.base_income}</b> 基础收入。</li>` +
+          `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">每个拥有的<b>城市</b></span>每回合 <b>+${ECONOMY.city_income}</b> 金币。</li>` +
+          `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">每个拥有的<b>村庄</b></span>每回合 <b>+${villageInc}</b> 金币——城市的<b>50%</b>。</li>` +
+          `<li>城市和村庄通过<b>移动单位进入</b>来占领。中心附近的中立（灰色边框）地点在被占领前无主。</li>` +
+          `<li><b>自定义地图</b>：棋盘<b>左三分之一</b>的城市村庄归Country1；<b>右三分之一</b>归Country2。中间保持中立。</li>`
+        : `<li>Each player earns gold at the start of every round: <b>${ECONOMY.base_income}</b> base income, no matter what.</li>` +
+          `<li><span class="name"><img class="swatch" src="${arts.city}" alt="">Every owned <b>City</b></span> pays <b>+${ECONOMY.city_income}</b> gold/round.</li>` +
+          `<li><span class="name"><img class="swatch" src="${arts.village}" alt="">Every owned <b>Village</b></span> pays <b>+${villageInc}</b> gold/round — <b>50%</b> of a city.</li>` +
+          `<li>Cities and villages are <b>captured by moving a unit onto them</b>. Neutral (gray-ringed) sites near the center are unowned until someone takes them.</li>` +
+          `<li><b>Custom maps</b>: cities and villages in the <b>left third</b> of the board start owned by Country1; those in the <b>right third</b> start owned by Country2. The middle third remains neutral.</li>`;
 
-    // --- Healing & supply ---
-    document.getElementById("healRules").innerHTML =
-      `<li><b>Resting heals</b>: a unit that <b>does not move</b> on its turn recovers HP at the start of its next one. Within supply range of an <b>owned city</b> (${REGEN.range.city} tiles) or <b>village</b> (${REGEN.range.village} tile), it regains <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> of max HP.</li>` +
-      `<li><b>Motorized</b> units self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>` +
-      `<li>A built <b>Supply Hub</b> also provides supply at village range (${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>`;
+      // PvE difficulty
+      if (!document.getElementById('hPveDiff')) {
+        const diffPanel = document.createElement("div");
+        diffPanel.className = "panel";
+        diffPanel.id = "pveDiffPanel";
+        const diffTitle = document.createElement("h2");
+        diffTitle.id = "hPveDiff";
+        const incomeSection = document.getElementById("incomeRules").parentNode;
+        incomeSection.after(diffPanel);
+        incomeSection.after(diffTitle);
+      }
+      document.getElementById('hPveDiff').textContent = zh ? '人机难度' : 'PvE Difficulty';
+      document.getElementById('pveDiffPanel').innerHTML = zh
+        ? `<ul>` +
+          `<li>人机对战中，AI以<b>170金币</b>开局（玩家以${ECONOMY.start}开局）。</li>` +
+          `<li><b>困难</b>：AI每回合收入 <span class="buff">1.7×</span>——比正常多70%。</li>` +
+          `<li><b>普通</b>：AI收入 <b>1×</b>——与玩家相同。</li>` +
+          `<li><b>简单</b>：AI收入 <span class="debuff">0.17×</span>——仅正常的17%。</li>` +
+          `<li><b>早期扩张</b>：前几回合AI部署<b>单连侦察兵</b>分散在领土上，并<b>拆分</b>大单位以尽快抢占城市村庄获取收入。</li>` +
+          `<li><b>营级编制</b>：经济稳定后（第5回合+），AI改为购买<b>营级单位</b>（每个4连）以获得更强战斗力。</li>` +
+          `<li><b>侵略性</b>：当AI<b>单位数量多~40%</b>时，会主动进攻防御阵地（城市、森林、村庄）。</li>` +
+          `<li><b>适应</b>：AI模仿玩家阵型——玩家<b>分散</b>则AI分散；玩家<b>集中</b>则AI向最大敌群汇聚。</li>` +
+          `<li><b>HQ护卫</b>：AI通过<b>撤退</b>（敌人接近时向己方边缘移动）或<b>护卫</b>（向最大友军集群移动）来保护HQ。</li>` +
+          `<li><b>地形感知战斗</b>：AI使用<b>地形修正攻击力</b>评估攻击——如坦克在平原更强、在森林更弱。</li>` +
+          `<li><b>数量优势</b>：AI在HP优势时更愿意进攻。<b>1.25×</b>降低谨慎度；<b>2×</b>时无条件进攻。</li>` +
+          `</ul>`
+        : `<ul>` +
+          `<li>In PvE, the AI starts with <b>170 gold</b> (player starts with ${ECONOMY.start}).</li>` +
+          `<li><b>Hard</b>: AI earns <span class="buff">1.7×</span> income per round — 70% more gold from all sources.</li>` +
+          `<li><b>Normal</b>: AI earns <b>1×</b> income — same rate as the player.</li>` +
+          `<li><b>Easy</b>: AI earns <span class="debuff">0.17×</span> income — only 17% of normal gold.</li>` +
+          `<li><b>Early expansion</b>: in the first few rounds the AI deploys <b>single-company scouts</b> spread across its territory and <b>splits</b> larger units near uncaptured settlements to grab cities and villages for income as fast as possible.</li>` +
+          `<li><b>Battalion doctrine</b>: once the AI has a stable economy (round 5+), it switches to buying <b>battalion-sized units</b> (4 companies each) for superior combat power. Fewer but stronger divisions.</li>` +
+          `<li><b>Aggression</b>: when the AI has <b>~40% more units</b> than the player, it plays aggressively — attacking into defended positions (cities, forests, villages) instead of holding back.</li>` +
+          `<li><b>Adaptation</b>: the AI mirrors the player's formation — if the player <b>spreads out</b> (5+ stacks), the AI spreads to match; if the player <b>concentrates</b> into few stacks (≤3), the AI converges on the largest enemy group.</li>` +
+          `<li><b>HQ escort</b>: the AI protects its HQ by choosing between two strategies — <b>flee</b> toward its own edge when enemies are close and no escort is available, or <b>escort</b> by moving the HQ toward its largest friendly stack (≥4 divisions) for protection when the stack is nearby and in a safe area.</li>` +
+          `<li><b>Terrain-aware combat</b>: the AI evaluates attacks using <b>terrain-modified ATK</b> — e.g. tanks on plains hit harder, tanks in forests hit softer — and factors in the defender's <b>terrain defense</b> when deciding whether to engage.</li>` +
+          `<li><b>Numeric superiority</b>: the AI becomes more willing to attack when it has a <b>HP advantage</b> over the target. At <b>1.25×</b> HP it lowers its caution threshold; at <b>1.5×</b> and <b>1.75×</b> it becomes increasingly aggressive. At <b>2× HP</b> advantage, the AI attacks <b>unconditionally</b> — even across difficult terrain or into fortified positions.</li>` +
+          `</ul>`;
+
+      // Healing & supply
+      document.getElementById("healRules").innerHTML = zh
+        ? `<li><b>休息回血</b>：<b>未移动</b>的单位在下回合开始时恢复HP。在己方<b>城市</b>（${REGEN.range.city}格）或<b>村庄</b>（${REGEN.range.village}格）补给范围内，恢复 <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> 最大HP。</li>` +
+          `<li><b>摩托化</b>单位<b>任何地方</b>可自修——<span class="buff">+${Math.round(REGEN.motor * 100)}%</span> 最大HP。<b>骑兵</b>和<b>坦克</b>从<b>更远</b>获取补给（城市${REGEN.heavyRange.city}/村庄${REGEN.heavyRange.village}格）。</li>` +
+          `<li>建造的<b>补给站</b>也提供村庄范围的补给（${REGEN.range.village}格，重型${REGEN.heavyRange.village}格）。</li>`
+        : `<li><b>Resting heals</b>: a unit that <b>does not move</b> on its turn recovers HP at the start of its next one. Within supply range of an <b>owned city</b> (${REGEN.range.city} tiles) or <b>village</b> (${REGEN.range.village} tile), it regains <span class="buff">+${Math.round(REGEN.supply * 100)}%</span> of max HP.</li>` +
+          `<li><b>Motorized</b> units self-repair <b>anywhere</b> — <span class="buff">+${Math.round(REGEN.motor * 100)}%</span> of max HP, scaled by their share of the unit. <b>Cavalry</b> and <b>Tank</b> units draw supply from <b>farther out</b> (city ${REGEN.heavyRange.city} / village ${REGEN.heavyRange.village} tiles).</li>` +
+          `<li>A built <b>Supply Hub</b> also provides supply at village range (${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>`;
 
     // --- Units table ---
     const ut = document.getElementById("unitTable");
@@ -285,56 +323,91 @@
       uct.appendChild(tr);
     }
 
-    // --- Combat & stacking rules ---
-    document.getElementById("combatRules").innerHTML =
-      `<li>A <b>division template</b> is a 5×5 grid of <b>battalion slots</b>. Each slot references a <b>battalion template</b> (3×4 grid of companies). A board piece is a <b>division</b> built from a template; its HP &amp; ATK are the <b>sum of all its companies</b> across all battalions.</li>` +
-      `<li><b>Battalion Designer</b>: design reusable battalion blueprints (up to 12 companies each) in the Template page. Add them as building blocks into the division grid — one slot per battalion.</li>` +
-      `<li><b>NATO symbols</b>: units on the board are shown as NATO APP-6 standard rectangles — Infantry ╳, Tank ◯, Artillery ●, Cavalry ╱, Motorized ╳+wheel. <b>Two ticks</b> (||) above the symbol means battalion-size (4–11 companies); <b>three ticks</b> (|||) means division-size (12+ companies).</li>` +
-      `<li>Up to <b>${Rules.STACK_LIMIT} divisions</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
-      `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
-      `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their divisions' ATK</b>, applied one division at a time; a division is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
-      `<li><b>Terrain shapes attacks</b>: each division's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
-      `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
-      `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a division paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured gaps</b> between tiles matching the player.</li>` +
-      `<li><b>Front-line</b>: where your territory borders the enemy's, a <b>dark line</b> marks the confrontation — push it forward by advancing divisions.</li>` +
-      `<li class="debuff">If a stack's <b>six hex neighbours are all the enemy's colour</b> (surrounded), it takes <b>double damage</b> from that enemy in combat.</li>` +
-      `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
-      `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot. Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Math.round(Rules.COMBAT.river_attack_penalty * 100)}%</span> river penalty.</li>` +
-      `<li><b>Forest</b> costs ${TERRAIN.forest.move_cost} to enter and gives <span class="buff">${Math.round(TERRAIN.forest.defense * 100)}% defense</span>.</li>` +
-      `<li>Deploy bought divisions anywhere in your own deployment zone (Country1 = left, Country2 = right).</li>`;
+      // Combat & stacking rules
+      document.getElementById("combatRules").innerHTML = zh
+        ? `<li><b>师模板</b>是5×5的<b>营槽</b>网格。每个槽位引用一个<b>营模板</b>（3×4连网格）。棋盘棋子是由模板构建的<b>师</b>；其HP和攻击力是<b>所有连的总和</b>。</li>` +
+          `<li><b>营设计器</b>：在模板页面设计可复用的营蓝图（每个最多12连）。将它们作为构建块添加到师网格中。</li>` +
+          `<li><b>NATO符号</b>：棋盘上的单位显示为NATO APP-6标准矩形——步兵╳、坦克◯、火炮●、骑兵╱、摩托化╳+轮。符号上方<b>两条竖线</b>(||)表示营级（4-11连）；<b>三条竖线</b>(|||)表示师级（12+连）。</li>` +
+          `<li>一个格子上同一方最多可<b>堆叠${Rules.STACK_LIMIT}个师</b>（显示为图标+数量）。</li>` +
+          `<li>攻击只能打<b>相邻</b>格子。</li>` +
+          `<li>战斗是<b>相互的</b>：攻守双方各造成其<b>所有师攻击力之和</b>的伤害；HP归零的师被摧毁。<b>防守方</b>的地形防御减少受到的伤害，但<b>发起战斗将放弃</b>自己格子的防御。</li>` +
+          `<li><b>地形影响攻击</b>：每个师的攻击力受其<b>所在</b>格子的地形缩放——如<b>坦克</b>在<b>平原</b><span class="buff">更强</span>，在<b>城市</b>、<b>森林</b>中<span class="debuff">更弱</span>；<b>火炮</b>在<b>村庄</b><span class="buff">更强</span>。反击同理。</li>` +
+          `<li><b>单位克制</b>：攻击力还受攻击者vs防守者类型缩放——坦克<span class="buff">碾压步兵</span>但<span class="debuff">被火炮克制</span>；步兵<span class="buff">克制火炮</span>但<span class="debuff">弱于摩托化</span>。防守方前排单位类型为目标。</li>` +
+          `<li><b>领土</b>：每方的部署区初始涂上己方颜色。师移动时将沿途格子涂为己方颜色。拥有的格子通过<b>颜色间隙</b>显示。</li>` +
+          `<li><b>前线</b>：你的领土与敌方领土交界处有一条<b>深色线</b>标记对峙。</li>` +
+          `<li class="debuff">如果一个部队的<b>六个邻格全是敌方颜色</b>（被包围），在战斗中受到<b>双倍伤害</b>。</li>` +
+          `<li>攻击后剩余移动力<b>减半</b>（向下取整），而非结束回合。</li>` +
+          `<li><b>水域</b>进入消耗${TERRAIN.water.move_cost}移动力，<b>连续两格水域不可通行</b>——1格宽的河流可渡（陆→水→陆），2格宽不行。在水域上攻击或攻击水域上的目标受 <span class="debuff">−${Math.round(Rules.COMBAT.river_attack_penalty * 100)}%</span> 河流惩罚。</li>` +
+          `<li><b>森林</b>进入消耗${TERRAIN.forest.move_cost}移动力，提供 <span class="buff">${Math.round(TERRAIN.forest.defense * 100)}% 防御</span>。</li>` +
+          `<li>购买的师部署在己方部署区任意位置。</li>`
+        : `<li>A <b>division template</b> is a 5×5 grid of <b>battalion slots</b>. Each slot references a <b>battalion template</b> (3×4 grid of companies). A board piece is a <b>division</b> built from a template; its HP &amp; ATK are the <b>sum of all its companies</b> across all battalions.</li>` +
+          `<li><b>Battalion Designer</b>: design reusable battalion blueprints (up to 12 companies each) in the Template page. Add them as building blocks into the division grid — one slot per battalion.</li>` +
+          `<li><b>NATO symbols</b>: units on the board are shown as NATO APP-6 standard rectangles — Infantry ╳, Tank ◯, Artillery ●, Cavalry ╱, Motorized ╳+wheel. <b>Two ticks</b> (||) above the symbol means battalion-size (4–11 companies); <b>three ticks</b> (|||) means division-size (12+ companies).</li>` +
+          `<li>Up to <b>${Rules.STACK_LIMIT} divisions</b> of one side may <b>stack</b> on a tile (shown as an icon + count).</li>` +
+          `<li>Attacks hit <b>adjacent</b> tiles only (up/down/left/right).</li>` +
+          `<li>Combat is <b>mutual</b>: attacker and defender each deal the <b>sum of their divisions' ATK</b>, applied one division at a time; a division is destroyed when its HP reaches 0. The <b>defender's</b> terrain defense reduces damage dealt to them, but <b>initiating combat forfeits</b> your own tile's defense.</li>` +
+          `<li><b>Terrain shapes attacks</b>: each division's ATK is scaled by the terrain it fights <b>from</b> (the tile it stands on) — e.g. <b>tanks</b> hit <span class="buff">harder</span> from open <b>plains</b> but <span class="debuff">softer</span> from <b>cities</b>, <b>forest</b>, <b>villages</b> and <b>water</b>; <b>cannons</b> batter <span class="buff">harder</span> from <b>villages</b> (see the table above). Counterattacks are scaled the same way.</li>` +
+          `<li><b>Unit matchups</b>: attacks are further scaled by attacker-vs-defender type — e.g. tanks <span class="buff">crush infantry</span> but are <span class="debuff">weak to cannon</span>; infantry <span class="buff">overrun cannon</span> but are <span class="debuff">soft vs motorized</span> (see the <b>Unit vs unit</b> table above). The defending stack's lead unit type is the target.</li>` +
+          `<li><b>Territory</b>: each side's deployment zone starts painted in its colour. Moving a division paints every tile along its path in that side's colour, overwriting the enemy's. Owned tiles are shown by <b>coloured gaps</b> between tiles matching the player.</li>` +
+          `<li><b>Front-line</b>: where your territory borders the enemy's, a <b>dark line</b> marks the confrontation — push it forward by advancing divisions.</li>` +
+          `<li class="debuff">If a stack's <b>six hex neighbours are all the enemy's colour</b> (surrounded), it takes <b>double damage</b> from that enemy in combat.</li>` +
+          `<li>Attacking <b>halves</b> the attacker's remaining movement (rounded down) instead of ending its turn.</li>` +
+          `<li><b>Water</b> costs ${TERRAIN.water.move_cost} to enter, and <b>two water tiles in a row are impassable</b> — 1-wide rivers can be crossed (land → water → land), 2-wide stretches cannot. Attacking while you <b>or</b> your target stands on water suffers a <span class="debuff">−${Math.round(Rules.COMBAT.river_attack_penalty * 100)}%</span> river penalty.</li>` +
+          `<li><b>Forest</b> costs ${TERRAIN.forest.move_cost} to enter and gives <span class="buff">${Math.round(TERRAIN.forest.defense * 100)}% defense</span>.</li>` +
+          `<li>Deploy bought divisions anywhere in your own deployment zone (Country1 = left, Country2 = right).</li>`;
 
-    // --- Economy, tech tree & upgrades ---
-    document.getElementById("econRules").innerHTML =
-      `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting divisions (up to <b>3 × board height</b>).</li>` +
-      `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other unit types with gold ` +
-        `(${Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ")}) before you can place them in a template — per player, per game.</li>` +
-      `<li><b>Templates</b>: design 5×5 division blueprints (filled with battalion slots) and 3×4 battalion blueprints (filled with companies); a division's <b>cost = the sum of all its companies' costs</b>.</li>` +
-      `<li><b>Buy</b>: pick a template and buy divisions built from it; deploy them in your zone.</li>` +
-      `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, ` +
-        `strengthen a unit type wherever it appears, and apply only to the <b>current game</b>.</li>`;
+      // Economy, tech tree & upgrades
+      const techList = Object.keys(TECH).filter((t) => TECH[t] > 0).map((t) => `${PIECES[t].name} ${GOLD_ICON}${TECH[t]}`).join(", ");
+      document.getElementById("econRules").innerHTML = zh
+        ? `<li>每个玩家以<b>${ECONOMY.start}</b>金币开局，初始师数量可配置（最多<b>3×棋盘高度</b>）。</li>` +
+          `<li><b>科技树</b>：游戏开始只解锁<b>步兵</b>。用金币研发其他兵种（${techList}）才能在模板中使用——每玩家每局独立。</li>` +
+          `<li><b>模板</b>：设计5×5师蓝图（填充营槽）和3×4营蓝图（填充连）；师的<b>费用=所有连费用之和</b>。</li>` +
+          `<li><b>购买</b>：选择模板购买师，部署在己方区域。</li>` +
+          `<li><b>升级</b>（攻击+${UPGRADES.atk.gain}，血量+${UPGRADES.hp.gain}，移动+${UPGRADES.mov.gain}）花费金币，强化某兵种所有单位，仅限<b>当局游戏</b>。</li>`
+        : `<li>Each player starts with <b>${ECONOMY.start}</b> gold and a configurable number of starting divisions (up to <b>3 × board height</b>).</li>` +
+          `<li><b>Tech tree</b>: only the <b>Infantry</b> unit is unlocked at the start. Research other unit types with gold (${techList}) before you can place them in a template — per player, per game.</li>` +
+          `<li><b>Templates</b>: design 5×5 division blueprints (filled with battalion slots) and 3×4 battalion blueprints (filled with companies); a division's <b>cost = the sum of all its companies' costs</b>.</li>` +
+          `<li><b>Buy</b>: pick a template and buy divisions built from it; deploy them in your zone.</li>` +
+          `<li><b>Upgrades</b> (Attack +${UPGRADES.atk.gain}, Health +${UPGRADES.hp.gain}, Movement +${UPGRADES.mov.gain}) cost gold, strengthen a unit type wherever it appears, and apply only to the <b>current game</b>.</li>`;
 
-    // --- Division actions (refit, split, combine) ---
-    document.getElementById("actionRules").innerHTML =
-      `<li><b>Refit</b>: swap a deployed division to a different template. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new template and the <b>current value of the division</b> — <span class="debuff">damaged divisions are worth less</span> (proportional to remaining HP), so refitting a battered division costs more.</li>` +
-      `<li><b>Split</b>: break individual companies off a deployed division into separate pieces on the same tile. The original division keeps its remaining companies. Requires at least 2 companies and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off divisions inherit the parent's HP ratio and cannot act until the next turn.</li>` +
-      `<li><b>Combine</b>: merge companies from one division (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs companies up to the 25-company template cap. If the donor is fully absorbed it is removed from the board.</li>`;
+      // Division actions (refit, split, combine)
+      document.getElementById("actionRules").innerHTML = zh
+        ? `<li><b>改装</b>：将已部署的师切换为另一模板。必须在己方城市或村庄的<b>补给范围</b>内，且未被敌方领土包围。支付新模板与<b>当前师价值</b>的差额——<span class="debuff">受损的师价值更低</span>（按剩余HP比例），所以改装受损师更贵。</li>` +
+          `<li><b>拆分</b>：将单个连从已部署的师中分离成同一格子上的独立棋子。原师保留剩余连。至少需要2连且格子堆叠未满（最多${Rules.STACK_LIMIT}）。拆分出的师继承母体HP比例，下回合才能行动。</li>` +
+          `<li><b>合并</b>：将一个师（供体）的连合并到<b>同一格子</b>上的另一个师（接收方）。接收方吸收连直到25连模板上限。如供体被完全吸收则从棋盘移除。</li>`
+        : `<li><b>Refit</b>: swap a deployed division to a different template. Must be within <b>supply range</b> of an owned city or village, and not surrounded by enemy territory. You pay the gold difference between the new template and the <b>current value of the division</b> — <span class="debuff">damaged divisions are worth less</span> (proportional to remaining HP), so refitting a battered division costs more.</li>` +
+          `<li><b>Split</b>: break individual companies off a deployed division into separate pieces on the same tile. The original division keeps its remaining companies. Requires at least 2 companies and room in the tile's stack (max ${Rules.STACK_LIMIT}). Split-off divisions inherit the parent's HP ratio and cannot act until the next turn.</li>` +
+          `<li><b>Combine</b>: merge companies from one division (the donor) into another (the receiver) on the <b>same tile</b>. The receiver absorbs companies up to the 25-company template cap. If the donor is fully absorbed it is removed from the board.</li>`;
 
-    // --- HQ (Headquarters) ---
-    document.getElementById("hqRules").innerHTML =
-      `<li>Each side starts with <b>one HQ</b> division — a unique command unit placed in the deployment zone.</li>` +
-      `<li><span class="debuff">If your HQ is destroyed, you lose immediately.</span> Protect it at all costs.</li>` +
-      `<li>The HQ starts with <b>1 Infantry</b> company. Each time you <b>research a new unit type</b>, one company of that type is automatically added to the HQ's hidden template — making it stronger over time.</li>` +
-      `<li>The HQ's template is <b>hidden</b> — it does not appear in the Unit Designer or the Shop. You <b>cannot refit</b> the HQ to another template, and you cannot buy additional HQs.</li>` +
-      `<li><b>📯 Rally</b>: select the HQ and click <b>Rally</b>, then tap any tile on the board. All your other divisions will move toward that tile this turn (using their remaining movement). The HQ itself does not move during a rally.</li>` +
-      `<li>HQ stats: HP <b>${PIECES.hq.hp}</b> · ATK <b>${PIECES.hq.attack}</b> · MOV <b>${PIECES.hq.movement_speed}</b>. It is a command unit, not a fighter — keep it behind the front line.</li>`;
+      // HQ (Headquarters)
+      document.getElementById("hqRules").innerHTML = zh
+        ? `<li>每方以<b>一个HQ</b>师开局——放置在部署区的独特指挥单位。</li>` +
+          `<li><span class="debuff">HQ被摧毁则立即失败。</span>不惜一切代价保护它。</li>` +
+          `<li>HQ初始有<b>1个步兵</b>连。每次<b>研发新兵种</b>时，该类型的一个连自动加入HQ隐藏模板——随时间变强。</li>` +
+          `<li>HQ的模板是<b>隐藏的</b>——不出现在单位设计器或商店中。<b>不能改装</b>HQ为其他模板，也不能购买额外HQ。</li>` +
+          `<li><b>📯 集结</b>：选择HQ并点击<b>集结</b>，然后点击棋盘任意格子。你的所有其他师将向该格子移动（使用剩余移动力）。HQ本身在集结时不移动。</li>` +
+          `<li>HQ数据：HP <b>${PIECES.hq.hp}</b> · 攻击 <b>${PIECES.hq.attack}</b> · 移动 <b>${PIECES.hq.movement_speed}</b>。它是指挥单位而非战斗单位——保持在前线后方。</li>`
+        : `<li>Each side starts with <b>one HQ</b> division — a unique command unit placed in the deployment zone.</li>` +
+          `<li><span class="debuff">If your HQ is destroyed, you lose immediately.</span> Protect it at all costs.</li>` +
+          `<li>The HQ starts with <b>1 Infantry</b> company. Each time you <b>research a new unit type</b>, one company of that type is automatically added to the HQ's hidden template — making it stronger over time.</li>` +
+          `<li>The HQ's template is <b>hidden</b> — it does not appear in the Unit Designer or the Shop. You <b>cannot refit</b> the HQ to another template, and you cannot buy additional HQs.</li>` +
+          `<li><b>📯 Rally</b>: select the HQ and click <b>Rally</b>, then tap any tile on the board. All your other divisions will move toward that tile this turn (using their remaining movement). The HQ itself does not move during a rally.</li>` +
+          `<li>HQ stats: HP <b>${PIECES.hq.hp}</b> · ATK <b>${PIECES.hq.attack}</b> · MOV <b>${PIECES.hq.movement_speed}</b>. It is a command unit, not a fighter — keep it behind the front line.</li>`;
 
-    // --- Structures ---
-    document.getElementById("structureRules").innerHTML =
-      `<li>Select any tile (not water, no existing structure) and click <b>Build</b> to place a structure — whoever builds first owns it.</li>` +
-      `<li><span class="name"><img class="swatch" src="assets/fort.svg" alt=""><b>Fort</b></span> — ${GOLD_ICON}${STRUCTURES.fort.cost}. Defenders on this tile take <span class="buff">${Math.round(STRUCTURES.fort.defense * 100)}% less damage</span>. Attackers initiating from a fort forfeit its protection (like terrain defense).</li>` +
-      `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>Supply Hub</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}. Extends the <b>supply network</b> for healing and refit (village range: ${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>` +
-      `<li>Structures can be <b>captured</b> when an enemy moves onto the tile — they then buff the new owner instead.</li>` +
-      `<li>The structure icon appears in the <b>top-right corner</b> of the tile, tinted with the owner's colour.</li>`;
+      // Structures
+      document.getElementById("structureRules").innerHTML = zh
+        ? `<li>选择任意格子（非水域，无已有建筑）并点击<b>建造</b>放置建筑——先建者拥有。</li>` +
+          `<li><span class="name"><img class="swatch" src="assets/fort.svg" alt=""><b>堡垒</b></span> — ${GOLD_ICON}${STRUCTURES.fort.cost}。该格防守者受到 <span class="buff">${Math.round(STRUCTURES.fort.defense * 100)}% 减伤</span>。从堡垒发起攻击将放弃其防护（同地形防御）。</li>` +
+          `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>补给站</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}。扩展<b>补给网络</b>用于治疗和改装（村庄范围：${REGEN.range.village}格，重型${REGEN.heavyRange.village}格）。</li>` +
+          `<li>建筑可被敌方移动单位<b>占领</b>——之后为新主人提供增益。</li>` +
+          `<li>建筑图标显示在格子<b>右上角</b>，带有拥有者颜色色调。</li>`
+        : `<li>Select any tile (not water, no existing structure) and click <b>Build</b> to place a structure — whoever builds first owns it.</li>` +
+          `<li><span class="name"><img class="swatch" src="assets/fort.svg" alt=""><b>Fort</b></span> — ${GOLD_ICON}${STRUCTURES.fort.cost}. Defenders on this tile take <span class="buff">${Math.round(STRUCTURES.fort.defense * 100)}% less damage</span>. Attackers initiating from a fort forfeit its protection (like terrain defense).</li>` +
+          `<li><span class="name"><img class="swatch" src="assets/supply.svg" alt=""><b>Supply Hub</b></span> — ${GOLD_ICON}${STRUCTURES.supply.cost}. Extends the <b>supply network</b> for healing and refit (village range: ${REGEN.range.village} tile, heavy ${REGEN.heavyRange.village} tiles).</li>` +
+          `<li>Structures can be <b>captured</b> when an enemy moves onto the tile — they then buff the new owner instead.</li>` +
+          `<li>The structure icon appears in the <b>top-right corner</b> of the tile, tinted with the owner's colour.</li>`;
+    }
+    buildDynamicRules();
 
     // --- Current map seed ---
     const savedGame = SaveState.load();
@@ -355,6 +428,245 @@
     } else {
       seedEl.textContent = 'No active game — start a new map to see its seed here.';
     }
+
+    // --- i18n ---
+    const infoI18n = {
+      en: {
+        title: '📖 field manual',
+        sub: 'Buffs, debuffs and rules for terrain, units and combat.',
+        controls: 'Controls',
+        controlsList: [
+          'Drag or use <b>one finger</b> to pan the map; <b>scroll or pinch</b> to zoom.',
+          'Tap a tile to select its stack, then tap a <b>yellow tile</b> to move, or an <b>adjacent enemy</b> to attack.',
+        ],
+        income: 'Income',
+        healing: 'Healing & supply',
+        units: 'Units',
+        unitHeaders: ['Unit','HP','ATK','MOV','Cost','Role'],
+        roles: {
+          infantry: "Cheap frontline body; storms cannon, holds cities & forest.",
+          motorized: "Truck-borne troops: fast, outmaneuvers cavalry & cannon.",
+          cavalry: "Fast flanker, hard hitter.",
+          cannon: "Siege gun: fragile but devastating; hard-counters tanks.",
+          tank: "Heavy: high HP + ATK; crushes infantry, priciest.",
+        },
+        terrainAtk: 'Unit vs terrain (attack)',
+        terrainAtkSub: 'How much each unit\'s ATK changes based on the tile it fights <b>from</b> (the tile it stands on) — applied both attacking and defending. Blank = no change.',
+        unitAtk: 'Unit vs unit (attack)',
+        unitAtkSub: 'How much each attacker\'s ATK changes versus the defending stack\'s lead unit type. Blank = no change.',
+        combat: 'Combat & stacking',
+        economy: 'Economy & upgrades',
+        actions: 'Unit actions',
+        hq: 'HQ (Headquarters)',
+        structures: 'Structures',
+        spawn: 'Spawn & starting positions',
+        spawnList: [
+          'Each country starts inside a <b>circular territory</b> proportional to the board size. The circle\'s radius scales so every country gets a fair footprint.',
+          '<b>🎲 Random spawn</b> (default): countries are placed at random positions on the board with a minimum distance of <b>max(height, width) ÷ number of countries</b> between any two centers.',
+          '<b>Fixed spawn</b> (unchecked): countries spawn at <b>corners first</b> (top-left, bottom-right, top-right, bottom-left), then <b>edge midpoints</b> if more than 4 countries.',
+          'Each country is <b>guaranteed at least one city</b> inside its starting circle — if the map generator didn\'t place one there, a city is created under the HQ.',
+          '<b>Starting units</b> are placed inside the spawn circle, clustered near the center. The HQ spawns at the circle\'s center.',
+          'Cities and villages inside a country\'s spawn circle are assigned to that country. Sites outside all circles start <b>neutral</b>.',
+        ],
+        mapSeed: 'Map Seed',
+        mapSeedList: [
+          'Every map is generated from a <b>seed number</b>. The same seed + board size + terrain weights always produces the <b>exact same map</b>.',
+          'You can enter a <b>numeric seed</b> or any <b>text string</b> (it will be hashed into a number). Leave blank for a random seed.',
+          'Click <b>🎲 Roll</b> to generate a random seed you can share with friends to play the same map.',
+          'The seed is saved with the game state, so continuing a game always restores the same map.',
+        ],
+        terrainDensity: 'Terrain Density',
+        terrainDensityList: [
+          'Four sliders control how much of each terrain type the map generator places: <b>Forest</b>, <b>Water</b> (lakes & rivers), <b>City</b>, and <b>Village</b>.',
+          'Each slider ranges from <b>0×</b> (none) to <b>3.0×</b> (triple density). Default is <b>1.0×</b>.',
+          '<b>Forest 0×</b>: open battlefield with no cover. <b>Forest 3×</b>: dense woodland with heavy concealment.',
+          '<b>Water 0×</b>: no lakes or rivers. <b>Water 3×</b>: many waterways creating chokepoints.',
+          '<b>City 0×</b>: minimal settlements (at least 1 per player guaranteed). <b>City 3×</b>: urban-heavy maps with more income sources.',
+          '<b>Village 0×</b>: no villages. <b>Village 3×</b>: dense villages clustered around cities.',
+          'Terrain weights are saved with the game, so the map regenerates identically when you continue.',
+        ],
+        diplomacy: 'Diplomacy & alliances',
+        diplomacyList: [
+          'Games with <b>3–8 countries</b> include a full diplomacy system. Access it from the 🤝 Diplomacy button.',
+          'Each pair of countries is in one of three states: <b>War</b> (default), <b>Peace</b>, or <b>Alliance</b>.',
+          '<b>War</b>: units attack on sight; territory is contested.',
+          '<b>Peace</b>: units cannot attack each other, but cannot pass through each other\'s territory either.',
+          '<b>Alliance</b>: units can move through allied territory and stacks. Allies can send each other gold.',
+          '<b>AI Takeover</b>: when handing your turn to the AI, choose a strategy — <b>Focus Attack</b> (aggressive), <b>Focus Defend</b> (cautious), or <b>Balanced</b> (default).',
+          '<b>Elimination</b>: a country is eliminated when it has <b>no units for 3 turns</b> or <b>no cities for 7 turns</b>. HQ destruction is instant (see HQ section below).',
+          '<b>PvE</b>: if the human player is eliminated, the game ends immediately — AI countries fighting each other won\'t continue without you.',
+          '<b>Peace deals</b>: eliminated territory is redistributed among the countries that fought it, proportional to damage dealt. Cities count for 2 points, villages for 1.',
+          '<b>Victory</b>: the game ends when only one country (or alliance bloc) survives.',
+        ],
+        backBattle: '⬅ Return to battle',
+        backMenu: 'Main menu',
+        noSeed: 'No active game — start a new map to see its seed here.',
+        currentSeed: '🗺️ Current map — Seed:',
+        size: 'Size:',
+        weights: 'Weights:',
+        langBtn: '中文',
+      },
+      zh: {
+        title: '📖 作战手册',
+        sub: '地形、单位和战斗的增益、减益及规则。',
+        controls: '操作',
+        controlsList: [
+          '拖动或用<b>单指</b>平移地图；<b>滚动或捏合</b>缩放。',
+          '点击格子选择部队，然后点击<b>黄色格子</b>移动，或点击<b>相邻敌人</b>攻击。',
+        ],
+        income: '收入',
+        healing: '治疗与补给',
+        units: '单位',
+        unitHeaders: ['单位','血量','攻击','移动','费用','定位'],
+        roles: {
+          infantry: "廉价前线肉盾；克制火炮，擅守城市和森林。",
+          motorized: "卡车运兵：速度快，克制骑兵和火炮。",
+          cavalry: "快速侧翼突击手，高伤害。",
+          cannon: "攻城炮：脆弱但毁灭性打击；克制坦克。",
+          tank: "重型：高血量+攻击力；碾压步兵，最贵。",
+        },
+        terrainAtk: '单位 vs 地形（攻击）',
+        terrainAtkSub: '每个单位的攻击力如何根据其<b>所在</b>格子（站立的格子）变化——攻守双方均适用。空白=无变化。',
+        unitAtk: '单位 vs 单位（攻击）',
+        unitAtkSub: '每个攻击者的攻击力对防守方前排单位类型的变化。空白=无变化。',
+        combat: '战斗与堆叠',
+        economy: '经济与升级',
+        actions: '单位行动',
+        hq: '总部（HQ）',
+        structures: '建筑',
+        spawn: '出生点与初始位置',
+        spawnList: [
+          '每个国家在棋盘上以<b>圆形领土</b>开始，大小与棋盘成比例。圆的半径会缩放以确保每个国家获得公平面积。',
+          '<b>🎲 随机出生</b>（默认）：各国随机分布，任意两个中心之间的最小距离为<b>max(高度, 宽度) ÷ 国家数量</b>。',
+          '<b>固定出生</b>（取消勾选）：国家首先在<b>角落</b>（左上、右下、右上、左下）出生，超过4国则在<b>边缘中点</b>。',
+          '每个国家<b>保证至少有一个城市</b>在其出生圈内——如果地图生成器未放置，则在HQ下方创建城市。',
+          '<b>初始单位</b>放置在出生圈内，靠近中心聚集。HQ在圆心出生。',
+          '出生圈内的城市和村庄归属该国家。所有圈外的地点保持<b>中立</b>。',
+        ],
+        mapSeed: '地图种子',
+        mapSeedList: [
+          '每张地图由一个<b>种子数字</b>生成。相同种子+棋盘大小+地形权重始终生成<b>完全相同的地图</b>。',
+          '可以输入<b>数字种子</b>或任何<b>文本字符串</b>（会被哈希为数字）。留空则随机生成。',
+          '点击<b>🎲 随机</b>生成一个可分享给朋友的随机种子来玩同一张地图。',
+          '种子随游戏状态保存，继续游戏时始终恢复相同地图。',
+        ],
+        terrainDensity: '地形密度',
+        terrainDensityList: [
+          '四个滑块控制地图生成器放置的各类地形比例：<b>森林</b>、<b>水域</b>（湖泊和河流）、<b>城市</b>和<b>村庄</b>。',
+          '每个滑块范围从<b>0×</b>（无）到<b>3.0×</b>（三倍密度）。默认<b>1.0×</b>。',
+          '<b>森林 0×</b>：无掩护的开阔战场。<b>森林 3×</b>：浓密林地，大量隐蔽。',
+          '<b>水域 0×</b>：无湖泊河流。<b>水域 3×</b>：大量水道形成瓶颈。',
+          '<b>城市 0×</b>：极少定居点（每人至少保证1个）。<b>城市 3×</b>：城市密集地图，更多收入来源。',
+          '<b>村庄 0×</b>：无村庄。<b>村庄 3×</b>：密集村庄围绕城市。',
+          '地形权重随游戏保存，继续时地图完全相同地重新生成。',
+        ],
+        diplomacy: '外交与同盟',
+        diplomacyList: [
+          '<b>3–8个国家</b>的游戏包含完整外交系统。通过🤝外交按钮进入。',
+          '每对国家处于三种状态之一：<b>战争</b>（默认）、<b>和平</b>或<b>同盟</b>。',
+          '<b>战争</b>：单位见面即攻击；领土有争议。',
+          '<b>和平</b>：单位不能互相攻击，也不能穿越对方领土。',
+          '<b>同盟</b>：单位可以穿越盟友领土和部队。盟友间可以互赠金币。',
+          '<b>AI接管</b>：将回合交给AI时，选择策略——<b>主攻</b>（激进）、<b>主守</b>（谨慎）或<b>均衡</b>（默认）。',
+          '<b>淘汰</b>：一个国家在<b>3回合无单位</b>或<b>7回合无城市</b>时被淘汰。HQ被摧毁则立即出局（见下方HQ章节）。',
+          '<b>人机对战</b>：如果人类玩家被淘汰，游戏立即结束——AI国家不会在没有你的情况下继续互相战斗。',
+          '<b>和平协议</b>：被淘汰国家的领土按伤害比例重新分配给参战国。城市计2分，村庄计1分。',
+          '<b>胜利</b>：当只剩一个国家（或同盟集团）存活时游戏结束。',
+        ],
+        backBattle: '⬅ 返回战场',
+        backMenu: '主菜单',
+        noSeed: '无进行中的游戏——开始新地图后可在此查看种子。',
+        currentSeed: '🗺️ 当前地图 — 种子:',
+        size: '大小:',
+        weights: '权重:',
+        langBtn: 'EN',
+      }
+    };
+
+    function applyInfoLang() {
+      const lang = localStorage.getItem('battlegrid.lang') || 'en';
+      const t = infoI18n[lang] || infoI18n.en;
+      document.getElementById('langBtn').textContent = t.langBtn;
+      document.querySelector('h1').textContent = t.title;
+      document.querySelector('.wrap > .sub').textContent = t.sub;
+
+      // Headings
+      document.getElementById('hControls').textContent = t.controls;
+      document.getElementById('hIncome').textContent = t.income;
+      document.getElementById('hHealing').innerHTML = t.healing;
+      document.getElementById('hUnits').textContent = t.units;
+      document.getElementById('hTerrainAtk').textContent = t.terrainAtk;
+      document.getElementById('hUnitAtk').textContent = t.unitAtk;
+      document.getElementById('hCombat').textContent = t.combat;
+      document.getElementById('hEconomy').textContent = t.economy;
+      document.getElementById('hActions').textContent = t.actions;
+      document.getElementById('hHQ').textContent = t.hq;
+      document.getElementById('hStructures').textContent = t.structures;
+      document.getElementById('hSpawn').textContent = t.spawn;
+      document.getElementById('hMapSeed').textContent = t.mapSeed;
+      document.getElementById('hTerrainDensity').textContent = t.terrainDensity;
+      document.getElementById('hDiplomacy').textContent = t.diplomacy;
+
+      // Controls list
+      document.getElementById('controlsList').innerHTML = t.controlsList.map(li => '<li>' + li + '</li>').join('');
+
+      // Unit table headers
+      const unitTh = document.querySelectorAll('#unitTable tr:first-child th');
+      t.unitHeaders.forEach((h, i) => { if (unitTh[i]) unitTh[i].textContent = h; });
+
+      // Unit roles
+      const unitRows = document.querySelectorAll('#unitTable tr:not(:first-child)');
+      const roleKeys = Object.keys(t.roles);
+      unitRows.forEach((row, i) => {
+        const roleCell = row.querySelector('td:last-child');
+        if (roleCell && roleKeys[i]) roleCell.textContent = t.roles[roleKeys[i]];
+      });
+
+      // Matrix sub-descriptions
+      document.querySelector('#terrainCombatTable').parentNode.querySelector('.sub').innerHTML = t.terrainAtkSub;
+      document.querySelector('#unitCombatTable').parentNode.querySelector('.sub').innerHTML = t.unitAtkSub;
+
+      // Static list sections (spawn, map seed, terrain density, diplomacy)
+      document.getElementById('hSpawn').nextElementSibling.querySelector('ul').innerHTML = t.spawnList.map(li => '<li>' + li + '</li>').join('');
+      var seedPanel = document.getElementById('hMapSeed').nextElementSibling;
+      var seedItems = seedPanel.querySelectorAll('li');
+      t.mapSeedList.forEach((text, i) => { if (seedItems[i + 1]) seedItems[i + 1].innerHTML = text; });
+      document.getElementById('hTerrainDensity').nextElementSibling.querySelector('ul').innerHTML = t.terrainDensityList.map(li => '<li>' + li + '</li>').join('');
+      document.getElementById('hDiplomacy').nextElementSibling.querySelector('ul').innerHTML = t.diplomacyList.map(li => '<li>' + li + '</li>').join('');
+
+      // Bottom nav
+      const barLinks = document.querySelectorAll('.bar a');
+      if (barLinks[0]) barLinks[0].textContent = t.backBattle;
+      if (barLinks[1]) barLinks[1].textContent = t.backMenu;
+
+      // Seed info
+      if (savedGame && savedGame.seed != null) {
+        const w = savedGame.terrainWeights;
+        let weightStr = '';
+        if (w) {
+          const parts = [];
+          if (w.forest != null && w.forest !== 1) parts.push((lang === 'zh' ? '森林 ' : 'Forest ') + w.forest + '×');
+          if (w.water != null && w.water !== 1) parts.push((lang === 'zh' ? '水域 ' : 'Water ') + w.water + '×');
+          if (w.city != null && w.city !== 1) parts.push((lang === 'zh' ? '城市 ' : 'City ') + w.city + '×');
+          if (w.village != null && w.village !== 1) parts.push((lang === 'zh' ? '村庄 ' : 'Village ') + w.village + '×');
+          if (parts.length) weightStr = ' · ' + t.weights + ' ' + parts.join(', ');
+        }
+        seedEl.innerHTML = t.currentSeed + ' <code style="background:#1b1f23;padding:2px 8px;border-radius:4px;user-select:all">' +
+          savedGame.seed + '</code> · ' + t.size + ' ' + (savedGame.rows || '?') + '×' + (savedGame.cols || '?') + weightStr;
+      } else {
+        seedEl.textContent = t.noSeed;
+      }
+    }
+
+    // Lang toggle
+    document.getElementById('langBtn').addEventListener('click', () => {
+      const cur = localStorage.getItem('battlegrid.lang') || 'en';
+      const next = cur === 'en' ? 'zh' : 'en';
+      localStorage.setItem('battlegrid.lang', next);
+      buildDynamicRules();
+      applyInfoLang();
+    });
+    applyInfoLang();
   </script>
 <script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js")</script>
 </body>

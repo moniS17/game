@@ -646,9 +646,9 @@
           for (const t in coCounts) coDropdown += `<div>${PIECES[t].name}: ${coCounts[t]}</div>`;
 
           statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>` +
-            `<span class="stat-chip" data-drop="bn${p}">${uCount} bn<span class="stat-dropdown">${coDropdown || '<div>No units</div>'}</span></span> · ` +
-            `${cCount} city · ${vCount} vlg · ` +
-            `<span class="stat-chip" data-drop="g${p}">${gRound} g/rnd<span class="stat-dropdown"><div>${vCount} village</div></span></span>` +
+            `<span class="stat-chip" data-drop="bn${p}">${uCount} ${_t('statBn')}<span class="stat-dropdown">${coDropdown || '<div>' + _t('statNoUnits') + '</div>'}</span></span> · ` +
+            `${cCount} ${_t('statCity')} · ${vCount} ${_t('statVlg')} · ` +
+            `<span class="stat-chip" data-drop="g${p}">${gRound} ${_t('statGold')}<span class="stat-dropdown"><div>${vCount} ${_t('statVillage')}</div></span></span>` +
             `</span></div>`;
         }
         statsEl.innerHTML = statsHtml;
@@ -1254,6 +1254,12 @@
         pickHint: 'Checked units move/attack together. Tap a yellow tile to move, or an adjacent enemy to attack.',
         onTile: 'on tile',
         units: 'units',
+        statBn: 'bn',
+        statCity: 'city',
+        statVlg: 'vlg',
+        statGold: 'g/rnd',
+        statNoUnits: 'No units',
+        statVillage: 'village',
       },
       zh: {
         selection: '选择',
@@ -1314,6 +1320,12 @@
         pickHint: '勾选的单位一起移动/攻击。点击黄色格子移动，或点击相邻敌人攻击。',
         onTile: '在格子上',
         units: '个单位',
+        statBn: '营',
+        statCity: '城市',
+        statVlg: '村庄',
+        statGold: '金/回合',
+        statNoUnits: '无单位',
+        statVillage: '村庄',
       }
     };
     function _t(key) {

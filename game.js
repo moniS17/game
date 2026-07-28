@@ -1764,7 +1764,7 @@ function executeOrders() {
   for (const [tk, groups] of atkByTarget) {
     const [tr, tc] = tk.split(',').map(Number);
     const defenders = stackAt(tr, tc).slice();
-    if (!defenders.length || defenders[0].owner === Game.turn) continue;
+    if (!defenders.length || defenders[0].owner === Game.turn || !window.isAtWar(Game.turn, defenders[0].owner)) continue;
     const allAttackers = groups.flat().filter(u => !u.acted && u.owner === Game.turn);
     if (!allAttackers.length) continue;
     doCoordinatedAttack(allAttackers, groups, tr, tc);
@@ -1783,7 +1783,7 @@ function executeOrders() {
 // all attacking groups proportionally to group size.
 function doCoordinatedAttack(allAttackers, groups, tr, tc) {
   const defenders = stackAt(tr, tc).slice();
-  if (!defenders.length || defenders[0].owner === allAttackers[0].owner) return;
+  if (!defenders.length || defenders[0].owner === allAttackers[0].owner || !window.isAtWar(allAttackers[0].owner, defenders[0].owner)) return;
 
   let { dmgToDef, dmgToAtk, defSurrounded, atkSurrounded } =
     Rules.resolveCombat(Game.terrain, allAttackers, defenders, Game.territory);
