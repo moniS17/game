@@ -443,6 +443,10 @@
     }
 
     // --- Terrain weight sliders ---
+    const TERRAIN_COLORS = {
+      plains: '#c8b87a', forest: '#2e7d32', water: '#1565c0',
+      city: '#ff8f00', village: '#8d6e63'
+    };
     function wireWeight(id, type) {
       const slider = document.getElementById(id);
       const label = document.getElementById(id + 'Val');
@@ -465,10 +469,6 @@
     const getWCity    = wireWeight('wCity', 'count');
     const getWVillage = wireWeight('wVillage', 'count');
 
-    const TERRAIN_COLORS = {
-      plains: '#c8b87a', forest: '#2e7d32', water: '#1565c0',
-      city: '#ff8f00', village: '#8d6e63'
-    };
     function updateTerrainPreview() {
       const hEl = document.getElementById('heightInput');
       const wEl = document.getElementById('widthInput');
