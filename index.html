@@ -319,7 +319,7 @@
         <button class="shop" id="buyBtn">🛒 Buy</button>
         <button class="tech-btn" id="techBtn">⚗️ Tech</button>
         <button class="tmpl-btn" id="templateBtn">▦ Template</button>
-        <button class="ghost" id="diplomacyBtn" style="font-size:.78rem;">🤝 Diplomacy</button>
+        <button class="ghost" id="diplomacyBtn" style="font-size:.78rem;background:#4a3580;border-color:#6a4bd9;">🤝 Diplomacy</button>
       </div>
 
       <div class="log-row">
@@ -649,7 +649,7 @@
 
           statsHtml += `<div class="stat-row"><span style="color:${PLAYERS[p].color}">${PLAYERS[p].name}</span><span>` +
             `<span class="stat-chip" data-drop="bn${p}">${uCount} ${_t('statBn')}<span class="stat-dropdown">${coDropdown || '<div>' + _t('statNoUnits') + '</div>'}</span></span> · ` +
-            `${cCount} ${_t('statCity')} · ${vCount} ${_t('statVlg')} · ` +
+            `${cCount} ${_t('statCity')} · ` +
             `<span class="stat-chip" data-drop="g${p}">${gRound} ${_t('statGold')}<span class="stat-dropdown"><div>${vCount} ${_t('statVillage')}</div></span></span>` +
             `</span></div>`;
         }
