@@ -351,6 +351,22 @@
         <div id="llmScanResults" style="display:none;margin-top:.5rem;"></div>
       </div>
 
+      <div id="llmCustomWrap" style="display:none;margin-top:.6rem;">
+        <div style="font-size:.68rem;color:#9aa4ad;margin-bottom:.3rem;">Connect to LLM server (e.g. PC on your network):</div>
+        <div style="display:flex;gap:.4rem;align-items:center;">
+          <input type="url" id="llmCustomUrl" placeholder="http://192.168.1.x:18766"
+            style="flex:1;min-width:0;font-size:.78rem;padding:.45rem .6rem;
+                   background:#0f1216;color:#e0e0e0;border:1px solid #3a3f45;border-radius:6px;
+                   font-family:monospace;" />
+          <button type="button" id="llmCustomTestBtn"
+            style="width:auto;margin:0;padding:.45rem .7rem;font-size:.72rem;font-weight:600;
+                   background:#2e7d46;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">
+            Test
+          </button>
+        </div>
+        <div id="llmCustomStatus" style="font-size:.65rem;margin-top:.3rem;color:#9aa4ad;"></div>
+      </div>
+
       <div id="cpmModeWrap" style="display:none;margin-top:.7rem;">
         <div style="display:flex;align-items:center;justify-content:center;gap:.6rem;">
           <span id="cpmModeLocalLabel" style="font-size:.72rem;font-weight:600;color:#7cb342;">Local CPM</span>
@@ -739,6 +755,24 @@
       const progressWrap = document.getElementById('cpmProgress');
       const bar = document.getElementById('cpmBar');
       const progressText = document.getElementById('cpmProgressText');
+      const customWrap = document.getElementById('llmCustomWrap');
+      const customUrlInput = document.getElementById('llmCustomUrl');
+      const customTestBtn = document.getElementById('llmCustomTestBtn');
+      const customStatus = document.getElementById('llmCustomStatus');
+      const scanWrap = document.getElementById('llmScanWrap');
+      const scanBtn = document.getElementById('llmScanBtn');
+      const scanStatus = document.getElementById('llmScanStatus');
+      const scanResults = document.getElementById('llmScanResults');
+      const cpmModeWrap = document.getElementById('cpmModeWrap');
+      const cpmModeToggle = document.getElementById('cpmModeToggle');
+      const cpmModeKnob = document.getElementById('cpmModeKnob');
+      const cpmModeLocalLabel = document.getElementById('cpmModeLocalLabel');
+      const cpmModeApiLabel = document.getElementById('cpmModeApiLabel');
+      const apiKeyWrap = document.getElementById('apiKeyWrap');
+      const apiKeyInput = document.getElementById('apiKeyInput');
+      const apiModelSelect = document.getElementById('apiModelSelect');
+      const apiKeyStatus = document.getElementById('apiKeyStatus');
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
       seg.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-v]');
@@ -755,6 +789,7 @@
           scanWrap.style.display = 'none';
           scanResults.style.display = 'none';
           scanStatus.style.display = 'none';
+          customWrap.style.display = 'none';
           cpmModeWrap.style.display = 'none';
           apiKeyWrap.style.display = 'none';
           chosenLLM = null;
@@ -784,7 +819,9 @@
           status.style.color = '#7cb342';
           dlWrap.style.display = 'none';
         } else if (window.WasmCPM) {
-          status.textContent = 'Server not found — download the AI to play offline:';
+          status.textContent = isMobile
+            ? 'Download the AI model to play offline on this device:'
+            : 'Server not found — download the AI to play offline:';
           status.style.color = '#9aa4ad';
           dlWrap.style.display = '';
           progressWrap.style.display = 'none';
@@ -792,7 +829,9 @@
           dlBtn.disabled = false;
           dlBtn.textContent = '⬇ Download AI for offline play (656 MB)';
         } else {
-          status.textContent = '❌ MiniCPM server not found — run ./start-minicpm.sh first';
+          status.textContent = isMobile
+            ? '❌ Connect to a PC running the AI server, or use OpenAI API'
+            : '❌ MiniCPM server not found — run ./start-minicpm.sh first';
           status.style.color = '#ff7a76';
         }
       }
@@ -825,11 +864,6 @@
       });
 
       // LLM server scanning
-      const scanWrap = document.getElementById('llmScanWrap');
-      const scanBtn = document.getElementById('llmScanBtn');
-      const scanStatus = document.getElementById('llmScanStatus');
-      const scanResults = document.getElementById('llmScanResults');
-
       scanBtn.addEventListener('click', async () => {
         if (!window.LLMScanner) return;
         scanBtn.disabled = true;
@@ -890,17 +924,50 @@
         }
       });
 
-      // Local / API mode slider
-      const cpmModeWrap = document.getElementById('cpmModeWrap');
-      const cpmModeToggle = document.getElementById('cpmModeToggle');
-      const cpmModeKnob = document.getElementById('cpmModeKnob');
-      const cpmModeLocalLabel = document.getElementById('cpmModeLocalLabel');
-      const cpmModeApiLabel = document.getElementById('cpmModeApiLabel');
-      const apiKeyWrap = document.getElementById('apiKeyWrap');
-      const apiKeyInput = document.getElementById('apiKeyInput');
-      const apiModelSelect = document.getElementById('apiModelSelect');
-      const apiKeyStatus = document.getElementById('apiKeyStatus');
+      // Custom LLM URL (for phones connecting to PC on LAN)
+      // Load saved custom URL
+      const savedUrl = localStorage.getItem('battlegrid.llmUrl');
+      if (savedUrl) customUrlInput.value = savedUrl;
 
+      customTestBtn.addEventListener('click', async () => {
+        const url = customUrlInput.value.trim().replace(/\/+$/, '');
+        if (!url) { customStatus.textContent = '⚠ Enter a URL'; customStatus.style.color = '#ff7a76'; return; }
+        customTestBtn.disabled = true;
+        customTestBtn.textContent = '⏳';
+        customStatus.textContent = 'Testing connection...';
+        customStatus.style.color = '#9aa4ad';
+        try {
+          const healthUrl = url + '/health';
+          const modelsUrl = url + '/v1/models';
+          let ok = false, model = 'default', serverName = 'LLM';
+          try {
+            const r = await fetch(healthUrl, { signal: AbortSignal.timeout(4000) });
+            if (r.ok) { ok = true; serverName = 'llama.cpp'; }
+          } catch {}
+          if (!ok) {
+            try {
+              const r = await fetch(modelsUrl, { signal: AbortSignal.timeout(4000) });
+              if (r.ok) { ok = true; const d = await r.json(); if (d.data && d.data[0]) model = d.data[0].id; }
+            } catch {}
+          }
+          if (ok) {
+            customStatus.textContent = '✅ Connected! Server: ' + serverName;
+            customStatus.style.color = '#7cb342';
+            chosenLLM = { baseUrl: url, model: model, serverName: serverName };
+            localStorage.setItem('battlegrid.llmUrl', url);
+          } else {
+            customStatus.textContent = '❌ Could not reach server. Check the IP/port and that CORS is enabled.';
+            customStatus.style.color = '#ff7a76';
+          }
+        } catch (err) {
+          customStatus.textContent = '❌ Connection failed: ' + err.message;
+          customStatus.style.color = '#ff7a76';
+        }
+        customTestBtn.disabled = false;
+        customTestBtn.textContent = 'Test';
+      });
+
+      // Local / API mode slider
       function syncCpmMode() {
         const isApi = cpmModeToggle.checked;
         cpmModeKnob.style.left = isApi ? '23px' : '3px';
@@ -912,13 +979,20 @@
           scanWrap.style.display = 'none';
           scanResults.style.display = 'none';
           scanStatus.style.display = 'none';
+          customWrap.style.display = 'none';
           apiKeyWrap.style.display = '';
           chosenLLM = null;
         } else {
           apiKeyWrap.style.display = 'none';
           apiKeyStatus.textContent = '';
-          checkCpmStatus();
-          scanWrap.style.display = '';
+          customWrap.style.display = '';
+          if (isMobile) {
+            scanWrap.style.display = 'none';
+            checkCpmStatus();
+          } else {
+            checkCpmStatus();
+            scanWrap.style.display = '';
+          }
         }
       }
 

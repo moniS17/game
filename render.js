@@ -17,6 +17,7 @@ window.Render = (function () {
   const cam = { x: 0, y: 0, cell: 14 }; // cell = hex size (center to vertex)
   const MIN_CELL = 5, MAX_CELL = 48;
   const PAD_TILES = 3;
+  let logW = 0, logH = 0;
 
   const S3 = Math.sqrt(3);
 
@@ -62,16 +63,21 @@ window.Render = (function () {
 
   function resize() {
     const wrap = canvas.parentElement;
-    canvas.width = wrap.clientWidth;
-    canvas.height = wrap.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    logW = wrap.clientWidth; logH = wrap.clientHeight;
+    canvas.width = Math.round(logW * dpr);
+    canvas.height = Math.round(logH * dpr);
+    canvas.style.width = logW + 'px';
+    canvas.style.height = logH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     clamp();
     render();
   }
 
   function clamp() {
     const pad = PAD_TILES * cam.cell * 1.5;
-    cam.x = clampAxis(cam.x, boardWidth(cam.cell), canvas.width, pad);
-    cam.y = clampAxis(cam.y, boardHeight(cam.cell), canvas.height, pad);
+    cam.x = clampAxis(cam.x, boardWidth(cam.cell), logW, pad);
+    cam.y = clampAxis(cam.y, boardHeight(cam.cell), logH, pad);
   }
 
   function clampAxis(v, boardPx, viewPx, pad) {
@@ -81,9 +87,9 @@ window.Render = (function () {
   }
 
   function autoZoom() {
-    if (!canvas.width || !canvas.height || !Board.COLS || !Board.ROWS) return false;
-    const fitW = canvas.width / (S3 * (Board.COLS + 0.5));
-    const fitH = canvas.height / (1.5 * (Board.ROWS - 1) + 2);
+    if (!logW || !logH || !Board.COLS || !Board.ROWS) return false;
+    const fitW = logW / (S3 * (Board.COLS + 0.5));
+    const fitH = logH / (1.5 * (Board.ROWS - 1) + 2);
     const target = Math.min(Math.floor(Math.min(fitW, fitH)), MAX_CELL);
     if (target > cam.cell) {
       cam.cell = target;
@@ -95,10 +101,10 @@ window.Render = (function () {
   }
 
   function centerOn(r, c) {
-    if (!canvas.width || !canvas.height) return;
+    if (!logW || !logH) return;
     const center = hexCenter(r, c, cam.cell);
-    cam.x = center.x - canvas.width / 2;
-    cam.y = center.y - canvas.height / 2;
+    cam.x = center.x - logW / 2;
+    cam.y = center.y - logH / 2;
     clamp();
     render();
   }
@@ -135,7 +141,7 @@ window.Render = (function () {
     const G = window.Game;
     if (!G || !G.terrain.length) return;
     ctx.fillStyle = '#6a6f76';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, logW, logH);
     const size = cam.cell;
     const COLS = Board.COLS, ROWS = Board.ROWS;
     const w = hexW(size);
@@ -149,17 +155,17 @@ window.Render = (function () {
 
     // Viewport culling: determine visible row/col range
     const r0 = Math.max(0, Math.floor((cam.y - size) / rh));
-    const r1 = Math.min(ROWS, Math.ceil((cam.y + canvas.height + size) / rh) + 1);
+    const r1 = Math.min(ROWS, Math.ceil((cam.y + logH + size) / rh) + 1);
     const c0 = Math.max(0, Math.floor((cam.x - w) / w));
-    const c1 = Math.min(COLS, Math.ceil((cam.x + canvas.width + w) / w) + 1);
+    const c1 = Math.min(COLS, Math.ceil((cam.x + logW + w) / w) + 1);
 
     for (let r = r0; r < r1; r++) {
       for (let c = c0; c < c1; c++) {
         const center = hexCenter(r, c, size);
         const sx = center.x - cam.x, sy = center.y - cam.y;
         // Skip if clearly off screen
-        if (sx < -size * 1.2 || sx > canvas.width + size * 1.2 ||
-            sy < -size * 1.2 || sy > canvas.height + size * 1.2) continue;
+        if (sx < -size * 1.2 || sx > logW + size * 1.2 ||
+            sy < -size * 1.2 || sy > logH + size * 1.2) continue;
 
         const tkey = G.terrain[r][c];
         const terr = TERRAIN[tkey];

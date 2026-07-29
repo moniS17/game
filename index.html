@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <script>if(!localStorage.getItem("battlegrid.user"))location.replace("login.html");</script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -12,10 +12,12 @@
   <link rel="stylesheet" href="chat.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
+    html, body { height: 100%; overflow: hidden; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex; height: 100vh; background: #1b1f23; color: #e6e6e6;
+      display: flex; height: 100vh; height: 100dvh; background: #1b1f23; color: #e6e6e6;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none;
     }
     #boardWrap { flex: 1; position: relative; min-width: 0; }
     #board { display: block; width: 100%; height: 100%; cursor: grab; background: #0d0f11; touch-action: none; }
@@ -323,13 +325,9 @@
       </div>
 
       <div class="log-row">
-        <label style="display:flex; align-items:center; gap:8px; font-size:.85rem; cursor:pointer;">
-          <input type="checkbox" id="logChk" checked style="width:auto; margin:0;" />
-          Combat log
-        </label>
+        <button id="logBtn" class="small" style="background:#37474f;border:1px solid #546e7a;">📜 Battle log</button>
         <button id="nextRoundBtn" class="next-round-btn">Next ▶</button>
       </div>
-      <p class="hint" style="margin-top:2px">When checked, the enemy's move is shown as a pop-up after each turn.</p>
 
       <div class="btn-grid">
         <button class="ghost" id="menuBtn">Main menu</button>
@@ -344,10 +342,10 @@
     </div>
   </aside>
 
-  <!-- Pop-up shown after the enemy's turn (combat log). Closed with OK. -->
+  <!-- Pop-up shown after the enemy's turn or when Battle log button is tapped. -->
   <div id="logModal" class="modal-overlay" style="display:none">
     <div class="modal-box">
-      <h2 style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Enemy's move</h2>
+      <h2 id="logModalTitle" style="color:#e6e6e6; font-size:1rem; margin-bottom:0;">Battle log</h2>
       <div id="logModalBody"></div>
       <button id="logModalOk">OK</button>
     </div>
@@ -790,12 +788,10 @@
         if (this.entries.length > 200) this.entries.shift();
       },
       entries: [],
-      // Show `lines` (the enemy's actions this turn) in a pop-up, if the
-      // Combat log checkbox is on and there is anything to report.
       showEnemyMoves(lines) {
-        const chk = document.getElementById('logChk');
-        if (!chk || !chk.checked || !lines.length) return;
+        if (!lines.length) return;
         const body = document.getElementById('logModalBody');
+        document.getElementById('logModalTitle').textContent = "Enemy's move";
         body.innerHTML = lines.map((m) => `<div>${m}</div>`).join('');
         document.getElementById('logModal').style.display = 'flex';
       },
@@ -805,6 +801,16 @@
     // (info.html) to keep the board sidebar focused on play.
 
     document.getElementById('nextRoundBtn').addEventListener('click', () => nextRound());
+    document.getElementById('logBtn').addEventListener('click', () => {
+      const body = document.getElementById('logModalBody');
+      document.getElementById('logModalTitle').textContent = 'Battle log';
+      if (UI.entries.length) {
+        body.innerHTML = UI.entries.slice(-50).map((m) => `<div>${m}</div>`).join('');
+      } else {
+        body.innerHTML = '<div class="empty">No actions recorded yet.</div>';
+      }
+      document.getElementById('logModal').style.display = 'flex';
+    });
     document.addEventListener('click', () => document.querySelectorAll('.stat-chip.open').forEach(c => c.classList.remove('open')));
     document.getElementById('buyBtn').addEventListener('click', () => { window.location.href = 'buy.html'; });
     document.getElementById('templateBtn').addEventListener('click', () => { window.location.href = 'template.html'; });
@@ -1194,12 +1200,6 @@
     document.getElementById('combineModal').addEventListener('click', (e) => {
       if (e.target.id === 'combineModal') e.currentTarget.style.display = 'none';
     });
-    (function () {
-      const chk = document.getElementById('logChk');
-      const saved = localStorage.getItem('battlegrid.logPopup');
-      if (saved !== null) chk.checked = saved === '1';
-      chk.addEventListener('change', () => localStorage.setItem('battlegrid.logPopup', chk.checked ? '1' : '0'));
-    })();
 
     // --- i18n for game page ---
     window.GAME_I18N = {
@@ -1377,15 +1377,8 @@
       if (qi('infoBtn')) qi('infoBtn').textContent = _t('fieldManual');
       if (qi('advisorBtn')) qi('advisorBtn').textContent = _t('advisor');
       if (qi('menuBtn')) qi('menuBtn').textContent = _t('mainMenu');
-      // Log checkbox
-      const logLabel = q('#logChk');
-      if (logLabel && logLabel.parentElement) {
-        const parent = logLabel.parentElement;
-        const chk2 = parent.querySelector('input');
-        if (chk2) { parent.innerHTML = ''; parent.appendChild(chk2); parent.append(' ' + _t('combatLog')); }
-      }
-      const logHintP = q('.log-row + p.hint');
-      if (logHintP) logHintP.textContent = _t('logHint');
+      // Log button
+      if (qi('logBtn')) qi('logBtn').textContent = '📜 ' + _t('combatLog');
       // Deploy panel
       const deployH2 = q('#placePanel h2');
       if (deployH2) deployH2.textContent = _t('deploy');

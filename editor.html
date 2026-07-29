@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <script>if(!localStorage.getItem("battlegrid.user"))location.replace("login.html");</script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#1b1f23" />
   <meta name="mobile-web-app-capable" content="yes" />
   <link rel="manifest" href="manifest.json" />
@@ -154,8 +154,8 @@
     function clamp() {
       const pad = 3 * cam.cell * 1.5;
       const bw = boardWidth(cam.cell), bh = boardHeight(cam.cell);
-      cam.x = Math.min(Math.max(cam.x, -pad), Math.max(bw - canvas.width + pad, -pad));
-      cam.y = Math.min(Math.max(cam.y, -pad), Math.max(bh - canvas.height + pad, -pad));
+      cam.x = Math.min(Math.max(cam.x, -pad), Math.max(bw - _logW + pad, -pad));
+      cam.y = Math.min(Math.max(cam.y, -pad), Math.max(bh - _logH + pad, -pad));
     }
 
     // Images
@@ -176,22 +176,22 @@
     }
 
     function render() {
-      if (!canvas.width || !canvas.height) return;
+      if (!_logW || !_logH) return;
       ctx.fillStyle = '#6a6f76';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, _logW, _logH);
       const s = cam.cell, w = hexW(s), rh = rowH(s);
       const innerSize = s * 0.83;
       const detailed = s >= 22;
       const r0 = Math.max(0, Math.floor((cam.y - s) / rh));
-      const r1 = Math.min(ROWS, Math.ceil((cam.y + canvas.height + s) / rh) + 1);
+      const r1 = Math.min(ROWS, Math.ceil((cam.y + _logH + s) / rh) + 1);
       const c0 = Math.max(0, Math.floor((cam.x - w) / w));
-      const c1 = Math.min(COLS, Math.ceil((cam.x + canvas.width + w) / w) + 1);
+      const c1 = Math.min(COLS, Math.ceil((cam.x + _logW + w) / w) + 1);
 
       for (let r = r0; r < r1; r++) {
         for (let c = c0; c < c1; c++) {
           const center = hexCenter(r, c, s);
           const sx = center.x - cam.x, sy = center.y - cam.y;
-          if (sx < -s * 1.2 || sx > canvas.width + s * 1.2 || sy < -s * 1.2 || sy > canvas.height + s * 1.2) continue;
+          if (sx < -s * 1.2 || sx > _logW + s * 1.2 || sy < -s * 1.2 || sy > _logH + s * 1.2) continue;
           ctx.fillStyle = '#8a9099';
           hexPath(sx, sy, s);
           ctx.fill();
@@ -245,17 +245,23 @@
       }
     }
 
+    let _logW = 0, _logH = 0;
     function resize() {
       const wrap = canvas.parentElement;
-      canvas.width = wrap.clientWidth;
-      canvas.height = wrap.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      _logW = wrap.clientWidth; _logH = wrap.clientHeight;
+      canvas.width = Math.round(_logW * dpr);
+      canvas.height = Math.round(_logH * dpr);
+      canvas.style.width = _logW + 'px';
+      canvas.style.height = _logH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       clamp();
       render();
     }
 
     function autoZoom() {
-      const fitW = canvas.width / (S3 * (COLS + 0.5));
-      const fitH = canvas.height / (1.5 * (ROWS - 1) + 2);
+      const fitW = _logW / (S3 * (COLS + 0.5));
+      const fitH = _logH / (1.5 * (ROWS - 1) + 2);
       cam.cell = Math.min(Math.floor(Math.min(fitW, fitH)), MAX_CELL);
       clamp();
       render();
